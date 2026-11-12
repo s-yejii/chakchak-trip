@@ -17,6 +17,10 @@ import { tripBadge } from '@/utils/tripView'
 import { useStartTrip } from '@/utils/useStartTrip'
 import StartConflictSheet from '@/components/trip/StartConflictSheet.vue'
 
+const NIGHT_END = '04:00' // 이 시각 전 칸은 그날 밤 늦게 간 곳
+// 정렬용 글자: 새벽 칸은 앞에 '1'을 붙여 그날 맨 뒤로 (11/12 ② 찬기, 자정 넘는 일정)
+const nightLast = (time) => (time < NIGHT_END ? '1' : '0') + time
+
 const route = useRoute()
 const store = useTripStore()
 const { saved, view, isLoading, error, load, loadDay } = useTripDetail()
@@ -37,7 +41,7 @@ async function continueTrip() {
   const day = Number(route.query.day || 1)
   if (devMode.isOn && day > 1 && saved.value) {
     const date = addDays(saved.value.startDate, day - 1)
-    const first = saved.value.stops.filter((stop) => (stop.day || 1) === day && stop.state !== 'skipped').sort((a, b) => a.time.localeCompare(b.time))[0]
+    const first = saved.value.stops.filter((stop) => (stop.day || 1) === day && stop.state !== 'skipped').sort((a, b) => nightLast(a.time).localeCompare(nightLast(b.time)))[0]
     if (first && todayText() < date) {
       const status = await setDevClock(date, toTime(toMinutes(first.time) - MORNING_BEFORE_MIN)).catch(() => null)
       if (status) syncClock(status)
