@@ -637,7 +637,11 @@ public class PlanRuleMaker {
             }
             // 11/12 실제 시각: 앞 일정 끝 + 이동 시간보다 이르지 않게, 다음 예약(+ 거기까지 이동)·하루 끝 전에 끝나게 머무는 시간을 줄임
             double[] placePoint = new double[] {place.getLat(), place.getLng()};
-            int actualStart = prevEnd < 0 ? start : roundUp(Math.max(start, prevEnd + PlanTravelTime.minutesBetween(point, placePoint)));
+            int travel = PlanTravelTime.minutesBetween(point, placePoint);
+            int actualStart = prevEnd < 0 ? start : roundUp(Math.max(start, prevEnd + travel));
+            if (prevEnd >= 0) {
+                extendLastStay(stops, candidates, day, date, prevEnd, actualStart - travel); // 바로 옆이면 20분 띄우지 않고 앞 곳에 더 머묾 (11/14)
+            }
             int latestEnd = Math.min(dayEnd, nextExtraLimit(extras, candidates, day, actualStart, placePoint));
             int actualStay = Math.min(stay, latestEnd - actualStart);
             if (actualStay < SHORTEST_STAY_MIN) {
@@ -655,6 +659,31 @@ public class PlanRuleMaker {
             cafeCount += CAFE_KIND.equals(lastKind) ? 1 : 0;
         }
         return replaced;
+    }
+
+    /**
+     * 칸 사이가 이동 시간보다 많이 남으면 앞 칸에 더 머물게 (11/14).
+     * 칸은 20분 간격으로 미리 나눠 둬서, 57m 옆 가게로 가는데도 20분이 비었어요 → 그만큼(최대 20분) 앞 곳에 더 있어요.
+     * 식사·예약 시각은 그대로라 뒤 칸이 당겨지지 않아요. 앞 곳이 그때 닫으면 늘리지 않음
+     */
+    private void extendLastStay(List<AiDraftStop> stops, Map<String, Place> candidates, int day, LocalDate date, int prevEnd, int leaveBy) {
+        if (stops.isEmpty()) {
+            return;
+        }
+        AiDraftStop last = stops.get(stops.size() - 1);
+        if (dayOf(last) != day || last.getTime() == null || last.getStay() == null) {
+            return;
+        }
+        int lastStart = Geo.toMinutes(last.getTime());
+        if (lastStart + last.getStay() != prevEnd) {
+            return; // 바로 앞이 예약·담은 곳이면 그대로
+        }
+        int spare = Math.min(MAX_EXTEND_MIN, (leaveBy - prevEnd) / TIME_STEP_MIN * TIME_STEP_MIN);
+        Place place = last.getId() == null ? null : candidates.get(last.getId());
+        if (spare < TIME_STEP_MIN || place == null || !isOpenFor(place, date, lastStart, last.getStay() + spare)) {
+            return;
+        }
+        last.setStay(last.getStay() + spare);
     }
 
     /**
