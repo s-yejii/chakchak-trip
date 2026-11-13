@@ -35,7 +35,9 @@ public class PlanVerifier {
     private static final String STAY_CATEGORY = "숙소";
     private static final String MUST = "must";
     private static final int MAX_LINES = 6; // 안내 목록이 너무 길어지지 않게
-    private static final int MIN_FACT_REVIEWS = 10; // 이 이상 리뷰가 있어야 평점을 이유로 씀
+    private static final int MIN_FACT_REVIEWS = 10;
+    private static final String NO_HOURS_TEXT = "영업시간 확인 못 함";
+    private static final java.util.regex.Pattern BOARDING = java.util.regex.Pattern.compile("역( |$)|역사|터미널|공항|정차역"); // 역·터미널 // 이 이상 리뷰가 있어야 평점을 이유로 씀
 
     private static final String UNLOCATED_MARK = "위치 확인 필요"; // 위치를 못 찾은 예약 칸 메모 앞부분 (PlanServiceImpl)
     private static final int CROWD_FIRST_HOUR = 7;  // 생활인구 데이터는 7~23시만
@@ -122,6 +124,8 @@ public class PlanVerifier {
         String openText = openTextOf(stop, date);
         if (openText != null) {
             checks.add(openText);
+        } else if (!isBoarding(stop)) {
+            checks.add(NO_HOURS_TEXT); // 장소 번호가 없는 예약(카카오로 찾은 곳): 영업은 확인 못 했다고 그대로 말함 (11/14)
         }
         String crowdText = crowdTextOf(stop, date);
         if (crowdText != null) {
@@ -197,9 +201,18 @@ public class PlanVerifier {
         }
     }
 
-    /** 그날 숙소(없으면 전날 숙소)에서 이 칸까지 어림 이동 분. 숙소가 없으면 null */
+    /** 역·터미널·공항 칸인지 (영업시간을 따질 곳이 아님) */
+    private boolean isBoarding(Stop stop) {
+        String text = (stop.getName() == null ? "" : stop.getName()) + " " + (stop.getCategory() == null ? "" : stop.getCategory());
+        return BOARDING.matcher(text).find();
+    }
+
+    /** 그날 숙소(그날 체크인 전이면 전날 숙소)에서 이 칸까지 어림 이동 분. 숙소가 없으면 null */
     private Integer minutesFromStay(Stop stop, List<Stop> stops) {
         Stop stay = findStay(stops, dayOf(stop));
+        if (stay != null && stay.getTime() != null && stop.getTime() != null && stop.getTime().compareTo(stay.getTime()) < 0) {
+            stay = null; // 그날 체크인 전 칸이면 그날 숙소에서 오는 게 아님 (11/14: 12:30 점심에 "숙소에서 6분", 체크인 15:00)
+        }
         if (stay == null) {
             stay = findStay(stops, dayOf(stop) - 1);
         }
