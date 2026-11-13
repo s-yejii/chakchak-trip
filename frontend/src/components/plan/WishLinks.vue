@@ -15,6 +15,7 @@ const url = ref('')
 const caption = ref('')
 const showCaption = ref(false)
 const error = ref('')
+const hint = ref('') // 회색 안내 (오류 아님)
 const loading = ref(false)
 const found = ref(null) // 찾은 장소 카드 목록 (찾기 전에는 null)
 const picked = ref({}) // 찾은 장소 중 고른 것 { 이름: true }
@@ -28,7 +29,15 @@ function fill(link) {
   found.value = null
   findPlaces()
 }
-defineExpose({ fill })
+// 인스타 공유(/share)로 들어온 링크: 바로 찾지 않고 링크를 채운 뒤 글 칸을 열어 둠 (11/14 디자인 검토)
+// 인스타는 글을 자주 가려서, 바로 찾으면 첫 화면이 빨간 오류가 돼요 → 회색 안내로 글도 같이 붙여넣게
+function fillShared(link) {
+  url.value = link
+  found.value = null
+  showCaption.value = true
+  hint.value = '인스타는 글을 가릴 때가 많아요. 게시물 글도 같이 붙여넣으면 더 잘 찾아요'
+}
+defineExpose({ fill, fillShared })
 
 // 찾은 곳 표시: 링크 주소로 플랫폼 이름
 const sourceName = computed(() => {
@@ -41,6 +50,7 @@ async function findPlaces() {
   const link = url.value.trim()
   if (!link) return (error.value = '게시물 링크를 붙여넣어 주세요')
   error.value = ''
+  hint.value = ''
   loading.value = true
   try {
     const result = await findLinkPlaces(link, caption.value.trim() || null)
@@ -105,12 +115,13 @@ function removeWish(name) {
       </div>
       <button type="submit" class="btn btn--secondary btn--md" :disabled="loading">{{ loading ? '찾는 중' : '장소 찾기' }}</button>
     </form>
+    <p v-if="hint && !error" class="field__help t-cap" style="margin: -4px 0 0"><i class="ic ic--s i-info" aria-hidden="true"></i>{{ hint }}</p>
     <p v-if="error" class="field__help c-danger" style="margin: -4px 0 0" role="alert"><i class="ic ic--s i-danger" aria-hidden="true"></i>{{ error }}</p>
     <div v-if="showCaption" class="field">
       <label for="pa-caption" class="t-cap">게시물 글</label>
-      <textarea id="pa-caption" v-model="caption" class="wl-caption" rows="4" maxlength="2200" placeholder="글 붙여 넣기"></textarea>
+      <textarea id="pa-caption" v-model="caption" class="wl-caption" rows="4" maxlength="2200" placeholder="글 붙여넣기"></textarea>
     </div>
-    <button v-else type="button" class="wl-more" @click="showCaption = true">글 붙여 넣기</button>
+    <button v-else type="button" class="wl-more" @click="showCaption = true">글 붙여넣기</button>
   </template>
 
   <div v-else class="wl-found" role="group" aria-label="찾은 장소">
@@ -138,7 +149,7 @@ function removeWish(name) {
 .wl-form{display:flex;gap:8px;align-items:flex-start}
 .wl-form .btn{flex:none;height:48px}
 .wl-caption{width:100%;box-sizing:border-box;padding:10px 12px;border-radius:12px;border:1px solid var(--line-strong);font:inherit;font-size:16px;resize:vertical}
-.wl-more{align-self:flex-start;padding:0;border:0;background:none;color:var(--navy);font:inherit;font-size:13px;cursor:pointer;text-decoration:underline}
+.wl-more{align-self:flex-start;display:inline-flex;align-items:center;min-height:44px;margin:-10px 0;padding:0 8px 0 0;border:0;background:none;color:var(--navy);font:inherit;font-size:13px;cursor:pointer;text-decoration:underline}
 .wl-found{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:14px;background:var(--surface);border:1px solid var(--line)}
 .wl-found .opt{padding:10px 12px}
 .wl-src{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--ink-muted)}
