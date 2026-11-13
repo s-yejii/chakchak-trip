@@ -4,6 +4,8 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AddToTripSheet from '@/components/trip/AddToTripSheet.vue'
+import PageMessage from '@/components/common/PageMessage.vue'
+import TopBar from '@/components/common/TopBar.vue'
 import { places } from '@/data/places'
 import { concertTrip } from '@/data/trips'
 import { getPlaceDetail, getPlacePhotos } from '@/api/trips'
@@ -23,7 +25,10 @@ const store = useTripStore()
 const isFake = !!places[route.query.id] || !route.query.id
 const id = places[route.query.id] ? route.query.id : 'daelim'
 const server = ref(null) // 서버 장소 상세 (화면이 쓰는 모양으로 바꾼 것)
-const place = computed(() => server.value || places[id])
+const isLoading = ref(!isFake) // 진짜 장소를 불러오는 중
+const loadError = ref('') // 진짜 장소를 못 불러왔을 때 문구
+// 진짜 장소는 서버 값만 (못 불러오면 null → 가짜 장소로 떨어지지 않음, 11/13 ② 찬기)
+const place = computed(() => (isFake ? places[id] : server.value))
 // 여행 상세에서 장소를 눌러 왔으면(?trip=) 이미 그 여행에 있는 실제 장소
 //   저장 전 일정 점검(?from=plan)에서 온 장소도 이미 일정에 있는 곳 (11/09 ② 찬기 OK)
 const isFromTrip = !isFake && (!!route.query.trip || route.query.from === 'plan')
@@ -41,8 +46,14 @@ async function findPhotos(placeId) {
   }
 }
 
-onMounted(async () => {
-  if (isFake) return
+onMounted(() => {
+  if (!isFake) loadPlace()
+})
+
+// 진짜 장소 불러오기 ([다시 시도]도 이걸 불러요)
+async function loadPlace() {
+  isLoading.value = true
+  loadError.value = ''
   try {
     // 상세와 사진을 같이 불러서 기다리는 시간을 줄임
     const [detail, photos] = await Promise.all([getPlaceDetail(route.query.id), findPhotos(route.query.id)])
@@ -59,13 +70,16 @@ onMounted(async () => {
       outdoor: false,
     }
   } catch (e) {
-    showToast(e.message)
+    loadError.value = e.message
+  } finally {
+    isLoading.value = false
   }
-})
+}
 
 // 네이버 지도 주소: 서버 값(DB 네이버 주소, 없으면 네이버 검색 링크), 시연용 가짜 장소는 이름으로 검색
-const naverLink = computed(() => place.value.naverUrl || 'https://map.naver.com/p/search/' + encodeURIComponent(place.value.name))
-const addressText = computed(() => place.value.address || '성내동 322-32')
+const naverLink = computed(() => (place.value ? place.value.naverUrl || 'https://map.naver.com/p/search/' + encodeURIComponent(place.value.name) : ''))
+// 주소: '성내동 322-32'는 가짜 장소만. 진짜 장소는 주소가 없으면 빈 글자 → 주소 줄을 숨김
+const addressText = computed(() => (place.value ? place.value.address || (isFake ? '성내동 322-32' : '') : ''))
 
 // 글자를 클립보드에 복사. http 주소나 권한 없는 브라우저에서는 navigator.clipboard가 없어서 옛날 방식으로
 async function copyText(text, doneMessage) {
@@ -110,7 +124,15 @@ function onAddClick() {
 
 <template>
   <div class="scr scr-Place">
-    <div class="app app--white">
+    <!-- 진짜 장소를 불러오는 중이거나 못 불러왔을 때: 안내만 (별점·주소·담기 버튼은 안 보여요) -->
+    <div v-if="!place" class="app">
+      <TopBar title="장소" back="/" />
+      <div class="scroll">
+        <PageMessage v-if="isLoading" is-loading title="장소를 불러오는 중이에요" />
+        <PageMessage v-else icon="i-warning" title="장소를 불러오지 못했어요" :text="loadError" button="다시 시도" @retry="loadPlace" />
+      </div>
+    </div>
+    <div v-else class="app app--white">
       <img :src="place.img" :alt="place.name + ' 사진'" class="pl-photo" />
       <span v-if="place.photoSite" class="pl-credit">사진: {{ place.photoSite }}</span>
       <header class="topbar topbar--float">
@@ -146,7 +168,7 @@ function onAddClick() {
               <span v-else-if="place.restDate" class="row__meta">휴무 {{ place.restDate }}</span>
             </span>
           </div>
-          <div class="row">
+          <div v-if="addressText" class="row">
             <i class="ic i-pin muted" aria-hidden="true"></i>
             <span class="row__body"><span class="t-strong">{{ addressText }}</span><span v-if="isFake" class="row__meta">천호역 도보 8분</span></span>
             <button type="button" class="btn btn--ghost btn--sm" @click="copyText(addressText, '주소를 복사했어요')">복사</button>
