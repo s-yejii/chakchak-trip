@@ -57,6 +57,15 @@ function dayOfTrip(readDate) {
   return Math.round((new Date(readDate) - new Date(start)) / DAY_MS) + 1
 }
 
+// 토스트 앞 날짜 말: 당일치기면 "11/16 ", 여러 날이면 "2일차 " (11/14: 당일치기인데 "1일차"라고 하던 문제)
+function dayLabelOf(day) {
+  const conditions = store.planConditions || {}
+  const start = store.planStartDate || conditions.startDate
+  const end = store.planStartDate ? store.planEndDate || start : conditions.endDate || start
+  if (start && start === end) return Number(start.slice(5, 7)) + '/' + Number(start.slice(8, 10)) + ' '
+  return start ? day + '일차 ' : ''
+}
+
 // 스캔 모션 (11/12): 읽는 중엔 스캔 빛, 다 읽으면 잠깐 초록 체크 + 짧은 진동
 const DONE_SHOW_MS = 1200 // 초록 체크를 보여 주는 시간
 const VIBRATE_MS = 40 // 다 읽었을 때 진동 길이
@@ -135,7 +144,7 @@ function add() {
   const conditions = store.planConditions || {}
   const fixed = conditions.fixed || []
   store.planConditions = { ...conditions, fixed: [...fixed, { name: placeName, time: time.value, day }] }
-  showToast(day + '일차 ' + placeName + ' ' + time.value + ' 고정했어요')
+  showToast(dayLabelOf(day) + placeName + ' ' + time.value + ' 고정했어요')
   goBack('/plan/info')
 }
 </script>
