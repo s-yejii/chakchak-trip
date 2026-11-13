@@ -55,6 +55,12 @@ public class PlanCandidateFinder {
     private static final String SHOP_KIND = "shop";
     // 들를 곳이 아닌 이름: 도로·길(둘레길·산책길·숲길은 뺌)·교차로·주차장·표지석 등
     private static final Pattern NOT_SIGHT = Pattern.compile("명예도로|도로$|교차로|사거리|삼거리|나들목|IC$|주차장|표지석|기념비|(?<!둘레|산책|숲|하늘|순라|골목|올레)길$");
+    // 관광 정보에 관광지로 들어 있지만 장소가 아니라 넓은 구역 이름인 것 ("명동 남대문 북창동 다동무교동 관광특구") → 뺌 (11/14)
+    private static final Pattern ODD_SIGHT = Pattern.compile("관광특구|특구$");
+    // 비석·표지석: 실제 사적("삼전도비")일 수 있어서 빼지 않고, 리뷰가 거의 없으면 점수를 낮춰 뒤로 (11/14)
+    private static final Pattern SMALL_MONUMENT = Pattern.compile("비$|비석|표지석|기념비");
+    private static final int FEW_REVIEWS = 10;
+    private static final double SMALL_MONUMENT_PENALTY = 1.0;
     private static final Pattern GOOD_SIGHT = Pattern.compile("공원|시장|거리|골목|전망|전시|미술관|박물관|갤러리|둘레길|산책|숲|천$|강$|마을|창작촌|광장");
     private static final int GOOD_SIGHT_ENOUGH = 3;
     // 동네 이름만 있는 곳 ("명동", "삼청동"): 관광 정보에 동네 자체가 장소로 들어 있어서, 일정 칸에 "명동 70분"이 들어가던 문제 (11/13)
@@ -238,6 +244,12 @@ public class PlanCandidateFinder {
         }
     }
 
+    /** 리뷰가 10개 안 되는 비석·표지석인지 (관광 칸에 70분 머물 곳으로는 약함) */
+    private boolean isSmallMonument(Place place) {
+        boolean isFewReviews = place.getReviewCount() == null || place.getReviewCount() < FEW_REVIEWS;
+        return TOUR_KIND.equals(place.getKind()) && place.getName() != null && SMALL_MONUMENT.matcher(place.getName()).find() && isFewReviews;
+    }
+
     /** 후보들의 리뷰 태그 개수 (장소 id → 개수). 점수·이유에 같이 쓰려고 한 번만 셈 */
     public Map<String, PlaceTagCount> countTags(Map<String, Place> candidates) {
         return placeTagReader.countTags(new ArrayList<>(candidates.values()));
@@ -248,7 +260,11 @@ public class PlanCandidateFinder {
         List<String> wantedTags = toTagNames(tags);
         Map<String, Double> scores = new HashMap<>();
         for (Place place : candidates.values()) {
-            scores.put(place.getId(), placeTagReader.getScore(place, tagCounts.get(place.getId()), wantedTags));
+            double score = placeTagReader.getScore(place, tagCounts.get(place.getId()), wantedTags);
+            if (isSmallMonument(place)) {
+                score -= SMALL_MONUMENT_PENALTY; // 리뷰가 거의 없는 비석·표지석은 다른 볼거리가 없을 때만 들어가게
+            }
+            scores.put(place.getId(), score);
         }
         return scores;
     }
@@ -476,6 +492,9 @@ public class PlanCandidateFinder {
             }
             if (place.getName() != null && AREA_NAME_ONLY.matcher(place.getName()).matches()) {
                 continue; // 동네 이름은 장소가 아님
+            }
+            if (TOUR_KIND.equals(place.getKind()) && place.getName() != null && ODD_SIGHT.matcher(place.getName()).find()) {
+                continue; // 관광특구는 장소가 아니라 넓은 구역 이름 (11/14)
             }
             if (TOUR_KIND.equals(place.getKind()) && place.getName() != null && FOOD_STREET.matcher(place.getName()).find()) {
 
