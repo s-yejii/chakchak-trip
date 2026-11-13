@@ -404,6 +404,12 @@ onMounted(() => {
   if (!store.planAutoNext) return
   store.planAutoNext = false
   const isPicked = (step.value.id === 'where' && store.planArea) || (step.value.id === 'from' && store.planOrigin)
+  // 11/14: 검색으로 "구"를 고르면 지도(planAreas)가 비어 있어서 동 단계를 건너뛰었어요 → 지도로 고른 것처럼 채워서 동도 고를 수 있게
+  const area = store.planArea
+  const isInMap = store.planAreas.some((item) => area && item.name === area.name)
+  if (step.value.id === 'where' && area && area.type === 'gu' && !isInMap) {
+    store.planAreas = [{ name: area.name, lat: area.lat, lng: area.lng, dongs: [] }]
+  }
   if (isPicked) moveStep(1)
 })
 // 시연 계정(개발자 모드): 발표 이야기대로 출발지(11/12 종로3가역)를 미리 채워 둠 (11/08 주형)
