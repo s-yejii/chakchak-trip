@@ -430,12 +430,21 @@ onMounted(async () => {
 })
 // 숙소는 미리 넣지 않음 (11/08 주형: 시연에서 숙소 단계에서 직접 찾아 넣는 모습을 보여 줌)
 
+// 예약 중 마지막 날·가장 늦은 시각인 것 (시연 계정 끝 시각 기준)
+function lastFixedOf(fixedList) {
+  let last = fixedList[0]
+  for (const item of fixedList) {
+    const isLater = item.day > last.day || (item.day === last.day && toMinutes(item.time) > toMinutes(last.time))
+    if (isLater) last = item
+  }
+  return last
+}
 // "시간 추천": 기본 11:00~20:00, 이미 넣은 예약이 그 밖이면 예약에 맞춰 넓힘 (utils/timeRecommend.js)
 function useRecommendedTime() {
   // 시연 계정: 시나리오 시각으로 (11/08 주형). 시작은 첫날(11/12 종로3가 11:30), 끝은 마지막 날 예약 기준
   //   값은 서버 DemoScenario.java 한 곳 (startTime, fixed). 시작·끝은 PlanRuleMaker가 첫날·마지막 날에만 써요
   if (scenario.value) {
-    const last = scenario.value.fixed.find((item) => item.day > 1) || scenario.value.fixed[0] // 마지막 날 예약
+    const last = lastFixedOf(scenario.value.fixed) // 마지막 날 가장 늦은 예약 (11/12: 16:00 동서울터미널 버스)
     const isBoarding = /역$|터미널|공항/.test(last.name)
     const end = toTime(toMinutes(last.time) + (isBoarding ? -BOARDING_EARLY_MIN : MEAL_AFTER_MIN))
     store.planFromTime = scenario.value.startTime
