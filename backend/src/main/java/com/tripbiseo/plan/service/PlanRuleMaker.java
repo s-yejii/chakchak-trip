@@ -848,7 +848,7 @@ public class PlanRuleMaker {
             return false;
         }
         for (String item : names) {
-            if (planCandidateFinder.isSameName(name, item)) { // 띄어쓰기 무시 (11/06)
+            if (planCandidateFinder.isSameName(name, item) && !planCandidateFinder.isInnerSpot(name, item)) { // 띄어쓰기 무시 (11/06), 박물관 안 정원은 박물관이 아님 (11/14)
                 return true;
             }
         }

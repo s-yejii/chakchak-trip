@@ -518,7 +518,7 @@ public class PlanServiceImpl implements PlanService {
     /** 일정에 그 이름이 들어간 칸이 있는지 ("한강" → "뚝섬한강공원"도 같은 곳으로 봄) */
     private boolean hasStopNamed(List<Stop> stops, String name) {
         for (Stop stop : stops) {
-            if (isSameName(stop.getName(), name)) {
+            if (isSameName(stop.getName(), name) && !planCandidateFinder.isInnerSpot(stop.getName(), name)) { // 박물관 안 정원은 박물관이 아님 (11/14)
                 return true;
             }
         }
