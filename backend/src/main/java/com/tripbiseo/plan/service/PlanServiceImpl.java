@@ -1205,7 +1205,8 @@ public class PlanServiceImpl implements PlanService {
             if (place == null) {
                 place = placeService.getPlaceByName(pick.getName(), nearLat, nearLng);
             }
-            if (place == null && Boolean.TRUE.equals(pick.getFixed()) && hasText(pick.getName()) && nearLat != null && nearLng != null) {
+            boolean isReserved = Boolean.TRUE.equals(pick.getFixed()) && isFixedName(pick.getName(), conditions); // 사용자가 넣은 예약만 (11/14: 못 찾은 꼭 갈 곳이 "예약" 칸으로 들어갔어요)
+            if (place == null && isReserved && hasText(pick.getName()) && nearLat != null && nearLng != null) {
                 // 11/13: 예약(고정)은 위치를 못 찾아도 빼지 않고 읽은 이름·시각 그대로 둠 (예전엔 빠져서 그 자리가 4시간 넘게 비었어요)
                 double centerLat = conditions.getAreaLat() != null ? conditions.getAreaLat() : nearLat; // 고른 지역 가운데, 없으면 첫 후보 근처
                 double centerLng = conditions.getAreaLng() != null ? conditions.getAreaLng() : nearLng;
@@ -1424,6 +1425,19 @@ public class PlanServiceImpl implements PlanService {
     }
 
     /** 사용자가 말한 곳(꼭 갈 곳·가능하면 갈 곳·시간 고정)의 이름인지 */
+    /** 사용자가 넣은 예약(고정 일정) 이름인지 */
+    private boolean isFixedName(String name, PlanConditions conditions) {
+        if (name == null || conditions.getFixed() == null) {
+            return false;
+        }
+        for (FixedVisit fixed : conditions.getFixed()) {
+            if (isSameName(name, fixed.getName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private boolean isNamedByUser(String name, PlanConditions conditions) {
         List<String> names = new ArrayList<>();
         if (conditions.getMustVisit() != null) {
