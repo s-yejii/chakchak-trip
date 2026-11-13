@@ -643,7 +643,7 @@ public class PlanRuleMaker {
                 extendLastStay(stops, candidates, day, date, prevEnd, actualStart - travel); // 바로 옆이면 20분 띄우지 않고 앞 곳에 더 머묾 (11/14)
             }
             int latestEnd = Math.min(dayEnd, nextExtraLimit(extras, candidates, day, actualStart, placePoint));
-            int actualStay = Math.min(stay, latestEnd - actualStart);
+            int actualStay = Math.min(Math.min(stay, latestEnd - actualStart), minutesUntilClose(place, date, actualStart, stay));
             if (actualStay < SHORTEST_STAY_MIN) {
                 continue; // 이동까지 넣으면 이 칸은 시간이 모자람
             }
@@ -659,6 +659,18 @@ public class PlanRuleMaker {
             cafeCount += CAFE_KIND.equals(lastKind) ? 1 : 0;
         }
         return replaced;
+    }
+
+    /**
+     * 실제 도착 시각에 닫을 때까지 남은 분 (11/14). 고를 때는 칸 시각으로 영업을 봤는데, 이동 시간 때문에 늦게 도착하면
+     * 마감을 넘겼어요 (19:30 도착 40분 → 20:10, 마감 20:00). 닫혀 있으면 0, 모르면 stay 그대로
+     */
+    private int minutesUntilClose(Place place, LocalDate date, int start, int stay) {
+        OpenInfo open = placeService.getOpenInfo(place, date, start, stay);
+        if (Boolean.FALSE.equals(open.getOpen())) {
+            return 0;
+        }
+        return open.getMinutesLeft() == null ? stay : open.getMinutesLeft();
     }
 
     /**
