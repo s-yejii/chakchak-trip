@@ -396,9 +396,9 @@ function onLinkAdded() {
 function markAutoNext() {
   store.planAutoNext = true
 }
-// 공유로 들어온 링크(/share → ?link=)가 있으면 링크 칸에 채워 둠 (11/13)
+// 공유로 들어온 링크(/share → ?link=)가 있으면 링크 칸에 채워 둠 (11/13). 찾기는 사용자가 글까지 넣고 눌러요 (11/14)
 onMounted(() => {
-  if (typeof route.query.link === 'string' && wishLinks.value) wishLinks.value.fill(route.query.link)
+  if (typeof route.query.link === 'string' && wishLinks.value) wishLinks.value.fillShared(route.query.link)
 })
 onMounted(() => {
   if (!store.planAutoNext) return
@@ -476,10 +476,10 @@ function useRecommendedTime() {
         </section>
 
         <section v-if="step.id === 'link'" class="pa-sns-sec" aria-label="어디서 봤어요?">
-          <!-- 11/13 주형: 제목 옆에 트리피(여행 중 화면과 같은 그림) + 한 줄 -->
+          <!-- 11/13 주형: 트리피(여행 중 화면과 같은 그림) + 안내 두 줄. 11/14 디자인 검토: 화면 제목은 하나만 → 여기는 작은 글씨, 그림은 깃발 글씨가 보이게 56px -->
           <div class="pa-trippie">
             <img src="/img/trippie-flag.webp" alt="" class="pa-trippie__img" aria-hidden="true" draggable="false" />
-            <span class="pa-trippie__text"><h2 class="t-sub" style="margin: 0">어디서 봤어요?</h2><span class="t-cap">링크만 주면 트리피가 찾아올게요</span></span>
+            <span class="pa-trippie__text"><b class="pa-trippie__q">어디서 봤어요?</b><span class="t-cap">링크만 주면 트리피가 찾아올게요</span></span>
           </div>
           <div class="pa-sns">
             <a v-for="item in SEARCH_LINKS" :key="item.key" class="pa-sns__tile" :href="item.url()" target="_blank" rel="noopener noreferrer" :aria-label="(item.text || item.label + '에서 서울 찾기') + ' (새 창)'">
@@ -626,10 +626,11 @@ function useRecommendedTime() {
 .scr-PlanAI .pa-sns__ic img.is-title{transform:scale(1.25)}
 .scr-PlanAI .pa-sns__ic img.is-logo{object-fit:contain;padding:0 4px;background:#fff;box-sizing:border-box;box-shadow:inset 0 0 0 1px var(--line)}
 .scr-PlanAI .pa-trippie{display:flex;align-items:center;gap:10px}
-.scr-PlanAI .pa-trippie__img{width:40px;height:40px;flex:none;object-fit:contain;-webkit-user-drag:none}
+.scr-PlanAI .pa-trippie__img{width:56px;height:56px;flex:none;object-fit:contain;-webkit-user-drag:none}
 .scr-PlanAI .pa-trippie__text{display:flex;flex-direction:column;gap:2px;min-width:0}
-.scr-PlanAI .pa-sns{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-.scr-PlanAI .pa-sns__tile{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:104px;border:1.5px solid var(--line);border-radius:16px;background:var(--surface-raised);text-decoration:none;color:var(--ink);transition:border-color .15s,transform .1s}
+.scr-PlanAI .pa-trippie__q{font-size:14px;font-weight:600;color:var(--ink)}
+.scr-PlanAI .pa-sns{display:grid;grid-template-columns:repeat(4,1fr);gap:8px} /* 11/14: 바로가기 4개 한 줄 (3칸이면 하나만 둘째 줄로 떨어짐) */
+.scr-PlanAI .pa-sns__tile{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:92px;border:1.5px solid var(--line);border-radius:16px;background:var(--surface-raised);text-decoration:none;color:var(--ink);transition:border-color .15s,transform .1s}
 .scr-PlanAI .pa-sns__tile:hover{border-color:var(--navy)}
 .scr-PlanAI .pa-sns__tile b{font-size:13px;font-weight:700}
 .scr-PlanAI .pa-sns__ic{width:44px;height:44px;border-radius:14px;display:flex;align-items:center;justify-content:center;color:#fff}
