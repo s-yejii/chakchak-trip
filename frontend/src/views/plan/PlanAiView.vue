@@ -450,7 +450,7 @@ function useRecommendedTime() {
   if (time.isTomorrow) moveToTomorrow()
   store.planFromTime = time.start
   store.planToTime = time.end
-  showToast('추천 시간 ' + time.start + '~' + time.end + '로 맞췄어요')
+  showToast((time.why ? time.why + ' ' : '') + '추천 시간 ' + time.start + '~' + time.end + '로 맞췄어요')
 }
 </script>
 
