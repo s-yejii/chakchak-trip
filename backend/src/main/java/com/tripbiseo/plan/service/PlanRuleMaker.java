@@ -265,7 +265,10 @@ public class PlanRuleMaker {
         return name.endsWith("역") || name.contains("터미널") || name.contains("공항");
     }
 
-    /** 숙소: 체크인 날 마지막 일정 뒤에 숙소 칸 (마지막 일정 끝 + 30분, 체크인 시각보다 이르지 않게, 23:30까지) */
+    /**
+     * 숙소: 체크인 날 마지막 일정 뒤에 숙소 칸 (마지막 일정 끝 + 거기서 숙소까지 이동 분, 체크인 시각보다 이르지 않게, 23:30까지).
+     * 11/14: 예전엔 늘 30분을 더해서 끝 21:00인데 숙소 칸이 21:30이 됐어요 → 실제 거리로 어림 (가까우면 5~10분)
+     */
     public void addStayStops(PlanGenerateResponse response, PlanConditions conditions, int days) {
         if (conditions.getStays() == null) {
             return;
@@ -276,9 +279,11 @@ public class PlanRuleMaker {
                 continue; // 여행 기간 밖이거나 위치가 없는 숙소
             }
             int clock = stay.getCheckInTime() == null ? 0 : Geo.toMinutes(stay.getCheckInTime());
+            double[] stayPoint = new double[] {stay.getLat(), stay.getLng()};
             for (Stop stop : response.getStops()) {
                 if (stop.getDay() == day) {
-                    clock = Math.max(clock, Geo.toMinutes(stop.getTime()) + stop.getStay() + STAY_AFTER_LAST_MIN);
+                    int move = stop.getLat() == null ? STAY_AFTER_LAST_MIN : PlanTravelTime.minutesBetween(new double[] {stop.getLat(), stop.getLng()}, stayPoint);
+                    clock = Math.max(clock, roundUp(Geo.toMinutes(stop.getTime()) + stop.getStay() + move));
                 }
             }
             response.getStops().add(toStayStop(stay, day, Math.min(clock, LATEST_STAY_MIN)));
