@@ -25,7 +25,7 @@ public interface ReviewEmbeddingMapper {
     /** 임베딩 여러 개를 INSERT 한 문장으로 저장 (이미 있으면 건너뜀) */
     void insertReviewEmbeddingList(@Param("list") List<ReviewVector> list, @Param("model") String model);
 
-    /** 후보 가게들의 리뷰 중 질문(query 임베딩)과 가까운 리뷰를 가게마다 perPlace개 (가게별 가까운 순) */
+    /** 후보 가게들의 리뷰(minLength자 이상) 중 질문(query 임베딩)과 가까운 리뷰를 가게마다 perPlace개 (가게별 가까운 순) */
     List<MoodReview> selectMoodReviewList(@Param("query") String query, @Param("placeIds") List<String> placeIds,
-                                          @Param("perPlace") int perPlace);
+                                          @Param("perPlace") int perPlace, @Param("minLength") int minLength);
 }

@@ -26,6 +26,7 @@ public class ReviewRagServiceImpl implements ReviewRagService {
     private static final int TOO_MANY_REQUESTS = 429;
     private static final int REVIEWS_PER_PLACE = 2;          // 가게마다 근거 리뷰 2개 (지금 규칙 "리뷰 2개 이상에 나와야 인정"과 같음)
     private static final double MAX_MOOD_DISTANCE = 0.40;    // 이보다 멀면 분위기와 상관없는 가게로 봄 (임시값, 7단계 평가로 정함)
+    private static final int MIN_REVIEW_LENGTH = 20;         // 이보다 짧은 리뷰("좋아요")는 근거로 안 씀 (11/15 시험: 아무 질문에나 가깝게 나옴)
 
     private final ReviewEmbeddingMapper reviewEmbeddingMapper;
     private final ReviewEmbedder reviewEmbedder;
@@ -87,7 +88,7 @@ public class ReviewRagServiceImpl implements ReviewRagService {
             return new ArrayList<>();
         }
         String query = toVectorText(reviewEmbedder.embedQuery(mood));
-        List<MoodReview> rows = reviewEmbeddingMapper.selectMoodReviewList(query, placeIds, REVIEWS_PER_PLACE);
+        List<MoodReview> rows = reviewEmbeddingMapper.selectMoodReviewList(query, placeIds, REVIEWS_PER_PLACE, MIN_REVIEW_LENGTH);
         List<MoodMatch> matches = new ArrayList<>();
         for (MoodMatch match : groupByPlace(rows)) {
             if (match.getReviews().size() >= REVIEWS_PER_PLACE && match.getScore() <= MAX_MOOD_DISTANCE) {

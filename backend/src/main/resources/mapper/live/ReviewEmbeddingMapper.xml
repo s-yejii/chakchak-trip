@@ -58,6 +58,7 @@
       JOIN retrip_review r ON r.id = e.review_id
       WHERE r.place_id IN
       <foreach collection="placeIds" item="placeId" open="(" separator="," close=")">#{placeId}</foreach>
+        AND length(r.content) &gt;= #{minLength}   -- "좋아요"·"친절해요"처럼 짧은 글은 어떤 질문과도 적당히 가까워서 근거에서 뺌
     ) ranked
     WHERE rank_in_place &lt;= #{perPlace}
     ORDER BY place_id, distance
