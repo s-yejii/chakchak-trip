@@ -15,5 +15,5 @@ CREATE TABLE IF NOT EXISTS review_embedding (
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
--- 벡터 인덱스(HNSW)는 두지 않아요: 영등포 리뷰 1.3만 개는 전부 비교해도 수십 ms이고, 인덱스는 근사 검색이라 정확도가 조금 떨어져요.
+-- 벡터 인덱스(HNSW)는 두지 않아요: 5개 구 리뷰 3.2만 개는 전부 비교해도 수십~100 ms이고, 인덱스는 근사 검색이라 정확도가 조금 떨어져요.
 -- 리뷰가 10만 개를 넘게 늘면 그때 추가: CREATE INDEX ON review_embedding USING hnsw (embedding vector_cosine_ops);

@@ -158,6 +158,7 @@
 | `POST /api/trips/{id}/live/apply` | 고른 대안을 일정에 반영 | live/AltTrimView, live/AltDropView, live/AltSwapView → live/AppliedView | 있음 |
 | `POST /api/trips/{id}/live/preview` | 직접 고친 남은 일정 계산 (저장 안 함) | live/AlternativesView, live/AltTrimView, live/AltDropView, live/AltSwapView | 있음 |
 | `GET /api/trips/{id}/live/swap-candidates` | 바꿀 장소 후보 (바꿨을 때 여유 포함) | live/AltSwapView | 있음 |
+| `POST /api/live/rag/embed` | 리뷰 RAG 준비: 시나리오 5개 구 리뷰 임베딩 채우기 (개발용) | 화면 없음 | 있음 (11/15) |
 | (주소 미정) | 줄서기 대기 시간 반영 | live/LiveView (TablingModal) | 확인 필요 |
 | (주소 미정) | "그냥 갈게요" (늦어도 그대로 가기) | member/LockDelayView, member/LockPushView | 확인 필요 |
 
@@ -1419,6 +1420,15 @@ key 끝의 숫자가 바뀔 때만 화면이 같은 알림을 다시 띄워요.
 | finalArrive, slackMin | string, number | 이 장소로 바꾸면 고정 일정(없으면 마지막 칸) 예상 도착과 여유 |
 
 **오류** 공통 오류 · 404 "남은 일정에서 찾을 수 없어요." · 400 "고정 일정은 바꿀 수 없어요."
+
+### `POST /api/live/rag/embed`
+리뷰 RAG 준비: 아직 임베딩이 없는 시나리오 5개 구(중구·종로구·강남구·용산구·영등포구) 리뷰를 Gemini 임베딩(768차원)으로 바꿔 `review_embedding`에 저장해요. 개발용이라 화면에서 안 불러요. `remaining`이 0이 될 때까지 여러 번 부르면 되고, 이미 한 리뷰는 건너뛰어요. · 로그인 필요 · 11/15 추가
+
+**요청** 쿼리 `limit`(선택, 1~5000, 기본 1000) = 이번에 바꿀 최대 개수
+
+**응답** `{ "embedded": 1000, "remaining": 11731 }` (이번에 바꾼 개수, 아직 남은 개수). Gemini 무료 한도에 걸리면 그때까지 한 만큼만 돌려줘요 (1분쯤 뒤 다시)
+
+**오류** 400 "limit은 1~5000이에요." · 503 "Gemini 키가 없어요…" · 502 "Gemini 임베딩을 받지 못했어요…"
 
 ---
 

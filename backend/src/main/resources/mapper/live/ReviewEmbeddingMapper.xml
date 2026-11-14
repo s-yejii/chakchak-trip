@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- ④ 리뷰 RAG: 리뷰 임베딩 (review_embedding). retrip_review·retrip_place(공통)는 읽기만 -->
+<mapper namespace="com.tripbiseo.live.mapper.ReviewEmbeddingMapper">
+
+  <!-- 아직 임베딩이 없는 리뷰 = review_embedding에 짝이 없는 리뷰 (LEFT JOIN … IS NULL).
+       그래서 중간에 멈춰도 다시 부르면 남은 것부터 이어서 해요.
+       시나리오 5개 구만 (db/10b와 같은 구, 리뷰 약 3.2만 개). 주소 두 번째 낱말이 구 이름 ("서울특별시 영등포구 …") -->
+  <sql id="notEmbeddedYet">
+    FROM retrip_review r
+    JOIN retrip_place p ON p.id = r.place_id
+    LEFT JOIN review_embedding e ON e.review_id = r.id
+    WHERE e.review_id IS NULL
+      AND split_part(p.address, ' ', 2) IN ('중구', '종로구', '강남구', '용산구', '영등포구')
+  </sql>
+
+  <select id="selectReviewToEmbedList" resultType="com.tripbiseo.live.dto.ReviewText">
+    SELECT r.id AS reviewId, r.content
+    <include refid="notEmbeddedYet"/>
+    ORDER BY r.id
+    LIMIT #{count}
+  </select>
+
+  <select id="selectRemainingCount" resultType="int">
+    SELECT COUNT(*)
+    <include refid="notEmbeddedYet"/>
+  </select>
+
+  <!-- foreach: 목록을 돌면서 (…), (…), (…) 를 이어 붙여 INSERT 한 문장으로 -->
+  <insert id="insertReviewEmbeddingList">
+    INSERT INTO review_embedding (review_id, embedding, model)
+    VALUES
+    <foreach collection="list" item="item" separator=",">
+      (#{item.reviewId}, #{item.embedding}::vector, #{model})
+    </foreach>
+    ON CONFLICT (review_id) DO NOTHING
+  </insert>
+
+</mapper>
