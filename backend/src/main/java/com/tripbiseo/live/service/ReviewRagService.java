@@ -13,4 +13,10 @@ public interface ReviewRagService {
 
     /** 후보 가게들을 분위기(mood)에 맞는 순으로 줄 세움 + 근거 리뷰. 분위기와 먼 가게는 뺌 */
     List<MoodMatch> rankByMood(List<String> placeIds, String mood);
+
+    /**
+     * 분위기 질문: 후보 가게 중 분위기에 맞는 곳만 이유·근거 리뷰와 함께 (벡터로 찾기 → Gemini 판단 → 인용 검사).
+     * 후보에 임베딩이 없으면 예전 방식(리뷰 2개 이상에 moodWord 글자)
+     */
+    List<MoodMatch> findByMood(List<String> placeIds, String mood, String moodWord);
 }

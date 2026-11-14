@@ -64,4 +64,25 @@
     ORDER BY place_id, distance
   </select>
 
+  <!-- 후보 가게 중 임베딩된 리뷰가 하나라도 있는 가게 수 -->
+  <select id="selectEmbeddedPlaceCount" resultType="int">
+    SELECT COUNT(DISTINCT r.place_id)
+    FROM review_embedding e
+    JOIN retrip_review r ON r.id = e.review_id
+    WHERE r.place_id IN
+    <foreach collection="placeIds" item="placeId" open="(" separator="," close=")">#{placeId}</foreach>
+  </select>
+
+  <!-- 예전 방식: 리뷰 글자에 word가 들어간 리뷰가 minCount개 이상인 가게 (AI SQL이 쓰던 ILIKE 조건과 같음).
+       '%' || #{word} || '%' : 값은 #{}로 넣고 앞뒤 %는 SQL에서 붙임 -->
+  <select id="selectKeywordPlaceIdList" resultType="string">
+    SELECT r.place_id
+    FROM retrip_review r
+    WHERE r.place_id IN
+    <foreach collection="placeIds" item="placeId" open="(" separator="," close=")">#{placeId}</foreach>
+      AND r.content ILIKE '%' || #{word} || '%'
+    GROUP BY r.place_id
+    HAVING COUNT(*) &gt;= #{minCount}
+  </select>
+
 </mapper>

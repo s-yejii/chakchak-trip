@@ -28,4 +28,11 @@ public interface ReviewEmbeddingMapper {
     /** 후보 가게들의 리뷰(minLength자 이상) 중 질문(query 임베딩)과 가까운 리뷰를 가게마다 perPlace개 (가게별 가까운 순) */
     List<MoodReview> selectMoodReviewList(@Param("query") String query, @Param("placeIds") List<String> placeIds,
                                           @Param("perPlace") int perPlace, @Param("minLength") int minLength);
+
+    /** 후보 가게 중 임베딩된 리뷰가 있는 가게 수 (0이면 리뷰 RAG를 못 씀 → 예전 방식) */
+    int selectEmbeddedPlaceCount(@Param("placeIds") List<String> placeIds);
+
+    /** 예전 방식(대비용·평가 비교용): 리뷰 minCount개 이상에 word 글자가 들어간 후보 가게 id */
+    List<String> selectKeywordPlaceIdList(@Param("placeIds") List<String> placeIds, @Param("word") String word,
+                                          @Param("minCount") int minCount);
 }

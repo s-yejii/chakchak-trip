@@ -6,10 +6,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import com.tripbiseo.common.ai.AiService;
 import com.tripbiseo.common.exception.ApiException;
 import com.tripbiseo.live.dto.EmbedResult;
+import com.tripbiseo.live.dto.MoodJudgeAnswer;
 import com.tripbiseo.live.dto.MoodMatch;
 import com.tripbiseo.live.dto.MoodReview;
 import com.tripbiseo.live.dto.ReviewText;
@@ -28,8 +32,17 @@ public class ReviewRagServiceImpl implements ReviewRagService {
     private static final double MAX_MOOD_DISTANCE = 0.40;    // 이보다 멀면 분위기와 상관없는 가게로 봄 (임시값, 7단계 평가로 정함)
     private static final int MIN_REVIEW_LENGTH = 20;         // 이보다 짧은 리뷰("좋아요")는 근거로 안 씀 (11/15 시험: 아무 질문에나 가깝게 나옴)
 
+    private static final int JUDGE_COUNT = 8;                // Gemini에게 보여 줄 후보 수 (벡터 상위 8곳 × 리뷰 2개)
+    private static final int KEYWORD_MIN_COUNT = 2;          // 예전 방식: 리뷰 2개 이상에 글자가 나와야 인정
+    private static final int MIN_QUOTE_LENGTH = 5;           // 인용문이 이보다 짧으면 근거로 안 봄 ("좋아요" 한 마디)
+    private static final int MAX_REASON_LENGTH = 40;
+
+    private static final Logger log = LoggerFactory.getLogger(ReviewRagServiceImpl.class);
+
     private final ReviewEmbeddingMapper reviewEmbeddingMapper;
     private final ReviewEmbedder reviewEmbedder;
+    private final MoodPromptMaker moodPromptMaker;
+    private final AiService aiService;
 
     /**
      * 100개씩: 꺼내기 → Gemini로 임베딩 → 저장. 한도(429)에 걸리면 거기서 멈추고 된 만큼 알려 줘요.
@@ -98,6 +111,118 @@ public class ReviewRagServiceImpl implements ReviewRagService {
         // Comparator.comparingDouble: score 값을 꺼내서 작은 것부터 정렬하라는 규칙 (Collections 정렬과 같은 일)
         matches.sort(Comparator.comparingDouble(MoodMatch::getScore));
         return matches;
+    }
+
+    /** 분위기 질문: R(벡터로 상위 8곳) → A·G(Gemini가 리뷰를 읽고 맞는 곳만 고름) → 인용 검사. 안 되면 예전 방식·벡터 순위로 */
+    @Override
+    public List<MoodMatch> findByMood(List<String> placeIds, String mood, String moodWord) {
+        if (placeIds == null || placeIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+        if (reviewEmbeddingMapper.selectEmbeddedPlaceCount(placeIds) == 0) {
+            log.info("리뷰 RAG: 후보에 임베딩이 없어 예전 방식(리뷰 글자 '{}')", moodWord);
+            return findByKeyword(placeIds, moodWord);
+        }
+        List<MoodMatch> ranked;
+        try {
+            ranked = rankByMood(placeIds, mood);
+        } catch (ApiException e) { // 질문 임베딩 실패 (한도·키 없음)
+            log.warn("리뷰 RAG: 질문 임베딩 실패 → 예전 방식 - {}", e.getMessage());
+            return findByKeyword(placeIds, moodWord);
+        }
+        List<MoodMatch> top = ranked.size() > JUDGE_COUNT ? new ArrayList<>(ranked.subList(0, JUDGE_COUNT)) : ranked;
+        return judgeWithGemini(top, mood);
+    }
+
+    // 예전 방식: 리뷰 2개 이상에 moodWord 글자가 나온 후보 (후보 순서 그대로)
+    private List<MoodMatch> findByKeyword(List<String> placeIds, String moodWord) {
+        List<MoodMatch> matches = new ArrayList<>();
+        if (moodWord == null || moodWord.isBlank()) {
+            return matches;
+        }
+        List<String> foundIds = reviewEmbeddingMapper.selectKeywordPlaceIdList(placeIds, moodWord.trim(), KEYWORD_MIN_COUNT);
+        for (String placeId : placeIds) {
+            if (foundIds.contains(placeId)) {
+                MoodMatch match = new MoodMatch();
+                match.setPlaceId(placeId);
+                matches.add(match);
+            }
+        }
+        return matches;
+    }
+
+    // Gemini가 리뷰를 읽고 분위기에 맞는 곳만 고름. 실패하면 벡터 순위 그대로 (이유 없이)
+    private List<MoodMatch> judgeWithGemini(List<MoodMatch> top, String mood) {
+        if (top.isEmpty() || !aiService.isReady()) {
+            return top;
+        }
+        MoodJudgeAnswer answer;
+        try {
+            answer = aiService.askJsonQuick(moodPromptMaker.makePrompt(mood, top), MoodJudgeAnswer.class);
+        } catch (ApiException e) {
+            log.warn("리뷰 RAG: Gemini 판단 실패 → 벡터 순위 그대로 - {}", e.getMessage());
+            return top;
+        }
+        return keepVerifiedPicks(top, answer);
+    }
+
+    // Gemini가 고른 곳 중 인용문이 실제 리뷰에 있는 곳만 (지어낸 근거 막기). 순서는 벡터 순위
+    private List<MoodMatch> keepVerifiedPicks(List<MoodMatch> top, MoodJudgeAnswer answer) {
+        List<MoodMatch> picked = new ArrayList<>();
+        for (int i = 0; i < top.size(); i++) {
+            MoodJudgeAnswer.Pick pick = findPick(answer, i + 1);
+            if (pick == null) {
+                continue; // Gemini가 안 고름
+            }
+            MoodMatch match = top.get(i);
+            if (!isQuoteInReviews(pick.getQuote(), match.getReviews())) {
+                log.info("리뷰 RAG: 인용문이 리뷰에 없어 뺌 - {} / {}", match.getPlaceId(), pick.getQuote());
+                continue;
+            }
+            match.setReason(cutText(pick.getReason(), MAX_REASON_LENGTH));
+            match.setQuote(pick.getQuote().trim());
+            picked.add(match);
+        }
+        return picked;
+    }
+
+    // 답에서 그 번호의 고른 것 (없으면 null)
+    private MoodJudgeAnswer.Pick findPick(MoodJudgeAnswer answer, int number) {
+        if (answer == null || answer.getPicks() == null) {
+            return null;
+        }
+        for (MoodJudgeAnswer.Pick pick : answer.getPicks()) {
+            if (pick.getNumber() != null && pick.getNumber() == number) {
+                return pick;
+            }
+        }
+        return null;
+    }
+
+    // 인용문이 리뷰 글 안에 그대로 있는지 (띄어쓰기는 무시하고 비교)
+    private boolean isQuoteInReviews(String quote, List<String> reviews) {
+        if (quote == null || removeSpaces(quote).length() < MIN_QUOTE_LENGTH) {
+            return false;
+        }
+        String target = removeSpaces(quote);
+        for (String review : reviews) {
+            if (removeSpaces(review).contains(target)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String removeSpaces(String text) {
+        return text.replaceAll("\\s", ""); // \\s: 띄어쓰기·줄바꿈 같은 빈칸 글자 (정규식)
+    }
+
+    private String cutText(String text, int maxLength) {
+        if (text == null) {
+            return null;
+        }
+        String trimmed = text.trim();
+        return trimmed.length() > maxLength ? trimmed.substring(0, maxLength) : trimmed;
     }
 
     // 리뷰 줄들(가게별 가까운 순)을 가게 하나에 MoodMatch 하나로 모음. 점수 = 리뷰 거리 평균
