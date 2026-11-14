@@ -5,13 +5,19 @@
 
   <!-- 아직 임베딩이 없는 리뷰 = review_embedding에 짝이 없는 리뷰 (LEFT JOIN … IS NULL).
        그래서 중간에 멈춰도 다시 부르면 남은 것부터 이어서 해요.
-       시나리오 5개 구만 (db/10b와 같은 구, 리뷰 약 3.2만 개). 주소 두 번째 낱말이 구 이름 ("서울특별시 영등포구 …") -->
+       범위 (11/15): Gemini 무료 임베딩이 하루 약 1,000개라 5개 구 3.2만 개 대신 시연 동선 장소 500m 안만 (리뷰 약 3,100개).
+       좌표는 plan/service/DemoScenario.java 시연 일정과 같은 곳 (종로3가·익선, 명동 숙소, 남산나들길, 팔각정, 예장공원, 을지로, 강남 스시도, 동서울터미널) -->
   <sql id="notEmbeddedYet">
     FROM retrip_review r
     JOIN retrip_place p ON p.id = r.place_id
     LEFT JOIN review_embedding e ON e.review_id = r.id
     WHERE e.review_id IS NULL
-      AND split_part(p.address, ' ', 2) IN ('중구', '종로구', '강남구', '용산구', '영등포구')
+      AND EXISTS (
+        SELECT 1
+        FROM (VALUES (37.5732, 126.9898), (37.5616, 126.9827), (37.5549, 126.9867), (37.5516, 126.9876),
+                     (37.5605, 126.9889), (37.5658, 126.9906), (37.4952, 127.0850), (37.5344, 127.0941)) AS demo(lat, lng)
+        WHERE ST_DWithin(p.geom, ST_SetSRID(ST_MakePoint(demo.lng, demo.lat), 4326)::geography, 500)
+      )
   </sql>
 
   <select id="selectReviewToEmbedList" resultType="com.tripbiseo.live.dto.ReviewText">
@@ -35,5 +41,26 @@
     </foreach>
     ON CONFLICT (review_id) DO NOTHING
   </insert>
+
+  <!-- 후보 가게마다 질문과 가장 가까운 리뷰 perPlace개 (리뷰 RAG의 R: 찾기)
+       안쪽 SELECT: 후보 가게 리뷰마다 질문과 거리를 재고, ROW_NUMBER로 가게마다 가까운 순 1, 2, 3… 번호를 매김
+       바깥 SELECT: 번호가 perPlace 이하인 것만 = 가게마다 위에서 perPlace개 -->
+  <select id="selectMoodReviewList" resultType="com.tripbiseo.live.dto.MoodReview">
+    SELECT place_id AS placeId, review_id AS reviewId, content, distance
+    FROM (
+      SELECT r.place_id,
+             r.id AS review_id,
+             r.content,
+             e.embedding &lt;=&gt; #{query}::vector AS distance,
+             ROW_NUMBER() OVER (PARTITION BY r.place_id
+                                ORDER BY e.embedding &lt;=&gt; #{query}::vector) AS rank_in_place
+      FROM review_embedding e
+      JOIN retrip_review r ON r.id = e.review_id
+      WHERE r.place_id IN
+      <foreach collection="placeIds" item="placeId" open="(" separator="," close=")">#{placeId}</foreach>
+    ) ranked
+    WHERE rank_in_place &lt;= #{perPlace}
+    ORDER BY place_id, distance
+  </select>
 
 </mapper>

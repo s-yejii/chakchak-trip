@@ -1,11 +1,16 @@
 package com.tripbiseo.live.controller;
 
+import java.util.List;
+
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.tripbiseo.live.dto.EmbedResult;
+import com.tripbiseo.live.dto.MoodMatch;
+import com.tripbiseo.live.dto.MoodRankRequest;
 import com.tripbiseo.live.service.ReviewRagService;
 
 import lombok.RequiredArgsConstructor;
@@ -22,5 +27,11 @@ public class ReviewRagController {
     @PostMapping("/embed")
     public EmbedResult embedReviews(@RequestParam(defaultValue = "1000") int limit) {
         return reviewRagService.embedReviews(limit);
+    }
+
+    /** 후보 가게들을 분위기로 줄 세워 보기 (개발·평가용) */
+    @PostMapping("/rank")
+    public List<MoodMatch> rankByMood(@RequestBody MoodRankRequest request) {
+        return reviewRagService.rankByMood(request.getPlaceIds(), request.getMood());
     }
 }
