@@ -28,6 +28,8 @@
 .lp-chips { display: flex; gap: 6px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
 .lp-chips::-webkit-scrollbar { display: none; }
 .lp-chips--indent { padding-left: 30px; }
+/* 예시 칩 줄 (11/16): 오른쪽 끝을 흐리게 해서 "옆에 더 있어요" 힌트. 끝 칩도 흐려지지 않게 오른쪽 여백 */
+.lp-chips--more { padding-right: 28px; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
 .lp-chips .chip { flex: none; border: 1px solid var(--line); background: #fff; color: var(--ink); font-weight: 600; }
 .lp-chips .chip.is-on { border-color: var(--navy); background: var(--navy); color: #fff; }
 .lp-radius { display: flex; align-items: center; gap: 8px; min-width: 0; }

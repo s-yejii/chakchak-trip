@@ -68,6 +68,15 @@ watch(() => props.selected, (id) => {
 })
 
 // ------------------------------------------------------------ 보내기·답
+// 예시 칩 줄: PC 마우스 휠(위아래)로도 옆으로 넘김 (폰은 손가락으로 밀면 원래 넘어가요, 11/16)
+function scrollSideways(event) {
+  const box = event.currentTarget
+  const isSideways = Math.abs(event.deltaX) > Math.abs(event.deltaY) // 트랙패드로 이미 옆으로 미는 중이면 그대로 둠
+  if (box.scrollWidth <= box.clientWidth || isSideways) return
+  box.scrollLeft += event.deltaY
+  event.preventDefault() // 대화창이 위아래로 같이 움직이지 않게
+}
+
 function addMessage(message) {
   const item = { id: ++nextId, ...message }
   messages.value.push(item)
@@ -263,7 +272,7 @@ function distText(m) {
           <span class="lp-avatar lp-avatar--ai lp-avatar--sm" aria-hidden="true"><i class="ic ic--s i-sparkle"></i></span>
           <p class="lp-bubble">근처에서 갈 곳을 찾아 드릴게요. '조용한 카페', '혼자 가기 편한 식당'처럼 원하는 분위기로 물어보세요. 리뷰에서 근거도 함께 보여 드려요.</p>
         </div>
-        <div v-if="!messages.length" class="lp-chips lp-chips--indent">
+        <div v-if="!messages.length" class="lp-chips lp-chips--indent lp-chips--more" @wheel="scrollSideways">
           <button v-for="text in examples" :key="text" type="button" class="chip chip--sm" @click="send(text)">{{ text }}</button>
         </div>
 
