@@ -261,7 +261,7 @@ function distText(m) {
       <div ref="threadBox" class="lp-thread lp-thread--chat" aria-live="polite">
         <div class="lp-row">
           <span class="lp-avatar lp-avatar--ai lp-avatar--sm" aria-hidden="true"><i class="ic ic--s i-sparkle"></i></span>
-          <p class="lp-bubble">여행 중에 필요한 걸 말해 주세요. '조용한', '혼자 가기 편한'처럼 분위기로 물으면 리뷰를 읽고 근거와 함께 찾아 드려요.</p>
+          <p class="lp-bubble">근처에서 갈 곳을 찾아 드릴게요. '조용한 카페', '혼자 가기 편한 식당'처럼 원하는 분위기로 물어보세요. 리뷰에서 근거도 함께 보여 드려요.</p>
         </div>
         <div v-if="!messages.length" class="lp-chips lp-chips--indent">
           <button v-for="text in examples" :key="text" type="button" class="chip chip--sm" @click="send(text)">{{ text }}</button>
