@@ -83,7 +83,7 @@ const isConditionsAsk = ref(false) // [조건 바꾸기]를 누르면 먼저 묻
 function openConditions() {
   isConditionsAsk.value = false
   store.planStep = 0
-  router.push({ path: '/plan/info', query: { step: '0', back: route.fullPath } }) // 1단계에서 ← 를 누르면 이 화면으로 돌아와요
+  router.push({ path: '/plan/info', query: { step: '0', back: '/trips' } }) // 1단계에서 ← 를 누르면 내 여행으로 (일정 점검의 ←와 같게)
 }
 
 // 이동 미리보기. 일정이 바뀌면(다시 점검) 처음으로
