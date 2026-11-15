@@ -20,7 +20,7 @@ import { devMode } from '@/utils/devMode'
 import { useTripStore } from '@/stores/trip'
 import { addDays } from '@/utils/dates'
 import { dayStopsOf, retime, setDayStops } from '@/utils/draftEdit'
-import { toShortDate, toViewTrip } from '@/utils/tripView'
+import { toShortDate, toViewTrip, tripDetailLink } from '@/utils/tripView'
 import { showToast } from '@/utils/toast'
 import { showTrashToast } from '@/utils/trash'
 import { useRouteSim } from '@/utils/useRouteSim'
@@ -36,6 +36,7 @@ const check = ref(null) // 점검 결과 (고른 날)
 const error = ref('')
 const saving = ref(false)
 const savedId = ref(null) // 다시 짜기로 방금 저장한 여행 번호 (있으면 바꿀지 묻는 창을 띄움)
+const savedTrip = ref(null) // 다시 짜기로 방금 저장한 여행 (창을 닫고 갈 화면을 날짜로 고르려고)
 const isReplacing = ref(false)
 const day = ref(Number(route.query.day || 1))
 const hasDraft = computed(() => store.draft.stops.length > 0)
@@ -151,12 +152,12 @@ function editLink(selected) {
   return `/plan/edit/stop?day=${day.value}&idx=${selected}&back=${encodeURIComponent(route.fullPath)}` // 돌아올 곳 = 지금 주소 그대로
 }
 
-// 저장 끝: 초안·조건을 비우고 새 여행으로
-function finishSave(id) {
+// 저장 끝: 초안·조건을 비우고 새 여행으로 (오늘·여행 중이면 여행 날 화면, 다음에 갈 여행이면 여행 전 화면)
+function finishSave(trip) {
   store.resetDraft()
   store.resetPlan()
   showToast('일정을 저장했어요')
-  router.replace('/trips/today?id=' + id)
+  router.replace(tripDetailLink(trip))
 }
 
 // 다시 짜기로 저장한 뒤: 옛 여행을 지우고 바꾸기 (지우기 실패해도 새 일정은 이미 저장됨)
@@ -171,7 +172,7 @@ async function replaceOld() {
     showToast(e.message)
   }
   isReplacing.value = false
-  finishSave(savedId.value)
+  finishSave(savedTrip.value)
   if (isMoved) showTrashToast(oldId) // 옛 여행은 휴지통으로 (되돌리면 두 여행 다 남아요)
 }
 
@@ -205,9 +206,10 @@ async function save() {
     if (devMode.isOn) await trashOverlappingTrips(saved) // 시연 계정: 날짜가 겹치는 예전 여행은 휴지통으로
     if (store.replanFrom) {
       savedId.value = saved.id // 다시 짜기: 새 일정이 저장된 뒤에만 옛 여행을 어떻게 할지 물어봄
+      savedTrip.value = saved
       return
     }
-    finishSave(saved.id)
+    finishSave(saved)
   } catch (e) {
     showToast(e.message)
   } finally {
@@ -253,7 +255,7 @@ async function save() {
         <h2 class="h-title" style="margin: 0">지금 여행을 이걸로 바꿀까요?</h2>
         <p class="t-cap" style="margin: 0 0 12px">{{ store.replanFrom.title }}</p>
         <div class="cta__row">
-          <button type="button" class="btn btn--secondary btn--lg" :disabled="isReplacing" @click="finishSave(savedId)">둘 다 두기</button>
+          <button type="button" class="btn btn--secondary btn--lg" :disabled="isReplacing" @click="finishSave(savedTrip)">둘 다 두기</button>
           <button type="button" class="btn btn--primary btn--lg" :disabled="isReplacing" @click="replaceOld">{{ isReplacing ? '바꾸는 중' : '바꾸기' }}</button>
         </div>
       </section>
