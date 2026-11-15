@@ -22,6 +22,7 @@ import { addDays } from '@/utils/dates'
 import { dayStopsOf, retime, setDayStops } from '@/utils/draftEdit'
 import { toShortDate, toViewTrip, tripDetailLink } from '@/utils/tripView'
 import { showToast } from '@/utils/toast'
+import { withEuroRo } from '@/utils/josa'
 import { showTrashToast } from '@/utils/trash'
 import { useRouteSim } from '@/utils/useRouteSim'
 import RouteSimButton from '@/components/trip/RouteSimButton.vue'
@@ -128,7 +129,7 @@ async function changeMode(i, mode) {
   list[i].mode = mode
   retime(list, list[0].time)
   await runCheck()
-  if (!error.value) showToast(modes[mode].label + '(으)로 바꿨어요')
+  if (!error.value) showToast(withEuroRo(modes[mode].label) + ' 바꿨어요')
 }
 
 // 영업시간 [확인했어요]: 초안 그 칸에 hoursChecked를 붙여 다시 점검해도 접힌 채로 ("미리 확인할 것"에서도 빠짐)

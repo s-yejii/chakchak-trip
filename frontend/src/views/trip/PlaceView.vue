@@ -13,6 +13,7 @@ import { useTripStore } from '@/stores/trip'
 import { imageFor } from '@/utils/mapView'
 import { goBack } from '@/utils/back'
 import { showToast } from '@/utils/toast'
+import { withEulReul } from '@/utils/josa'
 import { kindOf } from '@/utils/budget'
 
 // 종류별 보통 머무는 분 (PlanRuleMaker와 같은 값)
@@ -103,13 +104,13 @@ function toggleSave() {
 function addToPlan() {
   if (isFake) {
     // 시연용 가짜 장소는 예전 동작 그대로 (일정 점검에서 들어와서 뒤로 가면 거기로 돌아감)
-    showToast(place.value.name + '을(를) 동선에 맞춰 넣었어요')
+    showToast(withEulReul(place.value.name) + ' 동선에 맞춰 넣었어요')
     return goBack('/plan/check')
   }
   // 실제 장소: 시트의 "새 여행 만들기"
   store.addDraftPlace(server.value)
   store.draft.stops[store.draft.stops.length - 1].stay = server.value.dur // store는 늘 60분으로 넣어서 방금 넣은 칸(맨 끝)만 고침
-  showToast(place.value.name + '을(를) 새 여행에 넣었어요')
+  showToast(withEulReul(place.value.name) + ' 새 여행에 넣었어요')
   router.push('/plan/check') // goBack은 앱 안에서 왔으면 전 화면(홈 등)으로 가서, 담은 뒤엔 꼭 일정 점검으로
 }
 
