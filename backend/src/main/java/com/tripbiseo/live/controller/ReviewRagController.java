@@ -9,6 +9,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.tripbiseo.live.dto.EmbedResult;
+import com.tripbiseo.live.dto.MoodCompareRequest;
+import com.tripbiseo.live.dto.MoodCompareResponse;
 import com.tripbiseo.live.dto.MoodMatch;
 import com.tripbiseo.live.dto.MoodRankRequest;
 import com.tripbiseo.live.service.ReviewRagService;
@@ -27,6 +29,12 @@ public class ReviewRagController {
     @PostMapping("/embed")
     public EmbedResult embedReviews(@RequestParam(defaultValue = "1000") int limit) {
         return reviewRagService.embedReviews(limit);
+    }
+
+    /** 평가용: 같은 후보에서 A(글자)·B(벡터)·C(RAG) 결과를 나란히 (docs/rag-eval/run_eval.py가 부름) */
+    @PostMapping("/compare")
+    public MoodCompareResponse compareMood(@RequestBody MoodCompareRequest request) {
+        return reviewRagService.compareMood(request);
     }
 
     /** 후보 가게들을 분위기로 줄 세워 보기 (개발·평가용) */

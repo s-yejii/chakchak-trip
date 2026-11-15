@@ -159,6 +159,8 @@
 | `POST /api/trips/{id}/live/preview` | 직접 고친 남은 일정 계산 (저장 안 함) | live/AlternativesView, live/AltTrimView, live/AltDropView, live/AltSwapView | 있음 |
 | `GET /api/trips/{id}/live/swap-candidates` | 바꿀 장소 후보 (바꿨을 때 여유 포함) | live/AltSwapView | 있음 |
 | `POST /api/live/rag/embed` | 리뷰 RAG 준비: 시연 동선 500m 안 리뷰 임베딩 채우기 (개발용) | 화면 없음 | 있음 (11/15) |
+| `POST /api/live/rag/rank` | 후보 가게를 분위기로 줄 세워 보기 (개발·평가용) | 화면 없음 | 있음 (11/15) |
+| `POST /api/live/rag/compare` | 같은 후보에서 A(글자)·B(벡터)·C(RAG) 결과 비교 (평가용, `docs/rag-eval/run_eval.py`) | 화면 없음 | 있음 (11/16) |
 | (주소 미정) | 줄서기 대기 시간 반영 | live/LiveView (TablingModal) | 확인 필요 |
 | (주소 미정) | "그냥 갈게요" (늦어도 그대로 가기) | member/LockDelayView, member/LockPushView | 확인 필요 |
 
@@ -1429,6 +1431,18 @@ key 끝의 숫자가 바뀔 때만 화면이 같은 알림을 다시 띄워요.
 **응답** `{ "embedded": 1000, "remaining": 11731 }` (이번에 바꾼 개수, 아직 남은 개수). Gemini 무료 한도에 걸리면 그때까지 한 만큼만 돌려줘요 (1분쯤 뒤 다시)
 
 **오류** 400 "limit은 1~5000이에요." · 503 "Gemini 키가 없어요…" · 502 "Gemini 임베딩을 받지 못했어요…"
+
+### `POST /api/live/rag/rank`
+후보 가게를 분위기에 맞는 순으로 줄 세워 봐요 (벡터만, Gemini 판단 없음). 개발·평가용 · 로그인 필요 · 11/15 추가
+
+**요청** `{ "mood": "조용한", "placeIds": ["naver-1", …] }` · **응답** `[{ placeId, score, reviews }]` score(근거 리뷰 2개 거리 평균, 작을수록 맞음) 순. 근거 리뷰가 2개 안 되거나 거리 0.40을 넘으면 빠짐
+
+### `POST /api/live/rag/compare`
+평가용: 이 점 500m 안 그 종류 가게(고정 후보, 보정 평점 순)를 세 방식으로 골라 상위 5와 걸린 시간을 나란히 줘요. Gemini SQL을 거치지 않아 같은 질문이면 늘 같은 후보예요. · 로그인 필요 · 11/16 추가
+
+**요청** `{ "lat", "lng", "kind": "cafe", "mood": "오래 앉아 있어도 눈치 안 보이는", "moodWord": "오래" }`
+
+**응답** `{ candidateCount, embeddedCount, keyword: [...], vector: [...], rag: [...], keywordMs, vectorMs, ragMs }` 각 목록은 `{ id, name, reason, quote }` 최대 5개 (reason·quote는 rag만). keyword = A 리뷰 2개 이상에 moodWord 글자, vector = B 임베딩 거리 순, rag = C 벡터 → Gemini 판단 → 인용 검사. B가 임베딩 한도로 실패하면 빈 목록
 
 ---
 

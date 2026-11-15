@@ -73,6 +73,15 @@
     <foreach collection="placeIds" item="placeId" open="(" separator="," close=")">#{placeId}</foreach>
   </select>
 
+  <!-- 평가용 후보: Gemini SQL 없이 고정 (같은 질문이면 늘 같은 후보). ask_place는 ④ 뷰 (18_ask_place.sql) -->
+  <select id="selectCandidateList" resultType="com.tripbiseo.live.dto.MoodComparePlace">
+    SELECT id, name
+    FROM ask_place
+    WHERE kind = #{kind}
+      AND ST_DWithin(geom, ST_SetSRID(ST_MakePoint(#{lng}, #{lat}), 4326)::geography, #{meters})
+    ORDER BY rating_adj DESC, id
+  </select>
+
   <!-- 예전 방식: 리뷰 글자에 word가 들어간 리뷰가 minCount개 이상인 가게 (AI SQL이 쓰던 ILIKE 조건과 같음).
        '%' || #{word} || '%' : 값은 #{}로 넣고 앞뒤 %는 SQL에서 붙임 -->
   <select id="selectKeywordPlaceIdList" resultType="string">

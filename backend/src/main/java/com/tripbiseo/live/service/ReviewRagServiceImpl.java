@@ -2,6 +2,7 @@ package com.tripbiseo.live.service;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -13,6 +14,9 @@ import org.springframework.stereotype.Service;
 import com.tripbiseo.common.ai.AiService;
 import com.tripbiseo.common.exception.ApiException;
 import com.tripbiseo.live.dto.EmbedResult;
+import com.tripbiseo.live.dto.MoodCompareRequest;
+import com.tripbiseo.live.dto.MoodComparePlace;
+import com.tripbiseo.live.dto.MoodCompareResponse;
 import com.tripbiseo.live.dto.MoodJudgeAnswer;
 import com.tripbiseo.live.dto.MoodMatch;
 import com.tripbiseo.live.dto.MoodReview;
@@ -36,6 +40,8 @@ public class ReviewRagServiceImpl implements ReviewRagService {
     private static final int KEYWORD_MIN_COUNT = 2;          // 예전 방식: 리뷰 2개 이상에 글자가 나와야 인정
     private static final int MIN_QUOTE_LENGTH = 5;           // 인용문이 이보다 짧으면 근거로 안 봄 ("좋아요" 한 마디)
     private static final int MAX_REASON_LENGTH = 40;
+    private static final int COMPARE_RADIUS_M = 500;         // 평가 후보: 시연 장소에서 500m 안 (임베딩 범위와 같음)
+    private static final int COMPARE_TOP = 5;                // 평가: 방식마다 상위 5곳 (Precision@5)
 
     private static final Logger log = LoggerFactory.getLogger(ReviewRagServiceImpl.class);
 
@@ -132,6 +138,59 @@ public class ReviewRagServiceImpl implements ReviewRagService {
         }
         List<MoodMatch> top = ranked.size() > JUDGE_COUNT ? new ArrayList<>(ranked.subList(0, JUDGE_COUNT)) : ranked;
         return judgeWithGemini(top, mood);
+    }
+
+    /** 평가용: 같은 후보로 A·B·C를 차례로 돌리고 각각 걸린 시간을 잼 */
+    @Override
+    public MoodCompareResponse compareMood(MoodCompareRequest request) {
+        List<MoodComparePlace> candidates = reviewEmbeddingMapper.selectCandidateList(
+                request.getLat(), request.getLng(), request.getKind(), COMPARE_RADIUS_M);
+        Map<String, String> names = new HashMap<>(); // 가게 id → 이름 (결과에 이름을 붙이려고)
+        List<String> placeIds = new ArrayList<>();
+        for (MoodComparePlace candidate : candidates) {
+            names.put(candidate.getId(), candidate.getName());
+            placeIds.add(candidate.getId());
+        }
+        MoodCompareResponse response = new MoodCompareResponse();
+        response.setCandidateCount(placeIds.size());
+        if (placeIds.isEmpty()) {
+            return response;
+        }
+        response.setEmbeddedCount(reviewEmbeddingMapper.selectEmbeddedPlaceCount(placeIds));
+
+        long start = System.currentTimeMillis();
+        response.setKeyword(toComparePlaces(findByKeyword(placeIds, request.getMoodWord()), names));
+        response.setKeywordMs(System.currentTimeMillis() - start);
+
+        start = System.currentTimeMillis();
+        try {
+            response.setVector(toComparePlaces(rankByMood(placeIds, request.getMood()), names));
+        } catch (ApiException e) { // 질문 임베딩 실패(한도)면 B는 빈 결과로 두고 계속
+            log.warn("평가: B(벡터) 실패 - {}", e.getMessage());
+        }
+        response.setVectorMs(System.currentTimeMillis() - start);
+
+        start = System.currentTimeMillis();
+        response.setRag(toComparePlaces(findByMood(placeIds, request.getMood(), request.getMoodWord()), names));
+        response.setRagMs(System.currentTimeMillis() - start);
+        return response;
+    }
+
+    // 결과 앞 5곳을 이름 붙여서
+    private List<MoodComparePlace> toComparePlaces(List<MoodMatch> matches, Map<String, String> names) {
+        List<MoodComparePlace> places = new ArrayList<>();
+        for (MoodMatch match : matches) {
+            if (places.size() >= COMPARE_TOP) {
+                break;
+            }
+            MoodComparePlace place = new MoodComparePlace();
+            place.setId(match.getPlaceId());
+            place.setName(names.get(match.getPlaceId()));
+            place.setReason(match.getReason());
+            place.setQuote(match.getQuote());
+            places.add(place);
+        }
+        return places;
     }
 
     // 예전 방식: 리뷰 2개 이상에 moodWord 글자가 나온 후보 (후보 순서 그대로)

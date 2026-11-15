@@ -3,6 +3,8 @@ package com.tripbiseo.live.service;
 import java.util.List;
 
 import com.tripbiseo.live.dto.EmbedResult;
+import com.tripbiseo.live.dto.MoodCompareRequest;
+import com.tripbiseo.live.dto.MoodCompareResponse;
 import com.tripbiseo.live.dto.MoodMatch;
 
 /** ④ 리뷰 RAG: 리뷰를 임베딩해 두고, 분위기 질문에 뜻이 가까운 리뷰를 찾아요 */
@@ -19,4 +21,7 @@ public interface ReviewRagService {
      * 후보에 임베딩이 없으면 예전 방식(리뷰 2개 이상에 moodWord 글자)
      */
     List<MoodMatch> findByMood(List<String> placeIds, String mood, String moodWord);
+
+    /** 평가용: 고정 후보(이 점 500m 안 그 종류)에서 A(글자)·B(벡터)·C(RAG)가 고른 상위 5와 걸린 시간 */
+    MoodCompareResponse compareMood(MoodCompareRequest request);
 }
