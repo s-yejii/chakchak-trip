@@ -83,6 +83,36 @@ def make_table(rows, title):
     return "\n".join(lines) + "\n"
 
 
+def make_win_table(results, other, other_name):
+    """질문마다 C(RAG)와 다른 방식의 Precision@5를 비교해 이김·비김·짐을 셈 + 진 질문 목록 (왜 졌는지 볼 것)"""
+    counts = {"same": [0, 0, 0], "diff": [0, 0, 0]}  # [이김, 비김, 짐]
+    losses = []
+    for result in results:
+        question = result["question"]
+        rag = result["scores"]["rag"]["precision"]
+        base = result["scores"][other]["precision"]
+        if rag > base:
+            counts[question["type"]][0] += 1
+        elif rag == base:
+            counts[question["type"]][1] += 1
+        else:
+            counts[question["type"]][2] += 1
+            losses.append(f'{question["id"]}. {question["mood"]} ({question["type"]}, C {rag:.1f} < {base:.1f})')
+    lines = [f"### 질문별 승패: C RAG vs {other_name} (Precision@5 기준)", "",
+             "| 질문 | 이김 | 비김 | 짐 |", "|---|---|---|---|"]
+    for kind in ("same", "diff"):
+        win, tie, lose = counts[kind]
+        lines.append(f"| {kind} | {win} | {tie} | {lose} |")
+    total = [counts["same"][i] + counts["diff"][i] for i in range(3)]
+    lines.append(f"| 전체 | {total[0]} | {total[1]} | {total[2]} |")
+    if losses:
+        lines.append("")
+        lines.append("C가 진 질문 (리뷰를 열어 왜 졌는지 확인):")
+        for loss in losses:
+            lines.append(f"- {loss}")
+    return "\n".join(lines) + "\n"
+
+
 def main():
     with open(os.path.join(HERE, "results.json"), encoding="utf-8") as file:
         results = json.load(file)
@@ -95,6 +125,7 @@ def main():
     rows_all, rows_same, rows_diff = [], [], []
     for result in results:
         scores = score_question(result, labels)
+        result["scores"] = scores  # 승패 세기에 씀
         rows_all.append(scores)
         if result["question"]["type"] == "same":
             rows_same.append(scores)
@@ -105,6 +136,8 @@ def main():
     report += make_table(rows_all, "전체") + "\n"
     report += make_table(rows_same, "same: 말에 찾을 글자가 그대로 있음") + "\n"
     report += make_table(rows_diff, "diff: 말과 리뷰 표현이 다름") + "\n"
+    report += make_win_table(results, "keyword", "A 글자") + "\n"
+    report += make_win_table(results, "vector", "B 벡터") + "\n"
     print(report)
     with open(os.path.join(HERE, "summary.md"), "w", encoding="utf-8") as file:
         file.write(report)
