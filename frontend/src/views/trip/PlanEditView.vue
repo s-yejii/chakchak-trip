@@ -7,13 +7,15 @@
 //     (빈 시각은 점검으로 채운 뒤 PUT /api/trips/{id}/stops)
 // 순서를 바꾸면 첫 칸·고정 칸 시각만 두고 나머지는 비워요 (utils/draftEdit). ✕는 들어오기 전으로 되돌려요
 // 고정 칸(예약) 위에 놓으면 그 앞·뒤에 끼워 넣어요 (예약 전에 다른 곳 먼저 가기)
-// 위 40%는 지도 (11/04): 번호 핀 + 순서대로 잇는 선. 칸을 누르면 핀이 커지고(한 번 더 누르면 한 칸 수정), 핀을 누르면 그 칸으로 스크롤
+// 지도 + 위에 뜬 바텀시트 (11/15: 여행 상세와 같은 모양. 예전엔 위 36% 지도·아래 목록): 번호 핀 + 순서대로 잇는 선
+//   시트 머리(일차 칩·안내·이동 비교)는 그대로 있고 목록만 스크롤. 칸을 누르면 핀이 커지고(한 번 더 누르면 한 칸 수정), 핀을 누르면 그 칸으로 스크롤
 // − 는 바로 빼고 토스트로 되돌려요 (완료 전에는 서버에 안 가요). 지도의 [동선 최적화]는 상세 화면과 같은 함수
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { importance } from '@/data/places'
 import { checkPlan } from '@/api/trips'
 import KakaoMap from '@/components/common/KakaoMap.vue'
+import BottomSheet from '@/components/common/BottomSheet.vue'
 import { useRouteOptimize } from '@/utils/useRouteOptimize'
 import { useTripStore } from '@/stores/trip'
 import { goBackTo } from '@/utils/back'
@@ -47,8 +49,8 @@ const dayList = computed(() => {
   return list
 })
 const stopPhotos = useStopPhotos(() => (hasTrip.value ? dayStopsOf(trip.value, day.value) : [])) // 칸 사진 (홈 카드와 같은 함수)
-const MAP_PADDING = { top: 36, right: 36, bottom: 28, left: 36 }
-const FOCUS_LEVEL_KEEP = null // 칸을 눌러 옮길 때 지도 확대 단계는 그대로
+// 지도는 상단 바 아래(103px)부터 화면 끝까지, 시트는 화면 440px부터 → 지도 아래 약 404px가 시트에 가려서 핀을 그 위에 맞춤 (+여유 20)
+const MAP_PADDING = { top: 36, right: 36, bottom: 424, left: 36 }
 const mapRef = ref(null)
 const selected = ref(null) // 고른 칸 번호
 const mapStops = computed(() => (hasTrip.value ? dayStopsOf(trip.value, day.value) : []))
@@ -66,7 +68,7 @@ function pickRow(i) {
   if (selected.value === i) return openStop(i)
   selected.value = i
   const stop = mapStops.value[i]
-  if (mapRef.value && stop.lat != null) mapRef.value.moveTo(stop.lat, stop.lng, FOCUS_LEVEL_KEEP)
+  if (mapRef.value && stop.lat != null) mapRef.value.flyTo(stop.lat, stop.lng) // padding을 보고 시트에 안 가리는 칸 가운데로 (moveTo는 지도 한가운데라 핀이 시트 뒤에 숨음)
 }
 // 핀을 누름: 그 칸으로 스크롤
 async function pickPin(pin) {
@@ -281,17 +283,24 @@ async function done() {
       <div v-if="mapStops.length" class="pe-map">
         <KakaoMap ref="mapRef" :pins="mapPins" :padding="MAP_PADDING" :fit-key="day + '/' + mapStops.length" @pick="pickPin" />
       </div>
-      <div class="scroll" :class="{ 'pe-list': mapStops.length }" style="padding-top: 4px; gap: 10px; bottom: 34px">
+      <!-- 불러오는 중 / 못 불러옴 / 고칠 일정 없음: 예전처럼 글자만 -->
+      <div v-if="isLoading || loadError || !hasTrip" class="scroll" style="padding-top: 4px; gap: 10px; bottom: 34px">
         <p v-if="isLoading" class="t-cap">일정을 불러오는 중이에요</p>
         <p v-else-if="loadError" class="t-cap c-warning">{{ loadError }}</p>
-        <p v-else-if="!hasTrip" class="t-cap">고칠 일정이 없어요</p>
-        <template v-else>
-        <div v-if="dayList.length > 1" class="pe-days" role="tablist" aria-label="며칠째">
-          <button v-for="d in dayList" :key="d.day" type="button" role="tab" class="chip chip--sm" :class="{ 'is-on': d.day === day }" :aria-selected="d.day === day" @click="pickDay(d.day)">{{ d.day }}일차<span class="t-cap tn">{{ d.label }}</span></button>
+        <p v-else class="t-cap">고칠 일정이 없어요</p>
+      </div>
+      <!-- 일정이 있으면 여행 상세와 같은 시트 (손잡이로 맨 위 / 중간 / 손잡이만) -->
+      <BottomSheet v-else class="sheet--peek trip-sheet" expandable aria-label="일정 편집 목록">
+        <!-- 시트 머리: 여기를 잡고 시트를 끌어요 (data-drag). 칩 버튼은 그대로 눌려요. 목록을 내려도 이 줄은 그대로 -->
+        <div class="pe-head" data-drag>
+          <div v-if="dayList.length > 1" class="pe-days" role="tablist" aria-label="며칠째">
+            <button v-for="d in dayList" :key="d.day" type="button" role="tab" class="chip chip--sm" :class="{ 'is-on': d.day === day }" :aria-selected="d.day === day" @click="pickDay(d.day)">{{ d.day }}일차<span class="t-cap tn">{{ d.label }}</span></button>
+          </div>
+          <p class="t-cap" style="display: flex; align-items: center; gap: 4px"><i class="ic ic--s i-grip" aria-hidden="true"></i>손잡이를 끌어 순서를 바꿔요 · 시각은 다시 계산해요</p>
+          <p v-if="firstMove !== null && nowMove !== firstMove" class="t-cap tn" style="margin: 0">이동 {{ firstMove }}분 → {{ nowMove }}분</p>
         </div>
-        <p class="t-cap" style="display: flex; align-items: center; gap: 4px"><i class="ic ic--s i-grip" aria-hidden="true"></i>손잡이를 끌어 순서를 바꿔요 · 시각은 다시 계산해요</p>
-
-        <p v-if="firstMove !== null && nowMove !== firstMove" class="t-cap tn" style="margin: 0">이동 {{ firstMove }}분 → {{ nowMove }}분</p>
+        <!-- 시트 몸통: 목록만 스크롤 -->
+        <div class="trip-scroll">
         <ol class="elist">
           <li
             v-for="(stop, i) in rows"
@@ -335,16 +344,16 @@ async function done() {
         </ol>
         <!-- 장소 추가는 새로 짜는 초안에만 담겨요 (저장된 여행에 추가는 아직 연결 전이라 숨김) -->
         <RouterLink v-if="!tripId" to="/plan/manual" class="btn btn--secondary btn--md btn--block" style="margin-top: 4px"><i class="ic i-plus" aria-hidden="true"></i>장소 추가</RouterLink>
-        </template>
-      </div>
+        </div>
+      </BottomSheet>
     </div>
   </div>
 </template>
 
 <style>
-.scr-PlanEdit .pe-map { position: absolute; top: 103px; left: 0; right: 0; height: 36%; z-index: 1; }
+.scr-PlanEdit .pe-map { position: absolute; top: 103px; left: 0; right: 0; bottom: 0; z-index: 1; } /* 상단 바 아래부터 화면 끝까지 (위에 시트가 뜸) */
 .scr-PlanEdit .pe-map__btn { position: absolute; top: 10px; right: 10px; z-index: 2; }
-.scr-PlanEdit .scroll.pe-list { top: calc(103px + 36%); padding-top: 8px !important; }
+.scr-PlanEdit .pe-head { display: flex; flex-direction: column; gap: 8px; padding: 0 16px; touch-action: none; } /* 시트 머리: 끌 때 화면이 스크롤되지 않게 */
 .scr-PlanEdit .pe-num { flex: none; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--navy); color: #fff; font-size: 11px; font-weight: 700; }
 .scr-PlanEdit .erow.is-sel .stop__card { border-color: var(--navy); }
 .scr-PlanEdit .elist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
