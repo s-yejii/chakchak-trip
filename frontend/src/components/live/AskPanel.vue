@@ -309,6 +309,10 @@ function distText(m) {
                     <span class="lp-card__info tn" :class="{ 'is-late': isLate(p) }">{{ infoText(p) }}</span>
                   </span>
                 </button>
+                <!-- 분위기 질문(리뷰 RAG, 11/16): 서버가 실제 리뷰에 있는지 확인한 근거 문장. 고른 이유는 길게 누르면(title) -->
+                <p v-if="p.moodEvidence" class="lp-card__mood" :title="p.moodReason || ''">
+                  <span class="lp-card__mood-tag">리뷰</span>“{{ p.moodEvidence }}”
+                </p>
                 <div class="lp-card__actions">
                   <button type="button" class="btn btn--secondary btn--sm" @click="openDetail(p)">상세</button>
                   <span v-if="planned.includes(p.id)" class="lp-card__planned"><i class="ic ic--s i-check" aria-hidden="true"></i>일정에 있어요</span>

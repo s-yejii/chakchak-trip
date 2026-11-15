@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class SqlPromptMaker {
 
-    /** 예시: {사용자 말, SQL (못 찾는 질문이면 null), 설명 또는 못 찾는 이유} */
+    /** 예시: {사용자 말, SQL (못 찾는 질문이면 null), 설명 또는 못 찾는 이유, (분위기가 있으면) mood, moodWord} */
     static final List<String[]> EXAMPLES = List.of(
         new String[] {"가는 길에 5분 안에 들를 카페",
             "SELECT id FROM ask_place WHERE kind = 'cafe' AND detour_minutes(geom, :route) <= 5 "
@@ -27,9 +27,9 @@ public class SqlPromptMaker {
         new String[] {"근처 와이파이 되는 조용한 카페",
             "SELECT p.id FROM ask_place p WHERE p.kind = 'cafe' AND ST_DWithin(p.geom, :me, 500) "
                 + "AND p.amenities ILIKE '%무선 인터넷%' "
-                + "AND (SELECT COUNT(*) FROM ask_review r WHERE r.place_id = p.id AND r.content ILIKE '%조용%') >= 2 "
                 + "ORDER BY p.rating_adj DESC LIMIT 5",
-            "500m 안 와이파이 되는 카페 중 리뷰 2개 이상에 '조용'이 나온 곳이에요"},
+            "500m 안 와이파이 되는 카페 중 리뷰에서 조용하다고 한 곳이에요",
+            "조용한", "조용"},
         new String[] {"다음 장소 근처 리뷰 많은 고깃집",
             "SELECT id FROM ask_place WHERE kind = 'food' AND biz_type ILIKE '%고기%' AND ST_DWithin(geom, :next, 500) "
                 + "ORDER BY review_count DESC LIMIT 5",
@@ -53,10 +53,9 @@ public class SqlPromptMaker {
             "SELECT p.id FROM ask_place p WHERE p.id IN (:prev) ORDER BY ST_Distance(p.geom, :me) LIMIT 1",
             "앞에서 찾은 곳 중 지금 위치에서 가장 가까운 곳이에요"},
         new String[] {"이 중에 조용한 데만",
-            "SELECT p.id FROM ask_place p WHERE p.id IN (:prev) "
-                + "AND (SELECT COUNT(*) FROM ask_review r WHERE r.place_id = p.id AND r.content ILIKE '%조용%') >= 2 "
-                + "ORDER BY p.rating_adj DESC LIMIT 10",
-            "앞에서 찾은 곳 중 리뷰 2개 이상에 '조용'이 나온 곳이에요"});
+            "SELECT p.id FROM ask_place p WHERE p.id IN (:prev) ORDER BY p.rating_adj DESC LIMIT 10",
+            "앞에서 찾은 곳 중 리뷰에서 조용하다고 한 곳이에요",
+            "조용한", "조용"});
 
     /**
      * Gemini에 보낼 글
@@ -122,7 +121,8 @@ public class SqlPromptMaker {
              + "- SELECT 하나만. 첫 번째 칸은 id. ask_place·ask_review만. LIMIT 10 이하\n"
              + "- 돌아가는 시간은 15분 이하, 거리는 1000m 이하\n"
              + "- 와이파이·반려동물·주차·포장·예약·단체 같은 사실은 amenities로만 찾고, 리뷰로 찾지 마\n"
-             + "- 리뷰(ask_review)는 조용한·뷰·데이트 같은 분위기에만 쓰고, 한 곳에 2개 이상 나올 때만 인정해\n"
+             + "- 조용한·작업하기 좋은·뷰·데이트·아이랑 같은 분위기는 SQL에 넣지 마. mood에 사용자 말 그대로 짧게, "
+             + "moodWord에 리뷰에서 찾을 낱말 하나(예: 조용)를 적어. 서버가 리뷰 뜻으로 다시 골라 (11/15 리뷰 RAG)\n"
              + "- 머무는 시간을 말하지 않으면 30분으로 생각해\n"
              + "- 정렬을 말하지 않으면 rating_adj DESC\n"
              + "- '안 돌아가는·덜 돌아가는·가는 길에서 가까운'은 detour_minutes(geom, :route) 작은 순, '가까운'만 말하면 ST_Distance(geom, :me) 작은 순\n"
@@ -133,6 +133,7 @@ public class SqlPromptMaker {
     private String answerText() {
         return "[답]\n"
              + "{\"supported\": true, \"sql\": \"SELECT …\", \"explain\": \"어떻게 찾았는지 한 줄\"}\n"
+             + "분위기가 있으면 {\"supported\": true, \"sql\": \"SELECT …\", \"explain\": \"…\", \"mood\": \"조용한\", \"moodWord\": \"조용\"}\n"
              + "못 찾으면 {\"supported\": false, \"reason\": \"왜 못 찾는지 한 줄\"}\n";
     }
 
@@ -151,7 +152,13 @@ public class SqlPromptMaker {
                 text.append("{\"supported\": false, \"reason\": \"").append(example[2]).append("\"}\n");
             } else {
                 text.append("{\"supported\": true, \"sql\": \"").append(example[1])
-                    .append("\", \"explain\": \"").append(example[2]).append("\"}\n");
+                    .append("\", \"explain\": \"").append(example[2]).append('"');
+                boolean hasMood = example.length >= 5;
+                if (hasMood) {
+                    text.append(", \"mood\": \"").append(example[3])
+                        .append("\", \"moodWord\": \"").append(example[4]).append('"');
+                }
+                text.append("}\n");
             }
         }
         return text.toString();

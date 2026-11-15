@@ -47,6 +47,7 @@ public class SqlChecker {
     private static final int MAX_LIMIT = 10;          // 결과는 많아야 10곳
     private static final int MAX_DETOUR_MIN = 15;     // 돌아가는 시간 상한(분)
     private static final int MAX_METERS = 1000;       // ST_DWithin 반경 상한(m)
+    private static final int MOOD_POOL = 30;          // 분위기 질문이면 후보 30곳을 뽑아 리뷰 RAG가 다시 고름 (11/15)
     private static final int RERANK_POOL = 5;         // 다시 잴 후보 수. 1곳마다 길찾기 2번이라 5곳이면 1 + 5×2 = 11번
     private static final Set<String> ALLOWED_TABLES = Set.of("ask_place", "ask_review");
     private static final Set<String> ALLOWED_FUNCTIONS = Set.of(
@@ -59,6 +60,11 @@ public class SqlChecker {
 
     /** 검사하고, 통과하면 실행할 SQL로 바꿔서 돌려줌 */
     public SqlCheck checkSql(String sql) {
+        return checkSql(sql, false);
+    }
+
+    /** 검사 + 분위기 질문이면(hasMood) 후보를 넉넉히 뽑게 LIMIT을 늘림 (리뷰 RAG가 그 안에서 다시 고름, 11/15) */
+    public SqlCheck checkSql(String sql, boolean hasMood) {
         String text = sql == null ? "" : sql.trim();
         if (text.endsWith(";")) {
             text = text.substring(0, text.length() - 1).trim();
@@ -108,6 +114,9 @@ public class SqlChecker {
         check.setOrderBy(findOrderBy(select));
         if (check.getOrderBy() != null) {
             widenLimitForRerank(select, check);
+        }
+        if (hasMood) {
+            widenLimitForMood(select, check);
         }
         check.setSql(toMyBatis(select.toString()));
         check.setPlaceholders(collector.placeholders);
@@ -228,6 +237,14 @@ public class SqlChecker {
         if (want < RERANK_POOL) {
             select.setLimit(new Limit().withRowCount(new LongValue(RERANK_POOL)));
         }
+    }
+
+    /** 분위기 질문: 사용자가 원한 개수를 적어 두고 LIMIT을 MOOD_POOL로 (분위기에 안 맞는 곳이 빠져도 남게) */
+    private void widenLimitForMood(PlainSelect select, SqlCheck check) {
+        if (check.getWantLimit() == null) {
+            check.setWantLimit((int) ((LongValue) select.getLimit().getRowCount()).getValue()); // fixLimit 뒤라 늘 숫자
+        }
+        select.setLimit(new Limit().withRowCount(new LongValue(MOOD_POOL)));
     }
 
     /** 빈칸을 MyBatis 파라미터로: :route → ST_GeogFromText(#{route}), :slack → #{slack}, :prev → 쉼표로 쪼갠 id 목록 */
