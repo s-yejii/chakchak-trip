@@ -961,8 +961,8 @@ function restartMoving() {
           <div v-if="asking" v-show="!slotPlace">
             <AskPanel :me="mePoint || { x: 195, y: 300 }" :late="isLate" :trip-id="live.tripId.value" :position="live.position.value" @close="asking = false" @add="onAskAdd" :selected="askPickedId" :chat-key="chatKey(live.trip.value)" :planned="plannedPlaceIds" @choose="openSlotSheet" @found="onAskFound" @pick="askPickedId = $event" />
           </div>
-          <div v-else class="quick live-quick" data-sheet-follow role="group" aria-label="AI 채팅과 근처 찾기">
-            <button type="button" class="chip chip--sm chip--add live-chip" @click="openAsk"><span class="live-chip__ic live-chip__ic--ai" aria-hidden="true"><i class="ic ic--s i-sparkle"></i></span>AI에게 묻기</button>
+          <div v-else class="quick live-quick" data-sheet-follow role="group" aria-label="트리피에게 묻기와 근처 찾기">
+            <button type="button" class="chip chip--sm chip--add live-chip" aria-label="어디 갈까? 트리피에게 갈 곳 물어보기" @click="openAsk"><span class="live-chip__ic live-chip__ic--ai" aria-hidden="true"><img src="/img/trippie-favicon.png" alt="" class="live-chip__img" draggable="false" /></span>어디 갈까?</button>
             <button type="button" class="chip chip--sm chip--add live-chip" @click="openNear"><span class="live-chip__ic live-chip__ic--near" aria-hidden="true"><i class="ic ic--s i-search"></i></span>근처 찾기</button>
             <!-- 결제 메모 입구 (11/12): 화면은 ⑤ PayMemoView (/live/pay) -->
             <RouterLink to="/live/pay" class="chip chip--sm chip--add live-chip"><span class="live-chip__ic live-chip__ic--pay" aria-hidden="true"><i class="ic ic--s i-receipt"></i></span>결제 메모</RouterLink>
@@ -1031,16 +1031,21 @@ function restartMoving() {
 .scr-Live .live-fab { position: absolute; right: 16px; top: 380px; z-index: 6; } /* + 가운데는 예전(52px, 376px)과 같은 높이 */
 .scr-Live .live-fab__me { position: absolute; left: 0; bottom: calc(100% + 10px); width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #2F7BEA; background: #fff; box-shadow: 0 2px 8px rgba(24, 33, 58, .25); cursor: pointer; transition: opacity .18s, transform .18s; }
 .scr-Live .live-fab__me.is-hidden { opacity: 0; transform: translateY(16px) scale(.8); pointer-events: none; }
-.scr-Live .live-fab-dim { position: absolute; inset: 0; z-index: 5; background: rgba(24, 33, 58, .28); }
+.scr-Live .live-fab-dim { position: absolute; inset: 0; z-index: 5; background: rgba(24, 33, 58, .22); }
 .scr-Live .live-fab__main { width: 44px; height: 44px; border: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; background: var(--navy); box-shadow: 0 6px 16px rgba(24, 33, 58, .3); cursor: pointer; transition: transform .18s, background .18s; }
-.scr-Live .live-fab__main.is-open { transform: rotate(45deg); background: var(--ink); }
+.scr-Live .live-fab__main.is-open { transform: rotate(45deg); } /* 11/16: 열려도 같은 남색 (검정으로 바뀌면 색이 하나 더 늘어서) */
 .scr-Live .live-fab__list { position: absolute; right: 0; bottom: calc(100% + 10px); display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
 .scr-Live .live-fab__item { display: flex; align-items: center; gap: 8px; padding: 0; border: 0; background: none; font: inherit; cursor: pointer; white-space: nowrap; }
-.scr-Live .live-fab__text { padding: 7px 12px; border-radius: 999px; font-size: 13px; font-weight: 700; color: var(--ink); background: #fff; box-shadow: 0 2px 8px rgba(24, 33, 58, .18); }
-.scr-Live .live-fab__ic { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; box-shadow: 0 2px 8px rgba(24, 33, 58, .25); }
-.scr-Live .live-fab__ic--link { background: linear-gradient(135deg, #F58529, #DD2A7B 55%, #8134AF); }
-.scr-Live .live-fab__ic--plan { background: var(--navy); }
-.scr-Live .live-fab__ic--share { background: var(--success); }
+/* 11/16 + 메뉴 디자인: 작은 버튼은 같은 파랑 가족(하늘·파랑·남청) 색 동그라미 + 흰 아이콘, 메인(+)은 남색.
+   예전 인스타 그라데이션·초록·검정을 빼서 색이 한 계열로. 위쪽이 살짝 밝은 그라데이션으로 입체감.
+   작은 버튼은 40px로 메인(44px)보다 조금 작게 → 무엇이 메인인지 보이게. 가운데 줄이 맞게 오른쪽 2px */
+.scr-Live .live-fab__text { padding: 7px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; color: var(--ink); background: #fff; box-shadow: 0 2px 8px rgba(24, 33, 58, .14); }
+.scr-Live .live-fab__ic { width: 40px; height: 40px; margin-right: 2px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; box-shadow: 0 3px 10px rgba(24, 33, 58, .22); transition: transform .15s; }
+.scr-Live .live-fab__ic--link { background: linear-gradient(160deg, #3FA6DC, var(--sky)); }
+.scr-Live .live-fab__ic--plan { background: linear-gradient(160deg, #4A86E8, #2F6BD0); }
+.scr-Live .live-fab__ic--share { background: linear-gradient(160deg, #4F74C2, var(--focus-ring)); }
+.scr-Live .live-fab__item:hover .live-fab__ic, .scr-Live .live-fab__item:focus-visible .live-fab__ic { transform: scale(1.06); }
+@media (prefers-reduced-motion: reduce) { .scr-Live .live-fab__ic { transition: none; } }
 .scr-Live .live-chip { font-weight: 600; height: 34px; padding-left: 10px; padding-right: 10px; gap: 3px; font-size: 13px; letter-spacing: -.02em; }
 /* 11/12: 지도 앱 칩처럼 흰 바탕 + 겹 그림자, 글씨는 진하게 (아이콘 색만 칩마다 다르게) */
 .scr-Live .live-quick .live-chip { border: 0; padding-left: 5px; padding-right: 10px; gap: 4px; background: #fff; color: var(--ink); box-shadow: 0 0 0 1px rgba(24, 33, 58, .05), 0 1px 2px rgba(24, 33, 58, .08), 0 4px 12px rgba(24, 33, 58, .12); }
@@ -1048,7 +1053,9 @@ function restartMoving() {
 /* 아이콘은 연한 색 동그라미 안에 (AI 보라 · 근처 산호 · 결제 남색) */
 .scr-Live .live-chip__ic { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; }
 .scr-Live .live-chip__ic .ic { width: 13px; height: 13px; }
-.scr-Live .live-chip__ic--ai { background: #F1EAFE; color: #7C3AED; }
+/* AI에게 묻기 = 트리피 얼굴 (11/16, 예전 보라 ✨ 대신. AI 채팅창 프로필과 같은 그림) */
+.scr-Live .live-chip__ic--ai { overflow: hidden; background: var(--sky-soft); box-shadow: inset 0 0 0 1px var(--sky-line); }
+.scr-Live .live-chip__img { width: 100%; height: 100%; object-fit: cover; -webkit-user-drag: none; }
 .scr-Live .live-chip__ic--near { background: var(--coral-soft); color: var(--coral-ink); }
 .scr-Live .live-chip__ic--pay { background: var(--navy-soft); color: var(--navy); } /* 11/12: 결제 메모까지 칩 3개가 + 버튼 왼쪽에 다 들어가게 */
 .scr-Live .live-quick { position: absolute; top: 392px; left: 0; right: 58px; z-index: 2; gap: 5px; padding-left: 12px; padding-right: 4px; }
