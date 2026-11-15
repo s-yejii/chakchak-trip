@@ -12,6 +12,7 @@ import { toDuration } from '@/utils/time'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { examples, radiusOptions, askAssist, askRecommend } from '@/data/ask'
+import { scrollSideways, startChipDrag, isJustDragged } from '@/utils/chipScroll'
 import * as api from '@/api/trips'
 import { distanceMeters } from '@/utils/geo'
 import { loadPhotos, photoFor } from '@/utils/placePhoto'
@@ -68,13 +69,10 @@ watch(() => props.selected, (id) => {
 })
 
 // ------------------------------------------------------------ 보내기·답
-// 예시 칩 줄: PC 마우스 휠(위아래)로도 옆으로 넘김 (폰은 손가락으로 밀면 원래 넘어가요, 11/16)
-function scrollSideways(event) {
-  const box = event.currentTarget
-  const isSideways = Math.abs(event.deltaX) > Math.abs(event.deltaY) // 트랙패드로 이미 옆으로 미는 중이면 그대로 둠
-  if (box.scrollWidth <= box.clientWidth || isSideways) return
-  box.scrollLeft += event.deltaY
-  event.preventDefault() // 대화창이 위아래로 같이 움직이지 않게
+// 칩 누르기. 방금 마우스로 끌어 넘긴 거면 누른 걸로 안 봄 (끌기·휠은 utils/chipScroll.js, 11/16)
+function sendChip(text) {
+  if (isJustDragged()) return
+  send(text)
 }
 
 function addMessage(message) {
@@ -259,28 +257,29 @@ function distText(m) {
 
 <template>
   <div class="addbar">
-    <section class="addcard lp-panel" aria-label="AI 여행 도우미">
+    <section class="addcard lp-panel" aria-label="트리피에게 물어봐">
       <header class="lp-head">
-        <span class="lp-avatar lp-avatar--ai" aria-hidden="true"><i class="ic ic--s i-sparkle"></i></span>
-        <b class="lp-head__title">AI 여행 도우미</b>
-        <button type="button" class="iconbtn" aria-label="AI 채팅 닫기" @click="emit('close')"><i class="ic i-close muted" aria-hidden="true"></i></button>
+        <span class="lp-avatar lp-avatar--ai" aria-hidden="true"><img src="/img/trippie-favicon.png" alt="" class="lp-avatar__img" draggable="false" /></span>
+        <b class="lp-head__title">트리피에게 물어봐</b>
+        <button type="button" class="iconbtn" aria-label="트리피 채팅 닫기" @click="emit('close')"><i class="ic i-close muted" aria-hidden="true"></i></button>
       </header>
 
       <!-- 주고받은 말 (이 여행에서 한 말이 다 남아요) -->
       <div ref="threadBox" class="lp-thread lp-thread--chat" aria-live="polite">
         <div class="lp-row">
-          <span class="lp-avatar lp-avatar--ai lp-avatar--sm" aria-hidden="true"><i class="ic ic--s i-sparkle"></i></span>
-          <p class="lp-bubble">근처에서 갈 곳을 찾아 드릴게요. '조용한 카페', '혼자 가기 편한 식당'처럼 원하는 분위기로 물어보세요. 리뷰에서 근거도 함께 보여 드려요.</p>
+          <span class="lp-avatar lp-avatar--ai lp-avatar--sm" aria-hidden="true"><img src="/img/trippie-favicon.png" alt="" class="lp-avatar__img" draggable="false" /></span>
+          <!-- 11/16: 트리피 말투(반말, 여행 끝 카드 "나를 눌러줘!"와 같음). 무엇을 해 주는지 → 어떻게 물으면 되는지 순서 -->
+          <p class="lp-bubble">어디 갈지 고민되면 나한테 물어봐! '조용한 카페', '혼자 가기 편한 식당'처럼 말해 주면 리뷰를 읽고 딱 맞는 곳을 찾아 줄게.</p>
         </div>
-        <div v-if="!messages.length" class="lp-chips lp-chips--indent lp-chips--more" @wheel="scrollSideways">
-          <button v-for="text in examples" :key="text" type="button" class="chip chip--sm" @click="send(text)">{{ text }}</button>
+        <div v-if="!messages.length" class="lp-chips lp-chips--indent lp-chips--more lp-chips--drag lp-chips--suggest" @wheel="scrollSideways" @pointerdown="startChipDrag">
+          <button v-for="text in examples" :key="text" type="button" class="chip chip--sm" @click="sendChip(text)">{{ text }}</button>
         </div>
 
         <template v-for="m in messages" :key="m.id">
           <p v-if="m.role === 'me'" class="lp-me">{{ m.text }}</p>
           <template v-else>
             <div class="lp-row">
-              <span class="lp-avatar lp-avatar--ai lp-avatar--sm" aria-hidden="true"><i class="ic ic--s i-sparkle"></i></span>
+              <span class="lp-avatar lp-avatar--ai lp-avatar--sm" aria-hidden="true"><img src="/img/trippie-favicon.png" alt="" class="lp-avatar__img" draggable="false" /></span>
               <p v-if="m.isTyping" class="lp-bubble lp-typing" aria-label="생각하는 중이에요"><span></span><span></span><span></span></p>
               <p v-else class="lp-bubble">{{ m.text }}</p>
             </div>
@@ -333,8 +332,13 @@ function distText(m) {
         </template>
       </div>
 
+      <!-- 대화를 시작한 뒤에도 예시 칩을 입력창 바로 위에 연하게 (처음엔 말풍선 아래에 진하게 있어요, 11/16) -->
+      <div v-if="messages.length" class="lp-chips lp-chips--more lp-chips--drag lp-chips--suggest lp-chips--dock" @wheel="scrollSideways" @pointerdown="startChipDrag">
+        <button v-for="text in examples" :key="text" type="button" class="chip chip--sm" :disabled="isBusy" @click="sendChip(text)">{{ text }}</button>
+      </div>
+
       <form class="lp-form" @submit.prevent="send(draft)">
-        <label for="ask-q" class="sr">AI에게 물어보기</label>
+        <label for="ask-q" class="sr">트리피에게 물어보기</label>
         <input id="ask-q" v-model="draft" type="text" maxlength="300" :placeholder="placeholder" autocomplete="off" :disabled="isBusy" />
         <button type="submit" class="lp-send" :class="{ 'is-empty': !draft.trim() }" aria-label="보내기" :disabled="isBusy"><i class="ic ic--s i-send" aria-hidden="true"></i></button>
       </form>

@@ -6,8 +6,9 @@
 .lp-avatar { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; }
 .lp-avatar--sm { width: 24px; height: 24px; }
 .lp-avatar--sm .ic { width: 14px; height: 14px; }
-.lp-avatar--ai { background: #F1EAFE; }
-.lp-avatar--ai .ic { color: #7C3AED; }
+/* AI 프로필 = 트리피 얼굴 (11/16, 예전 보라 ✨ 아이콘 대신). 연한 하늘 동그라미 안에 꽉 차게 */
+.lp-avatar--ai { overflow: hidden; background: var(--sky-soft); box-shadow: inset 0 0 0 1px var(--sky-line); }
+.lp-avatar__img { width: 100%; height: 100%; object-fit: cover; -webkit-user-drag: none; user-select: none; }
 .lp-avatar--near { background: var(--coral-soft); }
 .lp-avatar--near .ic { color: var(--coral-ink); }
 .lp-avatar--similar { background: var(--navy-soft); }
@@ -28,10 +29,28 @@
 .lp-chips { display: flex; gap: 6px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
 .lp-chips::-webkit-scrollbar { display: none; }
 .lp-chips--indent { padding-left: 30px; }
-/* 예시 칩 줄 (11/16): 오른쪽 끝을 흐리게 해서 "옆에 더 있어요" 힌트. 끝 칩도 흐려지지 않게 오른쪽 여백 */
-.lp-chips--more { padding-right: 28px; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
 .lp-chips .chip { flex: none; border: 1px solid var(--line); background: #fff; color: var(--ink); font-weight: 600; }
 .lp-chips .chip.is-on { border-color: var(--navy); background: var(--navy); color: #fff; }
+/* 옆으로 넘기는 칩 줄 (11/16): 오른쪽 끝을 흐리게 해서 "옆에 더 있어요" 힌트. 끝 칩도 흐려지지 않게 오른쪽 여백.
+   위아래 3px 여백: 옆 스크롤 상자는 위아래가 딱 맞게 잘려서 칩 테두리·그림자 아랫줄이 잘리던 문제 */
+.lp-chips--more { padding: 3px 28px 3px 0; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
+.lp-chips--more.lp-chips--indent { padding-left: 30px; }
+/* 마우스로 잡고 끌 수 있게 grab 커서, 끄는 동안 글자가 선택되지 않게. 손가락은 옆으로만 밀리게(pan-x) (utils/chipScroll.js) */
+.lp-chips--drag { cursor: grab; user-select: none; touch-action: pan-x; }
+/* 아래 칩 색들은 .lp-chips .chip보다 아래에 둬야 이겨요 (우선순위가 같으면 나중 것) */
+/* AI 추천 질문 칩: 테두리·그라데이션 없이 아주 연한 하늘 단색 + 진한 하늘 글씨 (#0B5A82, 대비 6:1 이상) */
+.lp-chips--suggest .chip { border: 0; background: #EDF5FC; color: #0B5A82; font-weight: 600; transition: background-color .15s; }
+.lp-chips--suggest .chip:hover:not(:disabled), .lp-chips--suggest .chip:focus-visible { background: #E0EEFA; }
+.lp-chips--suggest .chip:active:not(:disabled) { background: #D3E7F8; }
+/* 대화 중 입력창 위 칩 줄: 대화보다 덜 띄게 한 단계 더 연하게 */
+.lp-chips--dock { margin: 0 0 4px; }
+.lp-chips--dock .chip { background: #F3F8FD; font-weight: 500; }
+/* 근처 찾기 카테고리 칩: 지도 앱 카테고리처럼 아이콘 + 글자, 테두리 없는 연회색 바탕 */
+.lp-chips--place .chip { gap: 4px; padding-left: 10px; border: 0; background: var(--surface); color: var(--ink); font-weight: 600; transition: background-color .15s; }
+.lp-chips--place .chip .ic { width: 14px; height: 14px; color: var(--sky); }
+.lp-chips--place .chip:hover, .lp-chips--place .chip:focus-visible { background: var(--navy-soft); }
+.lp-chips--place .chip:active { background: #DCE5F3; }
+@media (prefers-reduced-motion: reduce) { .lp-chips--suggest .chip, .lp-chips--place .chip { transition: none; } }
 .lp-radius { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .lp-radius__k { flex: none; font-size: 13px; font-weight: 600; color: var(--ink-muted); }
 .lp-status { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 13px; line-height: 1.45; color: var(--ink-muted); }
