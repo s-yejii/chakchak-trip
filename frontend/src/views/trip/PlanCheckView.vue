@@ -26,6 +26,7 @@ import { withEuroRo } from '@/utils/josa'
 import { showTrashToast } from '@/utils/trash'
 import { useRouteSim } from '@/utils/useRouteSim'
 import RouteSimButton from '@/components/trip/RouteSimButton.vue'
+import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import TripWeather from '@/components/plan/TripWeather.vue'
 import ScenarioRainNotice from '@/components/plan/ScenarioRainNotice.vue'
 
@@ -67,6 +68,23 @@ const dayList = computed(() => {
 const dayDate = computed(() => (store.draft.startDate ? addDays(store.draft.startDate, day.value - 1) : ''))
 
 onMounted(runCheck)
+// AI 일정 조건 화면(/plan/info)에서 만들어 왔으면 [조건 바꾸기] 버튼을 보여 줘요 (11/15)
+//   만드는 중 화면은 주소를 바꾸며(replace) 넘어와서, 바로 전 기록이 조건 화면이에요 → 주소에 ?from=ai 표시
+//   (일차 칩·칸 편집에 다녀와도 표시가 남아요. 왼쪽 위 ←는 그대로 내 여행)
+onMounted(() => {
+  const previous = window.history.state && window.history.state.back
+  if (route.query.from === 'ai' || typeof previous !== 'string' || !previous.startsWith('/plan/info')) return
+  router.replace({ query: { ...route.query, from: 'ai' } })
+})
+const isFromAi = computed(() => hasDraft.value && route.query.from === 'ai')
+// [조건 바꾸기]: 조건 화면 1단계부터 (고른 값은 그대로라 [다음]만 눌러도 돼요)
+//   조건 화면은 저장된 단계(store.planStep)로 열려서, 주소만 ?step=0 으로 주면 마지막 단계가 떠요 → 단계도 0으로
+const isConditionsAsk = ref(false) // [조건 바꾸기]를 누르면 먼저 묻는 창 (다시 만들면 지금 일정이 바뀌어서)
+function openConditions() {
+  isConditionsAsk.value = false
+  store.planStep = 0
+  router.push({ path: '/plan/info', query: { step: '0', back: route.fullPath } }) // 1단계에서 ← 를 누르면 이 화면으로 돌아와요
+}
 
 // 이동 미리보기. 일정이 바뀌면(다시 점검) 처음으로
 const sim = useRouteSim(() => trip.value)
@@ -109,7 +127,7 @@ function pickDay(d) {
   if (d === day.value) return
   day.value = d
   check.value = null
-  router.replace('/plan/check?day=' + d)
+  router.replace({ query: { ...route.query, day: String(d) } })
   runCheck()
 }
 
@@ -223,6 +241,7 @@ async function save() {
   <div class="scr scr-PlanCheck">
     <TripPage :trip="trip" back="/trips" :show-budget="hasDraft && SHOW_PRICE_ESTIMATE" :sim-me="sim.me.value" :active-stop="sim.activeStop.value" :reorderable="hasDraft" :mode-editable="hasDraft" @reorder="reorder" @change-mode="changeMode" :show-hours-help="hasDraft" @hours-checked="markHoursChecked" :reset-key="day">
       <template #right="{ selected }">
+        <button v-if="isFromAi && selected === null && !sim.isOn.value" type="button" class="btn btn--sm btn--float" @click="isConditionsAsk = true"><i class="ic ic--s i-settings" aria-hidden="true"></i>조건 바꾸기</button>
         <RouteSimButton v-if="hasDraft" :sim="sim" />
         <RouterLink v-if="selected !== null && trip.stops[selected] && !sim.isOn.value" :to="editLink(selected)" class="btn btn--sm btn--float"><i class="ic ic--s i-edit" aria-hidden="true"></i>{{ editLabel(selected) }}</RouterLink>
       </template>
@@ -250,6 +269,11 @@ async function save() {
         </div>
       </template>
     </TripPage>
+    <Teleport v-if="isConditionsAsk" to=".scr-PlanCheck .app">
+      <div class="pc-ask">
+        <ConfirmModal title="조건을 바꿔 다시 만들까요?" text="다시 만들면 조건이 같아도 장소가 바뀔 수 있어요. 지금 일정과 직접 바꾼 순서·이동 수단도 새 일정으로 바뀌어요." ok-text="조건 바꾸기" @cancel="isConditionsAsk = false" @ok="openConditions" />
+      </div>
+    </Teleport>
     <Teleport v-if="savedId" to=".scr-PlanCheck .app">
       <div class="dim" style="z-index: 40"></div>
       <section class="pc-replace" role="alertdialog" aria-modal="true" aria-label="지금 여행 바꾸기">
@@ -265,6 +289,8 @@ async function save() {
 </template>
 
 <style>
+.scr-PlanCheck .pc-ask{position:absolute;inset:0;z-index:40} /* 묻는 창을 바텀시트·지도 버튼보다 위에 (ConfirmModal은 z-index 8~9라 그냥 두면 시트 아래로 깔림) */
+.scr-PlanCheck .pc-ask .modal{min-height:0} /* 공통 .modal은 min-height 404px라 글만 있는 창은 아래가 비어서, 이 화면에서만 0 */
 .scr-PlanCheck .pc-missed{display:flex;align-items:center;gap:8px;margin:0 16px 8px;padding:8px 12px;border-radius:10px;font-size:13px;font-weight:600;color:var(--warning);background:var(--warning-soft)}
 .scr-PlanCheck .pc-missed .ic{flex:none}
 .scr-PlanCheck .pc-missed__text{flex:1;min-width:0}
