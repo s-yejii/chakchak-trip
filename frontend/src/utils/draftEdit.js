@@ -124,6 +124,10 @@ export function cancelEdit(trip) {
 export function finishEdit() {
   backup = null
 }
+// 편집에 들어온 뒤 칸이 바뀌었는지 (✕를 누를 때 버릴지 먼저 물어보려고)
+export function hasEditChanges(trip) {
+  return !!backup && !!trip && JSON.stringify(trip.stops) !== JSON.stringify(backup)
+}
 
 // 저장된 여행 편집 시작: 서버에서 읽어 store.editTrip에 (같은 여행을 이미 고치는 중이면 그대로 → 한 칸 수정에서 돌아와도 유지)
 export async function loadEditTrip(store, tripId) {

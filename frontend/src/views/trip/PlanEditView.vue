@@ -16,11 +16,12 @@ import { importance } from '@/data/places'
 import { checkPlan } from '@/api/trips'
 import KakaoMap from '@/components/common/KakaoMap.vue'
 import BottomSheet from '@/components/common/BottomSheet.vue'
+import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import { useRouteOptimize } from '@/utils/useRouteOptimize'
 import { useTripStore } from '@/stores/trip'
 import { goBackTo } from '@/utils/back'
 import { addDays } from '@/utils/dates'
-import { cancelEdit, dayStopsOf, dropPlaceOf, editingTripOf, finishEdit, loadEditTrip, orderAfterDrop, retime, saveEditTrip, setDayStops, startEdit, toEditRow } from '@/utils/draftEdit'
+import { cancelEdit, dayStopsOf, dropPlaceOf, editingTripOf, finishEdit, hasEditChanges, loadEditTrip, orderAfterDrop, retime, saveEditTrip, setDayStops, startEdit, toEditRow } from '@/utils/draftEdit'
 import { toDuration } from '@/utils/time'
 import { toShortDate, tripDetailLink } from '@/utils/tripView'
 import { showToast } from '@/utils/toast'
@@ -243,7 +244,15 @@ function exitLink() {
   return trip.value ? tripDetailLink(trip.value) : '/trips'
 }
 
+// ✕: 고친 게 있으면 버릴지 먼저 물어봐요 (모르고 누르면 고친 순서·시간이 다 사라져서)
+const isCancelAsk = ref(false)
+function onCloseClick() {
+  if (hasEditChanges(trip.value)) isCancelAsk.value = true
+  else cancel()
+}
+
 function cancel() {
+  isCancelAsk.value = false
   const link = exitLink() // 복사본을 지우기 전에 돌아갈 곳부터 정함
   cancelEdit(trip.value)
   if (tripId) store.editTrip = null
@@ -275,7 +284,7 @@ async function done() {
   <div class="scr scr-PlanEdit">
     <div class="app app--white">
       <header class="topbar" style="padding-right: 16px">
-        <button type="button" class="iconbtn" aria-label="편집 취소" @click="cancel"><i class="ic ic--l i-close" aria-hidden="true"></i></button>
+        <button type="button" class="iconbtn" aria-label="편집 취소" @click="onCloseClick"><i class="ic ic--l i-close" aria-hidden="true"></i></button>
         <h1 class="topbar__title">일정 편집{{ dayList.length > 1 ? ' · ' + day + '일차' : '' }}</h1>
         <button type="button" class="btn btn--primary btn--sm" :disabled="isLoading || isSaving || !hasTrip" @click="done">{{ isSaving ? '저장 중' : '완료' }}</button>
       </header>
@@ -346,11 +355,16 @@ async function done() {
         <RouterLink v-if="!tripId" to="/plan/manual" class="btn btn--secondary btn--md btn--block" style="margin-top: 4px"><i class="ic i-plus" aria-hidden="true"></i>장소 추가</RouterLink>
         </div>
       </BottomSheet>
+      <div v-if="isCancelAsk" class="pe-ask">
+        <ConfirmModal title="고친 내용을 버릴까요?" text="지금 나가면 바꾼 순서·시간·뺀 장소가 모두 편집 전으로 돌아가요." ok-text="버리기" cancel-text="계속 고치기" danger @cancel="isCancelAsk = false" @ok="cancel" />
+      </div>
     </div>
   </div>
 </template>
 
 <style>
+.scr-PlanEdit .pe-ask{position:absolute;inset:0;z-index:40} /* 버릴지 묻는 창을 바텀시트 위에 */
+.scr-PlanEdit .pe-ask .modal{min-height:0} /* 공통 .modal의 min-height 404px 때문에 아래가 비는 걸 이 화면에서만 없앰 */
 .scr-PlanEdit .pe-map { position: absolute; top: 103px; left: 0; right: 0; bottom: 0; z-index: 1; } /* 상단 바 아래부터 화면 끝까지 (위에 시트가 뜸) */
 .scr-PlanEdit .pe-map__btn { position: absolute; top: 10px; right: 10px; z-index: 2; }
 .scr-PlanEdit .pe-head { display: flex; flex-direction: column; gap: 8px; padding: 0 16px; touch-action: none; } /* 시트 머리: 끌 때 화면이 스크롤되지 않게 */
