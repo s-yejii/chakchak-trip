@@ -142,7 +142,9 @@ const hoursCheckedIds = computed(() => dayStopsOf(store.draft, day.value).filter
 
 // 고른 칸 편집 버튼: "성내동 카페 편집" → 그 칸 수정 (칸을 안 고르면 버튼이 없어요)
 function editLabel(selected) {
-  return trip.value.stops[selected].name.replace('천호 ', '') + ' 편집'
+  const stop = trip.value.stops[selected]
+  if (!stop) return '' // 고른 칸이 목록에 없음 (일차를 바꿨거나 칸을 뺌)
+  return stop.name.replace('천호 ', '') + ' 편집'
 }
 function editLink(selected) {
   if (!hasDraft.value) return '/plan/edit/stop?idx=' + selected
@@ -216,10 +218,10 @@ async function save() {
 
 <template>
   <div class="scr scr-PlanCheck">
-    <TripPage :trip="trip" back="/trips" :show-budget="hasDraft && SHOW_PRICE_ESTIMATE" :sim-me="sim.me.value" :active-stop="sim.activeStop.value" :reorderable="hasDraft" :mode-editable="hasDraft" @reorder="reorder" @change-mode="changeMode" :show-hours-help="hasDraft" @hours-checked="markHoursChecked">
+    <TripPage :trip="trip" back="/trips" :show-budget="hasDraft && SHOW_PRICE_ESTIMATE" :sim-me="sim.me.value" :active-stop="sim.activeStop.value" :reorderable="hasDraft" :mode-editable="hasDraft" @reorder="reorder" @change-mode="changeMode" :show-hours-help="hasDraft" @hours-checked="markHoursChecked" :reset-key="day">
       <template #right="{ selected }">
         <RouteSimButton v-if="hasDraft" :sim="sim" />
-        <RouterLink v-if="selected !== null && !sim.isOn.value" :to="editLink(selected)" class="btn btn--sm btn--float"><i class="ic ic--s i-edit" aria-hidden="true"></i>{{ editLabel(selected) }}</RouterLink>
+        <RouterLink v-if="selected !== null && trip.stops[selected] && !sim.isOn.value" :to="editLink(selected)" class="btn btn--sm btn--float"><i class="ic ic--s i-edit" aria-hidden="true"></i>{{ editLabel(selected) }}</RouterLink>
       </template>
       <template v-if="hasDraft" #head>
         <div v-if="missedList.length" class="pc-missed">
