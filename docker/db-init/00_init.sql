@@ -35,6 +35,7 @@
 \i /db/21b_retrip_crawl_6gu_review.sql
 \i /db/22_retrip_tour_6gu.sql
 \i /db/23_retrip_cleanup_6gu.sql
+\i /db/24_hangang_bus.sql
 
 \echo '== 90·95·96 테스트·시연 데이터'
 \i /db/90_test_data.sql

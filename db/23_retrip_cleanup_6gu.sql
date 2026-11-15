@@ -45,6 +45,9 @@ UPDATE retrip_place SET address = regexp_replace(address, '\s*스시이세이 �
 WHERE id = 'naver-1160275656';
 --  업종은 네이버 "초밥,롤" 대신 일식당으로 (11/15 상재 결정, 시나리오 화면에 일식당으로 보이게)
 UPDATE retrip_place SET biz_type = '일식당' WHERE id = 'naver-1160275656';
+--  11/15 상재: 시연 시나리오 맞춤 (실제 가게는 15:00 브레이크, 촬영 전 전화 확인). 브레이크 16:00~17:30, 14:30~16:00 점심 → 16:40 동서울터미널 버스
+--  use_time 글("11:00~22:00 (요일별: 매일 11:00-22:00)")에는 브레이크가 없어서 그대로
+UPDATE place_hours SET break_start = 960 WHERE place_id = 'naver-1160275656';
 
 -- 5. 08_retrip_cleanup.sql의 규칙을 새 데이터에 다시 적용 (모두 글자 규칙이라 다시 실행해도 같은 결과)
 
