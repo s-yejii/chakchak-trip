@@ -2,11 +2,18 @@
 리뷰 RAG 평가 1단계: 질문 30개를 A(글자)·B(벡터)·C(RAG)로 돌리고, 정답 표시용 표를 만들어요. (④ 신예지, 11/15)
 
 준비: 도커 DB와 백엔드 서버(8080)가 켜져 있어야 해요. 시연 동선 리뷰 임베딩이 채워져 있어야 B·C가 제대로 나와요.
-실행 (프로젝트 폴더에서):  python docs/rag-eval/run_eval.py
+      평가 API는 리뷰 RAG 관리 계정(ragadmin)만 부를 수 있어요. 비밀번호는 코드에 없고 환경변수로 넣어요 (팀 카톡).
+실행 (프로젝트 폴더에서, PowerShell):
+  $env:EVAL_PASSWORD = "관리 계정 비밀번호"
+  python docs/rag-eval/run_eval.py
 결과:
   docs/rag-eval/results.json  질문마다 A·B·C가 고른 상위 5와 걸린 시간 (점수 계산에 씀)
   docs/rag-eval/labels.csv    A·B·C 상위 5를 모은 가게(풀링)마다 리뷰 → label 칸에 1(맞음)/0(아님)을 사람이 채움
                               어느 방식이 골랐는지는 일부러 안 보여 줘요 (채점이 한쪽으로 쏠리지 않게)
+  docs/rag-eval/evidence.csv  C가 보여 준 근거 문장마다 → ok 칸에 1(정말 그 분위기의 근거)/0(아님: 부정문·딴 얘기)
+                              labels.csv를 다 채운 뒤에 해요 (근거 문장을 먼저 보면 C가 고른 가게를 알게 되니까)
+moodWord(A가 찾는 글자) 고르는 규칙: 사용자 말에서 핵심 낱말을 고르되, 다른 말의 일부로 흔히 잡히는 글자는 피함
+  (예: "뷰"는 "리뷰"에 3,345개, "아이"는 "아이스"에 1,827개가 걸려서 "창밖", "아이랑"으로 바꿈, 11/16)
 파이썬 기본 도구만 써요 (따로 설치할 것 없음).
 """
 import csv
@@ -18,8 +25,8 @@ import sys
 import urllib.request
 
 BASE_URL = os.environ.get("EVAL_BASE_URL", "http://localhost:8080")
-USERNAME = os.environ.get("EVAL_USER", "tripuser")          # 90_test_data.sql 테스트 계정
-PASSWORD = os.environ.get("EVAL_PASSWORD", "tripuser1234")
+USERNAME = os.environ.get("EVAL_USER", "ragadmin")          # 리뷰 RAG 관리 계정 (db/20_review_rag.sql)
+PASSWORD = os.environ.get("EVAL_PASSWORD")                    # 코드에 비밀번호를 쓰지 않음
 DB_CONTAINER = "tripbiseo-db"
 HERE = os.path.dirname(os.path.abspath(__file__))
 REVIEWS_PER_PLACE = 6       # 정답 표시할 때 보여 줄 리뷰 수
@@ -104,6 +111,22 @@ def read_reviews(place_ids):
     return reviews
 
 
+def write_evidence(results):
+    """C(RAG)가 보여 준 근거 문장 채점표: 근거가 정말 그 분위기를 말하는지 (부정문 '조용한 편은 아니에요' 같은 것 거르기)"""
+    path = os.path.join(HERE, "evidence.csv")
+    count = 0
+    with open(path, "w", encoding="utf-8-sig", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(["qid", "mood", "placeId", "name", "quote", "ok"])
+        for result in results:
+            for place in result["answer"]["rag"]:
+                if place.get("quote"):
+                    writer.writerow([result["question"]["id"], result["question"]["mood"], place["id"],
+                                     place["name"], place["quote"], ""])
+                    count += 1
+    print(f"근거 문장 {count}줄 → {path}")
+
+
 def write_labels(results):
     """정답 표시용 표. 어느 방식이 골랐는지는 안 적음 (블라인드)"""
     rows = []
@@ -124,11 +147,14 @@ def write_labels(results):
 
 
 def main():
+    if not PASSWORD:
+        sys.exit("EVAL_PASSWORD 환경변수에 관리 계정(ragadmin) 비밀번호를 넣어 주세요.")
     opener = make_opener()
     results = run_questions(opener, read_questions())
     with open(os.path.join(HERE, "results.json"), "w", encoding="utf-8") as file:
         json.dump(results, file, ensure_ascii=False, indent=1)
     write_labels(results)
+    write_evidence(results)
 
 
 if __name__ == "__main__":

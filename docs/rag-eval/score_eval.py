@@ -12,6 +12,7 @@
   찾은 비율    풀(A·B·C가 고른 곳 전체)에서 정답인 곳 중 이 방식이 찾은 비율 (풀링이라 진짜 재현율은 아님)
   0건 비율     하나도 못 고른 질문 비율
   평균 시간    방식마다 걸린 시간(ms)
+  근거 일치율  C가 보여 준 근거 문장 중 정말 그 분위기의 근거인 비율 (evidence.csv를 채웠을 때만)
 """
 import csv
 import json
@@ -113,6 +114,26 @@ def make_win_table(results, other, other_name):
     return "\n".join(lines) + "\n"
 
 
+def make_evidence_line():
+    """evidence.csv의 ok 칸으로 근거 일치율. 파일이 없거나 빈 칸이면 알려 줌"""
+    path = os.path.join(HERE, "evidence.csv")
+    if not os.path.exists(path):
+        return "근거 일치율: evidence.csv 없음\n"
+    total, good, empty = 0, 0, 0
+    with open(path, encoding="utf-8-sig") as file:
+        for row in csv.DictReader(file):
+            value = row["ok"].strip()
+            if value not in ("0", "1"):
+                empty += 1
+                continue
+            total += 1
+            good += int(value)
+    if total == 0:
+        return "근거 일치율: 아직 ok 칸을 안 채웠어요\n"
+    note = f" (빈 칸 {empty}줄은 뺌)" if empty else ""
+    return f"### C 근거 일치율: {good} / {total} = {good / total:.0%}{note}\n"
+
+
 def main():
     with open(os.path.join(HERE, "results.json"), encoding="utf-8") as file:
         results = json.load(file)
@@ -138,6 +159,7 @@ def main():
     report += make_table(rows_diff, "diff: 말과 리뷰 표현이 다름") + "\n"
     report += make_win_table(results, "keyword", "A 글자") + "\n"
     report += make_win_table(results, "vector", "B 벡터") + "\n"
+    report += make_evidence_line()
     print(report)
     with open(os.path.join(HERE, "summary.md"), "w", encoding="utf-8") as file:
         file.write(report)
