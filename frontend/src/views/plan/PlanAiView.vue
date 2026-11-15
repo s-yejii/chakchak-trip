@@ -444,7 +444,7 @@ function useRecommendedTime() {
   // 시연 계정: 시나리오 시각으로 (11/08 주형). 시작은 첫날(11/12 종로3가 11:30), 끝은 마지막 날 예약 기준
   //   값은 서버 DemoScenario.java 한 곳 (startTime, fixed). 시작·끝은 PlanRuleMaker가 첫날·마지막 날에만 써요
   if (scenario.value) {
-    const last = lastFixedOf(scenario.value.fixed) // 마지막 날 가장 늦은 예약 (11/12: 16:00 동서울터미널 버스)
+    const last = lastFixedOf(scenario.value.fixed) // 마지막 날 가장 늦은 예약 (11/15: 16:40 동서울터미널 버스)
     const isBoarding = /역$|터미널|공항/.test(last.name)
     const end = toTime(toMinutes(last.time) + (isBoarding ? -BOARDING_EARLY_MIN : MEAL_AFTER_MIN))
     store.planFromTime = scenario.value.startTime
