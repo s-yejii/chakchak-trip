@@ -39,6 +39,8 @@ import AskPanel from '@/components/live/AskPanel.vue'
 import InsertSlotSheet from '@/components/live/InsertSlotSheet.vue'
 import NearSearch from '@/components/after/NearSearch.vue'
 import SimilarSearch from '@/components/live/SimilarSearch.vue'
+import LiveTour from '@/components/live/LiveTour.vue'
+import { isTourDone, markTourDone } from '@/utils/liveTour'
 import LinkAddSheet from '@/components/live/LinkAddSheet.vue'
 import { useReplanStore } from '@/stores/replan'
 import { demoRoute } from '@/utils/demoRoute'
@@ -787,6 +789,25 @@ function restartMoving() {
   isDemo.value = isFakeGps() && !devMode.isFlow
   live.start(isDemo.value, isNoRealGps())
 }
+
+// ------------------------------------------------------------ 처음 여행 안내 (11/16)
+// 이 브라우저에서 처음 여행 중 화면에 들어오면 한 번만. 지도·카드가 다 그려지게 잠깐 뒤에. 주소에 ?tour=1이면 다시 (시연·촬영용)
+const TOUR_DELAY_MS = 800
+const isTourOn = ref(false)
+
+watch(isReady, (ready) => {
+  const isForced = pageRoute.query.tour === '1'
+  if (!ready || isTourOn.value || (!isForced && isTourDone())) return
+  setTimeout(() => {
+    fabOpen.value = false
+    isTourOn.value = true
+  }, TOUR_DELAY_MS)
+}, { immediate: true })
+
+function finishTour() {
+  isTourOn.value = false
+  markTourDone()
+}
 </script>
 
 <template>
@@ -794,6 +815,8 @@ function restartMoving() {
     <div class="app">
       <DevDot @clock="live.refresh()" @gps="restartMoving" />
       <DemoDrive :live="live" /><!-- 시연 계정만: 작은 "다음 장소로" 버튼 (GPS 이동 + 시계 배속만 자동, 11/08) -->
+      <!-- 처음 여행을 시작했을 때 한 번만: 트리피가 버튼을 하나씩 짚어 주는 안내 (11/16). 패널·알림 카드가 떠 있으면 미룸 -->
+      <LiveTour v-if="isTourOn && isReady && !adding && !asking && !isLostOpen && !isAskingEnd && !endStop" @finish="finishTour" />
       <TripEndSheet v-if="endStop && live.trip.value" :trip="live.trip.value" :place-name="endStop.name" :arrived-at="endStop.eta" :planned-at="endStop.time" :is-busy="isFinishing" @finish="finish" @close="endStop = null" />
       <!-- 여행 끝내기 확인 (11/12): 여행을 마친 트리피가 맞아 주는 창. 위 그림 → 글 → 버튼 -->
       <template v-if="isAskingEnd">
@@ -910,7 +933,7 @@ function restartMoving() {
           </div>
           <!-- 내 위치: + 위에 떠 있다가 메뉴를 열면 아래로 내려가며 사라짐 (메뉴가 + 바로 위에 뜨게) -->
           <button type="button" class="live-fab__me" :class="{ 'is-hidden': fabOpen }" aria-label="내 위치로" :aria-hidden="fabOpen" :tabindex="fabOpen ? -1 : 0" @click="locate"><i class="ic i-locate" aria-hidden="true"></i></button>
-          <button type="button" class="live-fab__main" :class="{ 'is-open': fabOpen }" :aria-label="fabOpen ? '메뉴 닫기' : '메뉴 열기'" :aria-expanded="fabOpen" @click="fabOpen = !fabOpen"><i class="ic i-plus" aria-hidden="true"></i></button>
+          <button type="button" class="live-fab__main" data-tour="fab" :class="{ 'is-open': fabOpen }" :aria-label="fabOpen ? '메뉴 닫기' : '메뉴 열기'" :aria-expanded="fabOpen" @click="fabOpen = !fabOpen"><i class="ic i-plus" aria-hidden="true"></i></button>
         </div>
 
         <!-- 링크로 장소 추가 -->
@@ -962,14 +985,14 @@ function restartMoving() {
             <AskPanel :me="mePoint || { x: 195, y: 300 }" :late="isLate" :trip-id="live.tripId.value" :position="live.position.value" @close="asking = false" @add="onAskAdd" :selected="askPickedId" :chat-key="chatKey(live.trip.value)" :planned="plannedPlaceIds" @choose="openSlotSheet" @found="onAskFound" @pick="askPickedId = $event" />
           </div>
           <div v-else class="quick live-quick" data-sheet-follow role="group" aria-label="트리피에게 묻기와 근처 찾기">
-            <button type="button" class="chip chip--sm chip--add live-chip" aria-label="어디 갈까? 트리피에게 갈 곳 물어보기" @click="openAsk"><span class="live-chip__ic live-chip__ic--ai" aria-hidden="true"><img src="/img/trippie-favicon.png" alt="" class="live-chip__img" draggable="false" /></span>어디 갈까?</button>
-            <button type="button" class="chip chip--sm chip--add live-chip" @click="openNear"><span class="live-chip__ic live-chip__ic--near" aria-hidden="true"><i class="ic ic--s i-search"></i></span>근처 찾기</button>
+            <button type="button" class="chip chip--sm chip--add live-chip" data-tour="ask" aria-label="어디 갈까? 트리피에게 갈 곳 물어보기" @click="openAsk"><span class="live-chip__ic live-chip__ic--ai" aria-hidden="true"><img src="/img/trippie-favicon.png" alt="" class="live-chip__img" draggable="false" /></span>어디 갈까?</button>
+            <button type="button" class="chip chip--sm chip--add live-chip" data-tour="near" @click="openNear"><span class="live-chip__ic live-chip__ic--near" aria-hidden="true"><i class="ic ic--s i-search"></i></span>근처 찾기</button>
             <!-- 결제 메모 입구 (11/12): 화면은 ⑤ PayMemoView (/live/pay) -->
-            <RouterLink to="/live/pay" class="chip chip--sm chip--add live-chip"><span class="live-chip__ic live-chip__ic--pay" aria-hidden="true"><i class="ic ic--s i-receipt"></i></span>결제 메모</RouterLink>
+            <RouterLink to="/live/pay" class="chip chip--sm chip--add live-chip" data-tour="pay"><span class="live-chip__ic live-chip__ic--pay" aria-hidden="true"><i class="ic ic--s i-receipt"></i></span>결제 메모</RouterLink>
           </div>
 
           <!-- 아래 시트: 오늘 일정 카드 -->
-          <BottomSheet v-if="!asking" class="sheet--peek live-sheet" :aria-label="doneCount ? '다음 일정' : '오늘 일정'">
+          <BottomSheet v-if="!asking" class="sheet--peek live-sheet" data-tour="sheet" :aria-label="doneCount ? '다음 일정' : '오늘 일정'">
             <div class="live-head" data-drag>
               <div style="flex: 1; min-width: 0">
                 <p class="t-cap">{{ head.cap }}</p>
