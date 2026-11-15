@@ -68,6 +68,7 @@
       WHERE r.place_id IN
       <foreach collection="placeIds" item="placeId" open="(" separator="," close=")">#{placeId}</foreach>
         AND length(r.content) &gt;= #{minLength}   -- "좋아요"·"친절해요"처럼 짧은 글은 어떤 질문과도 적당히 가까워서 근거에서 뺌
+        AND e.model = #{model}                     -- 다른 모델로 만든 좌표끼리는 비교하면 안 됨 (모델을 바꾸면 다시 임베딩)
     ) ranked
     WHERE rank_in_place &lt;= #{perPlace}
     ORDER BY place_id, distance
@@ -78,7 +79,8 @@
     SELECT COUNT(DISTINCT r.place_id)
     FROM review_embedding e
     JOIN retrip_review r ON r.id = e.review_id
-    WHERE r.place_id IN
+    WHERE e.model = #{model}
+      AND r.place_id IN
     <foreach collection="placeIds" item="placeId" open="(" separator="," close=")">#{placeId}</foreach>
   </select>
 

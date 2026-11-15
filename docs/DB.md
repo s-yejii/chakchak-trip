@@ -25,7 +25,7 @@
 | `db/14_live.sql` | ④ 테이블 (`trip_track`) | ④ |
 | `db/17_place_area.sql` | 넓은 장소 경계 `place_area` + 여의도한강공원 1줄 (OSM, 11/06, 이상재 확인 필요) | ④ |
 | `db/18_ask_place.sql` | AI에게 묻기(Text-to-SQL)용 뷰 `ask_place`·`ask_review`, 함수 `detour_minutes`, 읽기 전용 계정 `ask_reader`, 리뷰 검색 인덱스 (11/06, 이상재 확인 필요) | ④ |
-| `db/20_review_rag.sql` | 리뷰 RAG: pgvector 확장 + 리뷰 임베딩 `review_embedding` (11/15). pgvector 있는 DB(도커)에서만 | ④ |
+| `db/20_review_rag.sql` | 리뷰 RAG: pgvector 확장 + 리뷰 임베딩 `review_embedding` (11/15). pgvector 있는 DB(도커)에서만. 리뷰 RAG 관리 계정 `ragadmin` 한 명도 넣어요 (임베딩·평가 API용, 비밀번호는 팀 카톡, 11/16) | ④ |
 | `db/15_after.sql` | ⑤ 테이블 | ⑤ |
 | `db/90_test_data.sql` | 테스트 계정(tripuser / tripuser1234)·샘플 여행 | DB 총괄 |
 | `db/91_drop_old.sql` | 예전 DB에서 안 쓰는 테이블 정리 (예전 DB만 한 번) | DB 총괄 |

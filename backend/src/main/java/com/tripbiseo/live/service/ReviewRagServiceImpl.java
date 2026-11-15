@@ -9,6 +9,8 @@ import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 
 import com.tripbiseo.common.ai.AiService;
@@ -23,6 +25,7 @@ import com.tripbiseo.live.dto.MoodReview;
 import com.tripbiseo.live.dto.ReviewText;
 import com.tripbiseo.live.dto.ReviewVector;
 import com.tripbiseo.live.mapper.ReviewEmbeddingMapper;
+import com.tripbiseo.member.service.MemberService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -50,6 +53,23 @@ public class ReviewRagServiceImpl implements ReviewRagService {
     private final ReviewEmbedder reviewEmbedder;
     private final MoodPromptMaker moodPromptMaker;
     private final AiService aiService;
+    private final MemberService memberService;     // 관리 계정 확인 (① 회원 읽기만)
+
+    // 리뷰 RAG 관리 계정 아이디 (쉼표로). 기본 ragadmin (db/20_review_rag.sql로 만드는 계정)
+    @Value("${RAG_ADMIN_ACCOUNTS:ragadmin}")
+    private String adminAccounts;
+
+    /** 로그인한 회원 아이디가 관리 계정 목록에 있는지. 없으면 403 */
+    @Override
+    public void checkAdmin(long memberId) {
+        String username = memberService.getMember(memberId).getUsername();
+        for (String account : adminAccounts.split(",")) {
+            if (account.trim().equals(username)) {
+                return;
+            }
+        }
+        throw new ApiException(403, "리뷰 RAG 관리 계정만 쓸 수 있어요.");
+    }
 
     /**
      * 100개씩: 꺼내기 → Gemini로 임베딩 → 저장. 한도(429)에 걸리면 거기서 멈추고 된 만큼 알려 줘요.
@@ -108,7 +128,8 @@ public class ReviewRagServiceImpl implements ReviewRagService {
             return new ArrayList<>();
         }
         String query = toVectorText(reviewEmbedder.embedQuery(mood));
-        List<MoodReview> rows = reviewEmbeddingMapper.selectMoodReviewList(query, placeIds, REVIEWS_PER_PLACE, MIN_REVIEW_LENGTH);
+        List<MoodReview> rows = reviewEmbeddingMapper.selectMoodReviewList(query, placeIds, REVIEWS_PER_PLACE, MIN_REVIEW_LENGTH,
+                                                                          reviewEmbedder.getModel());
         List<MoodMatch> matches = new ArrayList<>();
         for (MoodMatch match : groupByPlace(rows)) {
             if (match.getReviews().size() >= REVIEWS_PER_PLACE && match.getScore() <= MAX_MOOD_DISTANCE) {
@@ -126,15 +147,18 @@ public class ReviewRagServiceImpl implements ReviewRagService {
         if (placeIds == null || placeIds.isEmpty()) {
             return new ArrayList<>();
         }
-        if (reviewEmbeddingMapper.selectEmbeddedPlaceCount(placeIds) == 0) {
-            log.info("리뷰 RAG: 후보에 임베딩이 없어 예전 방식(리뷰 글자 '{}')", moodWord);
-            return findByKeyword(placeIds, moodWord);
-        }
         List<MoodMatch> ranked;
         try {
+            if (reviewEmbeddingMapper.selectEmbeddedPlaceCount(placeIds, reviewEmbedder.getModel()) == 0) {
+                log.info("리뷰 RAG: 후보에 임베딩이 없어 예전 방식(리뷰 글자 '{}')", moodWord);
+                return findByKeyword(placeIds, moodWord);
+            }
             ranked = rankByMood(placeIds, mood);
         } catch (ApiException e) { // 질문 임베딩 실패 (한도·키 없음)
             log.warn("리뷰 RAG: 질문 임베딩 실패 → 예전 방식 - {}", e.getMessage());
+            return findByKeyword(placeIds, moodWord);
+        } catch (DataAccessException e) { // review_embedding 표가 없는 DB (20_review_rag.sql을 안 돌린 PC) → 예전 방식
+            log.warn("리뷰 RAG: DB에 임베딩 표가 없거나 오류 → 예전 방식 - {}", e.getMostSpecificCause().getMessage());
             return findByKeyword(placeIds, moodWord);
         }
         List<MoodMatch> top = ranked.size() > JUDGE_COUNT ? new ArrayList<>(ranked.subList(0, JUDGE_COUNT)) : ranked;
@@ -157,7 +181,7 @@ public class ReviewRagServiceImpl implements ReviewRagService {
         if (placeIds.isEmpty()) {
             return response;
         }
-        response.setEmbeddedCount(reviewEmbeddingMapper.selectEmbeddedPlaceCount(placeIds));
+        response.setEmbeddedCount(reviewEmbeddingMapper.selectEmbeddedPlaceCount(placeIds, reviewEmbedder.getModel()));
 
         long start = System.currentTimeMillis();
         response.setKeyword(toComparePlaces(findByKeyword(placeIds, request.getMoodWord()), names));

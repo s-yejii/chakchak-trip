@@ -10,6 +10,9 @@ import com.tripbiseo.live.dto.MoodMatch;
 /** ④ 리뷰 RAG: 리뷰를 임베딩해 두고, 분위기 질문에 뜻이 가까운 리뷰를 찾아요 */
 public interface ReviewRagService {
 
+    /** 리뷰 RAG 관리 계정(RAG_ADMIN_ACCOUNTS, 기본 ragadmin)인지 확인. 아니면 403 (임베딩·평가 API가 Gemini 한도를 쓰니까) */
+    void checkAdmin(long memberId);
+
     /** 아직 임베딩이 없는 시연 동선(장소 500m 안) 리뷰를 최대 limit개 임베딩해서 저장 (개발용, 다 될 때까지 여러 번 부름) */
     EmbedResult embedReviews(int limit);
 

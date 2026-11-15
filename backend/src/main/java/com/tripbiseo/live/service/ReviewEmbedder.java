@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -30,8 +31,12 @@ public class ReviewEmbedder {
     private static final int CONNECT_TIMEOUT_MS = 5000;
     private static final int READ_TIMEOUT_MS = 30000;
 
+    private static final int MAX_QUERY_CACHE = 500;  // 저장해 둘 질문 좌표 수
+
     // RestClient: Spring에 들어 있는 HTTP 호출 도구 (다른 서버 API 부르기)
     private final RestClient restClient;
+    // 질문 글 → 좌표. ConcurrentHashMap: 여러 요청이 동시에 읽고 써도 안전한 Map
+    private final Map<String, float[]> queryCache = new ConcurrentHashMap<>();
 
     @Value("${GEMINI_API_KEY:}")
     private String apiKey;
@@ -55,9 +60,18 @@ public class ReviewEmbedder {
         return callGemini(texts, "RETRIEVAL_DOCUMENT");
     }
 
-    /** 찾는 질문 하나 → 임베딩 하나 */
+    /** 찾는 질문 하나 → 임베딩 하나. 같은 질문은 저장해 둔 값을 다시 씀 (Gemini 한도·시간 아끼기, 11/16) */
     public float[] embedQuery(String text) {
-        return callGemini(List.of(text), "RETRIEVAL_QUERY").get(0);
+        float[] saved = queryCache.get(text);
+        if (saved != null) {
+            return saved;
+        }
+        float[] vector = callGemini(List.of(text), "RETRIEVAL_QUERY").get(0);
+        if (queryCache.size() >= MAX_QUERY_CACHE) {
+            queryCache.clear(); // 너무 많이 쌓이면 비우고 다시 (가장 단순한 방법)
+        }
+        queryCache.put(text, vector);
+        return vector;
     }
 
     private List<float[]> callGemini(List<String> texts, String taskType) {
