@@ -17,7 +17,7 @@ import { toDuration, toMinutes, toTime } from '@/utils/time'
 import { showToast } from '@/utils/toast'
 import { goBack } from '@/utils/back'
 import { rememberAlert, shouldOpenAlert } from '@/utils/alertMemory'
-import { finishTrip, getTripPhotos, skipStop } from '@/api/trips'
+import { finishTrip, getTripPhotos, skipStop, updateStop } from '@/api/trips'
 import { chatKey, clearChat } from '@/utils/askChat'
 import { loadPhoto } from '@/utils/placePhoto'
 import BottomSheet from '@/components/common/BottomSheet.vue'
@@ -524,7 +524,8 @@ function photoOf(stop) {
 
 // ------------------------------------------------------------ 카드
 const cards = computed(() => stops.value.map((stop) => {
-  const card = { no: stop.id, stopId: stop.id, img: photoOf(stop), title: stop.fixed ? stop.name : stop.no + ' ' + stop.name, fixed: stop.fixed, leg: null, legState: '', state: '', sub: '', subCls: '' }
+  // 11/16: 번호(seq)·이름(name)을 따로 줘서 카드에서 번호는 사진 위 배지로 (title은 예전처럼 '번호 이름', 화면 읽기용)
+  const card = { no: stop.id, stopId: stop.id, img: photoOf(stop), title: stop.fixed ? stop.name : stop.no + ' ' + stop.name, seq: stop.fixed ? null : stop.no, name: stop.name, fixed: stop.fixed, leg: null, legState: '', state: '', sub: '', subCls: '' }
   if (stop.moveMin != null) {
     card.leg = { mode: LEG_MODE[stop.moveMode] || 'walk', min: stop.moveMin, dist: distText(stop.moveMeters) }
     card.legState = stop.id === (nextStop.value && nextStop.value.id) ? 'now' : ''
@@ -539,18 +540,46 @@ const cards = computed(() => stops.value.map((stop) => {
   } else if (stop.reach === 'closed') {
     card.sub = stop.closedReason || '도착할 때 문을 닫아요'
     card.subCls = 'c-danger'
-  } else if (stop.reach === 'missed') {
-    card.sub = stop.time + ' 계획 시간이 지났어요'
-    card.subCls = 'c-warning'
-  } else if (stop.fixed && !isLate.value) {
-    card.sub = stop.time + ' 고정 · ' + stop.eta + ' 도착 예상'
+  } else if (stop.fixed) {
+    fillFixedSub(card, stop)
   } else {
-    card.sub = stop.eta + ' 도착 예상'
-    if (isLate.value) card.subCls = stop.fixed ? 'c-danger' : 'c-warning'
-    else if (isWarnReach(stop.reach)) card.subCls = 'c-warning'
+    fillPlainSub(card, stop)
   }
   return card
 }))
+
+// 11/16 카드 상태 줄: 사용자에게 필요한 건 "언제 도착하냐". 예전엔 늦은 뒤로 모든 카드에 "~계획 시간이 지났어요"가 주황으로 붙어
+// 진짜 중요한 경고(예약)가 묻혔어요. 일반 장소는 늦어도 뒤로 밀릴 뿐이라(서버도 출발 알림을 안 냄, 11/08) 도착 시각 + 줄 그은 원래 시각만,
+// 예약(고정)만 늦을 때 색으로 경고해요
+const LATE_NOTE_MIN = 5 // 계획보다 이만큼 이상 늦을 때만 줄 그은 원래 시각을 붙임
+
+// 계획 시각보다 예상 도착이 몇 분 늦은지 (모르면 0)
+function lateMinutes(stop) {
+  if (!stop.eta || !stop.time) return 0
+  return toMinutes(stop.eta) - toMinutes(stop.time)
+}
+
+// 예약(고정) 칸: "예약 12:30 · 12:41 도착", 늦으면 "예약 12:30 · 11분 늦어요"(주황), 이미 지났으면 빨강
+function fillFixedSub(card, stop) {
+  const late = lateMinutes(stop)
+  if (stop.reach === 'missed') {
+    card.sub = '예약 ' + stop.time + ' · 시간이 지났어요'
+    card.subCls = 'c-danger'
+  } else if (late > 0) {
+    card.sub = '예약 ' + stop.time + ' · ' + toDuration(late) + ' 늦어요'
+    card.subCls = 'c-warning'
+  } else {
+    card.sub = '예약 ' + stop.time + (stop.eta ? ' · ' + stop.eta + ' 도착' : '')
+  }
+}
+
+// 일반 칸: "11:48 도착", 늦으면 원래 시각에 줄을 그어 앞에 "~~10:00~~ 11:48 도착" (was). 다음 예약에 못 닿는 칸(tight·no)만 주황
+function fillPlainSub(card, stop) {
+  card.sub = stop.eta ? stop.eta + ' 도착' : stop.time + ' 계획'
+  const late = lateMinutes(stop)
+  if (late >= LATE_NOTE_MIN) card.was = stop.time // 원래 계획 시각에 줄을 그어 앞에 (기차·비행기 앱의 시각 변경 표시처럼)
+  if (isWarnReach(stop.reach)) card.subCls = 'c-warning'
+}
 
 // 카드·핀을 눌렀을 때: 다녀온 곳 → 정보창 / 지금 있는 곳 → 내 위치로 / 남은 곳 → 고르기, 한 번 더 누르면 미리 바꾸기
 function pickStop(stop, point) {
@@ -611,6 +640,32 @@ const segFrom = computed(() => {
   if (isFromMe && live.position.value) return { name: '지금 위치', img: '/img/mapB.svg', lat: live.position.value.lat, lng: live.position.value.lng }
   return { name: before.name, img: photoOf(before), lat: before.lat, lng: before.lng }
 })
+// 이동 칩 시트에서 수단 바꾸기 (11/16): 그 칸의 저장된 수단(null = 자동). 칸 원본은 여행 전체(live.trip)에서 찾아요
+const isSavingMode = ref(false)
+const segTripStop = computed(() => {
+  if (!segCard.value || !live.trip.value) return null
+  return (live.trip.value.stops || []).find((stop) => stop.id === segCard.value.stopId) || null
+})
+const segMode = computed(() => (segTripStop.value ? segTripStop.value.mode || null : null))
+const MODE_DONE_TEXT = { walk: '도보로', transit: '대중교통으로', taxi: '택시로' }
+
+// 고른 수단을 저장(② PUT /trips/{id}/stops/{stopId})하고 도착 예상을 다시 계산.
+// 이 API는 memo를 안 보내면 지워서 원래 메모를 같이 보내요 (API.md). 다른 칸(day·time 등)은 안 보내면 그대로
+async function changeSegMode(mode) {
+  const stop = segTripStop.value
+  if (!stop || isSavingMode.value) return
+  isSavingMode.value = true
+  try {
+    await updateStop(live.tripId.value, stop.id, { mode: mode, memo: stop.memo ?? null })
+    await live.refresh()
+    showToast(mode ? MODE_DONE_TEXT[mode] + ' 바꿨어요 · 도착 시간을 다시 계산했어요' : '거리에 맞춰 자동으로 골라요')
+  } catch (e) {
+    showToast(e.message)
+  } finally {
+    isSavingMode.value = false
+  }
+}
+
 const segTo = computed(() => {
   if (!segCard.value) return null
   const stop = stops.value.find((item) => item.id === segCard.value.stopId)
@@ -998,7 +1053,7 @@ function finishTour() {
                 <p class="t-cap">{{ head.cap }}</p>
                 <p class="t-big tn" :class="head.cls" style="margin: 0">
                   {{ head.big }}
-                  <span v-if="head.strong" class="t-strong c-navy">{{ head.strong }}</span>
+                  <span v-if="head.strong" class="live-head__strong">{{ head.strong }}</span>
                   <span v-if="head.small" class="t-cap tn">{{ head.small }}</span>
                 </p>
               </div>
@@ -1027,7 +1082,7 @@ function finishTour() {
             </div>
           </div>
 
-          <SegSheet v-if="segCard && segFrom && segTo" :from="segFrom" :to="segTo" :leg="segCard.leg" @close="segCard = null" />
+          <SegSheet v-if="segCard && segFrom && segTo" :from="segFrom" :to="segTo" :leg="segCard.leg" :current="segMode" :is-saving="isSavingMode" @mode="changeSegMode" @close="segCard = null" />
         </template>
       </template>
     </div>
@@ -1084,5 +1139,9 @@ function finishTour() {
 .scr-Live .live-quick { position: absolute; top: 392px; left: 0; right: 58px; z-index: 2; gap: 5px; padding-left: 12px; padding-right: 4px; }
 .scr-Live .live-sheet { top: 440px; padding: 8px 0 0; gap: 12px; }
 .scr-Live .live-head { display: flex; align-items: flex-end; gap: 12px; padding: 0 16px; }
+/* 11/16 시트 머리: 위 한 줄(어디까지) 회색 작게 → 도착 시각 크게 → '도착 예정'은 회색 보조 글씨 */
+.scr-Live .live-head .t-cap { font-size: 13px; line-height: 18px; color: var(--ink-muted); }
+.scr-Live .live-head .t-big { font-size: 28px; line-height: 36px; letter-spacing: -.03em; }
+.scr-Live .live-head__strong { margin-left: 4px; font-size: 14px; font-weight: 600; letter-spacing: 0; color: var(--ink-muted); }
 .scr-Live .live-pill { position: absolute; top: 112px; left: 16px; z-index: 3; }
 </style>
