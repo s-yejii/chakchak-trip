@@ -148,8 +148,10 @@ function countDays(t) {
 function hereLink() {
   return '/plan/edit?' + (tripId ? 'id=' + tripId + '&' : '') + 'day=' + day.value
 }
-// 다른 날 고르기
+// 다른 날 고르기: 고른 칸 번호는 "그날 몇 번째"라 다른 날로 가면 비움 (안 비우면 다음 날 같은 번호 칸이 골라진 채로 남음)
 function pickDay(d) {
+  if (d === day.value) return
+  selected.value = null
   day.value = d
   router.replace(hereLink())
 }
