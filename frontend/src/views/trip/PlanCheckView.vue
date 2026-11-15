@@ -105,13 +105,18 @@ function addMissed() {
 }
 
 // 그날 초안 점검: 시각이 빈 칸은 서버가 앞 일정에 이어서 채워 줌 → 그 시각을 초안에 반영
+// 일차 칩을 빠르게 바꾸면 늦게 온 앞 요청이 지금 날 점검을 덮어써서, 마지막 요청 번호만 받아들여요 (11/16)
+let lastCheckRequest = 0
 async function runCheck() {
   if (!hasDraft.value) return
+  const request = ++lastCheckRequest
   try {
     // 출발지(AI 일정의 "어디서 출발해요?")도 같이 보내서 1일차 첫 장소 앞에 길안내 (11/09, 저장은 안 함)
     const origin = store.planOrigin
     const draft = origin ? { ...store.draft, originName: origin.name, originLat: origin.lat, originLng: origin.lng } : store.draft
-    check.value = await checkPlan(draft, day.value)
+    const result = await checkPlan(draft, day.value)
+    if (request !== lastCheckRequest) return // 그 사이 다른 날을 눌렀으면 이 응답은 버림
+    check.value = result
     for (let i = 0; i < check.value.stops.length; i++) {
       const checked = check.value.stops[i]
       const stop = store.draft.stops.find((s) => s.name === checked.name && (s.day || 1) === checked.day)
@@ -119,7 +124,7 @@ async function runCheck() {
     }
     error.value = ''
   } catch (e) {
-    error.value = e.message
+    if (request === lastCheckRequest) error.value = e.message
   }
 }
 
