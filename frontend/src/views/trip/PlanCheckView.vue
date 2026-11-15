@@ -212,6 +212,21 @@ async function trashOverlappingTrips(saved) {
   }
 }
 
+// 저장 전: 시각이 빈 칸이 있는 날은 점검으로 시각을 채워요 (11/16)
+//   일정 점검은 보고 있는 날만 점검해서, 안 열어 본 날은 시각이 비어 있어요 → 서버가 "시각을 HH:mm으로 적어 주세요"로 막아요
+async function fillEmptyTimes() {
+  const days = [...new Set(store.draft.stops.filter((stop) => !stop.time).map((stop) => stop.day || 1))]
+  const origin = store.planOrigin
+  const draft = origin ? { ...store.draft, originName: origin.name, originLat: origin.lat, originLng: origin.lng } : store.draft
+  for (const d of days) {
+    const result = await checkPlan(draft, d)
+    for (const checked of result.stops) {
+      const stop = store.draft.stops.find((s) => s.name === checked.name && (s.day || 1) === checked.day)
+      if (stop && !stop.time) stop.time = checked.time
+    }
+  }
+}
+
 async function save() {
   if (!hasDraft.value) {
     router.replace('/trips/today')
@@ -220,6 +235,7 @@ async function save() {
   }
   saving.value = true
   try {
+    await fillEmptyTimes()
     const saved = await createTrip(store.draft)
     store.tripId = saved.id
     if (devMode.isOn) await trashOverlappingTrips(saved) // 시연 계정: 날짜가 겹치는 예전 여행은 휴지통으로
