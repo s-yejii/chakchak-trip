@@ -8,7 +8,9 @@ import { todayStops, reserveTime, planArrive, lateArrive, lateMinutes } from '@/
 import { toTime } from '@/utils/time'
 
 // 입력창 아래 예시 칩
-export const examples = ['근처 카페 추천해 줘', '혼밥하기 좋은 식당 추천해 줘', '다음 일정 뭐야?']
+// 11/16 리뷰 RAG: 분위기로 찾는 예시를 앞에 ("혼자 가도 편한"은 리뷰의 "혼밥"과 말이 달라도 뜻으로 찾음).
+// 채팅 분류(LiveChatClassifier)가 가게 찾기로 알아듣게 "근처"·"추천"을 꼭 넣어요
+export const examples = ['근처 조용히 작업할 카페', '혼자 가도 편한 식당 추천', '다음 일정 뭐야?']
 
 // 반경 칩 (m). API는 100~3000m까지 받아요
 export const radiusOptions = [300, 500, 1000]

@@ -45,7 +45,7 @@ let nextId = Date.now()
 
 const isServer = computed(() => props.tripId != null && props.position != null)
 const activeMessage = computed(() => messages.value.find((message) => message.id === activeId.value) || null)
-const placeholder = computed(() => (activeMessage.value ? '이 중에 더 조용한 곳은?' : '가는 길에 들를 카페'))
+const placeholder = computed(() => (activeMessage.value ? '이 중에 더 조용한 곳은?' : '가는 길에 들를 조용한 카페'))
 
 watch(messages, () => saveChat(props.chatKey, messages.value), { deep: true })
 
@@ -261,7 +261,7 @@ function distText(m) {
       <div ref="threadBox" class="lp-thread lp-thread--chat" aria-live="polite">
         <div class="lp-row">
           <span class="lp-avatar lp-avatar--ai lp-avatar--sm" aria-hidden="true"><i class="ic ic--s i-sparkle"></i></span>
-          <p class="lp-bubble">여행 중에 필요한 걸 말해 주세요. 근처 추천, 일정 바꾸기, 오늘 일정 질문을 도와드려요.</p>
+          <p class="lp-bubble">여행 중에 필요한 걸 말해 주세요. '조용한', '혼자 가기 편한'처럼 분위기로 물으면 리뷰를 읽고 근거와 함께 찾아 드려요.</p>
         </div>
         <div v-if="!messages.length" class="lp-chips lp-chips--indent">
           <button v-for="text in examples" :key="text" type="button" class="chip chip--sm" @click="send(text)">{{ text }}</button>
