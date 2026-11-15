@@ -17,6 +17,7 @@ import TripBudget from '@/components/trip/TripBudget.vue'
 import TripTimeline from '@/components/trip/TripTimeline.vue'
 import CheckList from '@/components/trip/CheckList.vue'
 import KakaoMap from '@/components/common/KakaoMap.vue'
+import { toDuration } from '@/utils/time'
 
 const props = defineProps({
   trip: { type: Object, required: true },
@@ -298,7 +299,7 @@ function slackBadge(slack) {
             <span v-if="badge" class="badge" :class="badge.cls" style="height: 20px; margin-right: 6px">{{ badge.text }}</span>{{ subText }}
           </p>
         </div>
-        <span v-if="trip.slack !== undefined" class="badge tn" :class="slackBadge(trip.slack).cls"><i class="ic ic--s" :class="slackBadge(trip.slack).icon" aria-hidden="true"></i>{{ trip.slack < 0 ? '예약에 ' + -trip.slack + '분 늦어요' : '예약 여유 ' + trip.slack + '분' }}</span>
+        <span v-if="trip.slack !== undefined" class="badge tn" :class="slackBadge(trip.slack).cls"><i class="ic ic--s" :class="slackBadge(trip.slack).icon" aria-hidden="true"></i>{{ trip.slack < 0 ? '예약에 ' + toDuration(-trip.slack) + ' 늦어요' : '예약 여유 ' + toDuration(trip.slack) }}</span>
       </div>
       <TripBudget v-if="showBudget && trip.stops.length" :stops="trip.stops" />
       <slot name="head"></slot>
