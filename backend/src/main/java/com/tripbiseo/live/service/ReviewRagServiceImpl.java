@@ -34,7 +34,8 @@ public class ReviewRagServiceImpl implements ReviewRagService {
     private static final int TOO_MANY_REQUESTS = 429;
     private static final int REVIEWS_PER_PLACE = 2;          // 가게마다 근거 리뷰 2개 (지금 규칙 "리뷰 2개 이상에 나와야 인정"과 같음)
     private static final double MAX_MOOD_DISTANCE = 0.40;    // 이보다 멀면 분위기와 상관없는 가게로 봄 (임시값, 7단계 평가로 정함)
-    private static final int MIN_REVIEW_LENGTH = 20;         // 이보다 짧은 리뷰("좋아요")는 근거로 안 씀 (11/15 시험: 아무 질문에나 가깝게 나옴)
+    private static final int MIN_REVIEW_LENGTH = 20;         // 이보다 짧은 리뷰("좋아요")는 근거로 안 씀 (11/15 시험: 아무 질문에나 가깝게 나옴). 임베딩도 안 함
+    private static final int EMBED_PER_PLACE = 6;            // 임베딩은 가게마다 긴 리뷰 6개만 (무료 한도 때문에, 11/16)
 
     private static final int JUDGE_COUNT = 8;                // Gemini에게 보여 줄 후보 수 (벡터 상위 8곳 × 리뷰 2개)
     private static final int KEYWORD_MIN_COUNT = 2;          // 예전 방식: 리뷰 2개 이상에 글자가 나와야 인정
@@ -62,7 +63,7 @@ public class ReviewRagServiceImpl implements ReviewRagService {
         int embedded = 0;
         while (embedded < limit) {
             int count = Math.min(ReviewEmbedder.MAX_BATCH, limit - embedded);
-            List<ReviewText> reviews = reviewEmbeddingMapper.selectReviewToEmbedList(count);
+            List<ReviewText> reviews = reviewEmbeddingMapper.selectReviewToEmbedList(count, MIN_REVIEW_LENGTH, EMBED_PER_PLACE);
             if (reviews.isEmpty()) {
                 break; // 다 했어요
             }
@@ -71,7 +72,7 @@ public class ReviewRagServiceImpl implements ReviewRagService {
             }
             embedded += reviews.size();
         }
-        return new EmbedResult(embedded, reviewEmbeddingMapper.selectRemainingCount());
+        return new EmbedResult(embedded, reviewEmbeddingMapper.selectRemainingCount(MIN_REVIEW_LENGTH, EMBED_PER_PLACE));
     }
 
     // 리뷰 묶음 하나를 임베딩해서 저장. 한도(429)에 걸리면 저장하지 않고 false (다른 오류는 그대로 던짐)

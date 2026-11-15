@@ -6,18 +6,27 @@
   <!-- 아직 임베딩이 없는 리뷰 = review_embedding에 짝이 없는 리뷰 (LEFT JOIN … IS NULL).
        그래서 중간에 멈춰도 다시 부르면 남은 것부터 이어서 해요.
        범위 (11/15): Gemini 무료 임베딩이 하루 약 1,000개라 5개 구 3.2만 개 대신 시연 동선 장소 500m 안만 (리뷰 약 3,100개).
-       좌표는 plan/service/DemoScenario.java 시연 일정과 같은 곳 (종로3가·익선, 명동 숙소, 남산나들길, 팔각정, 예장공원, 을지로, 강남 스시도, 동서울터미널) -->
+       좌표는 plan/service/DemoScenario.java 시연 일정과 같은 곳 (종로3가·익선, 명동 숙소, 남산나들길, 팔각정, 예장공원, 을지로, 강남 스시도, 동서울터미널)
+       11/16 더 줄임 (리뷰 약 1,830개, 무료로 2일): minLength자 이상 리뷰 중 가게마다 긴 순 perPlace개만.
+       긴 리뷰에 분위기 이야기가 많고, 짧은 리뷰는 검색 때도 안 씀(selectMoodReviewList의 minLength와 같은 값)
+       안쪽 SELECT: 범위 안 가게 리뷰마다 가게별 긴 순 번호(ROW_NUMBER). 바깥: 번호 perPlace 이하 + 아직 임베딩 없는 것 -->
   <sql id="notEmbeddedYet">
-    FROM retrip_review r
-    JOIN retrip_place p ON p.id = r.place_id
+    FROM (
+      SELECT r.id, r.content,
+             ROW_NUMBER() OVER (PARTITION BY r.place_id ORDER BY length(r.content) DESC, r.id) AS rank_in_place
+      FROM retrip_review r
+      JOIN retrip_place p ON p.id = r.place_id
+      WHERE length(r.content) &gt;= #{minLength}
+        AND EXISTS (
+          SELECT 1
+          FROM (VALUES (37.5732, 126.9898), (37.5616, 126.9827), (37.5549, 126.9867), (37.5516, 126.9876),
+                       (37.5605, 126.9889), (37.5658, 126.9906), (37.4952, 127.0850), (37.5344, 127.0941)) AS demo(lat, lng)
+          WHERE ST_DWithin(p.geom, ST_SetSRID(ST_MakePoint(demo.lng, demo.lat), 4326)::geography, 500)
+        )
+    ) r
     LEFT JOIN review_embedding e ON e.review_id = r.id
-    WHERE e.review_id IS NULL
-      AND EXISTS (
-        SELECT 1
-        FROM (VALUES (37.5732, 126.9898), (37.5616, 126.9827), (37.5549, 126.9867), (37.5516, 126.9876),
-                     (37.5605, 126.9889), (37.5658, 126.9906), (37.4952, 127.0850), (37.5344, 127.0941)) AS demo(lat, lng)
-        WHERE ST_DWithin(p.geom, ST_SetSRID(ST_MakePoint(demo.lng, demo.lat), 4326)::geography, 500)
-      )
+    WHERE r.rank_in_place &lt;= #{perPlace}
+      AND e.review_id IS NULL
   </sql>
 
   <select id="selectReviewToEmbedList" resultType="com.tripbiseo.live.dto.ReviewText">
