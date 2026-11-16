@@ -56,7 +56,7 @@ public class PlanCandidateFinder {
     // 들를 곳이 아닌 이름: 도로·길(둘레길·산책길·숲길은 뺌)·교차로·주차장·표지석 등
     private static final Pattern NOT_SIGHT = Pattern.compile("명예도로|도로$|교차로|사거리|삼거리|나들목|IC$|주차장|표지석|기념비|(?<!둘레|산책|숲|하늘|순라|골목|올레)길$");
     // 관광 정보에 관광지로 들어 있지만 장소가 아니라 넓은 구역 이름인 것 ("명동 남대문 북창동 다동무교동 관광특구") → 뺌 (11/14)
-    private static final Pattern ODD_SIGHT = Pattern.compile("관광특구|특구$");
+    private static final Pattern ODD_SIGHT = Pattern.compile("관광특구|특구$|^한강$"); // 11/16: 강 이름만 있는 "한강"도 한 칸(60분)으로 들어갔어요
     // 비석·표지석: 실제 사적("삼전도비")일 수 있어서 빼지 않고, 리뷰가 거의 없으면 점수를 낮춰 뒤로 (11/14)
     private static final Pattern SMALL_MONUMENT = Pattern.compile("비$|비석|표지석|기념비");
     private static final int FEW_REVIEWS = 10;
