@@ -15,6 +15,8 @@ import { useLiveTrip } from '@/utils/useLiveTrip'
 import { imageFor } from '@/utils/mapView'
 import { toDuration, toMinutes, toTime } from '@/utils/time'
 import { showToast } from '@/utils/toast'
+import { shareToKakao } from '@/utils/kakaoShare'
+import { createShareLink } from '@/api/members'
 import { goBack } from '@/utils/back'
 import { rememberAlert, shouldOpenAlert } from '@/utils/alertMemory'
 import { finishTrip, getTripPhotos, skipStop } from '@/api/trips'
@@ -621,22 +623,20 @@ function locate() {
   showToast('아직 지금 위치를 받지 못했어요')
 }
 
-// 같이 간 사람에게 남은 일정 보내기 (휴대폰 공유 창, 없으면 글자 복사)
+// 공유 링크 앞주소: 폰에서 열리게 터널 주소(frontend/.env.local의 VITE_SHARE_BASE_URL)가 있으면 그것, 없으면 지금 주소
+const SHARE_BASE_URL = import.meta.env.VITE_SHARE_BASE_URL || location.origin
+// 카톡 카드 사진: 트리피 깃발(800×400). 카카오는 인터넷 주소 사진만 가져가서, 내 PC는 카카오에 올린 주소(.env.local), 배포 서버는 그 서버의 그림
+const SHARE_IMAGE_URL = import.meta.env.VITE_SHARE_IMAGE_URL || SHARE_BASE_URL + '/img/share-card.png'
+// 같이 간 사람에게 일정 보내기 (11/16 ① 상재): 공유 링크(/s/코드, 로그인 없이 열림)를 카카오톡 피드로. 카카오를 못 쓰면 링크 복사
 async function share() {
-  const lines = [(live.trip.value ? live.trip.value.title : '여행') + ' · 지금 ' + status.value.now]
-  if (currentStop.value) lines.push('지금 ' + currentStop.value.name)
-  for (const stop of remainingStops.value) lines.push(stop.eta + ' ' + stop.name + (stop.fixed ? ' (고정 ' + stop.time + ')' : ''))
-  if (fixed.value) lines.push(fixed.value.name + (fixed.value.slackMin < 0 ? ' ' + toDuration(-fixed.value.slackMin) + ' 늦을 것 같아요' : ' 여유 ' + toDuration(fixed.value.slackMin)))
-  const text = lines.join('\n')
+  const next = remainingStops.value.slice(0, 2).map((stop) => stop.eta + ' ' + stop.name)
   try {
-    if (navigator.share) {
-      await navigator.share({ title: '남은 일정', text })
-      return
-    }
-    await navigator.clipboard.writeText(text)
-    showToast('남은 일정을 복사했어요 · 메신저에 붙여 넣어 보내세요')
+    const link = await createShareLink(live.tripId.value)
+    const result = await shareToKakao({ title: live.trip.value ? live.trip.value.title : '여행 일정', description: next.join(' · ') || '착착트립 일정',
+      imageUrl: SHARE_IMAGE_URL, imageWidth: 800, imageHeight: 400, link: SHARE_BASE_URL + link.path, buttonTitle: '일정 보기' })
+    if (result === 'copied') showToast('일정 링크를 복사했어요 · 메신저에 붙여 넣어 보내세요')
   } catch (e) {
-    if (e.name !== 'AbortError') showToast('공유하지 못했어요')
+    showToast('공유하지 못했어요 · ' + e.message)
   }
 }
 
