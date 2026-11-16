@@ -182,7 +182,8 @@ async function moveToNext() {
 //   → 가운데 카드에서 대안을 고르면(안 늦게 되면) 다음에 누를 때 출발. "나중에"·"그냥 갈게요" 뒤 한 번 더 누르면 그대로 출발
 // 돌발(가운데 카드가 뜨는 늦음 알림)인지. 대안을 골랐거나 "그냥 갈게요"면 10분 더 늦기 전까지는 아님 (여행 중 화면과 같은 기준)
 function isIncident(status) {
-  if (!status || !status.alert || !status.fixed || !/^late-/.test(status.alert.key || '')) return false
+  // 11/16 리허설: 놓침 카드(lost-, 예지 11/12)도 돌발 카드라서 같이 멈춤 (영상 트는 동안 시각이 흐르지 않게)
+  if (!status || !status.alert || !status.fixed || !/^(late|lost)-/.test(status.alert.key || '')) return false
   const lateMin = Math.max(0, -status.fixed.slackMin)
   return !replan.isMutedFor(props.live.tripId.value, status.fixed.name, lateMin)
 }
