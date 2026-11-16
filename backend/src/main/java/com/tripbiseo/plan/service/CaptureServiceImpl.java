@@ -2,6 +2,7 @@ package com.tripbiseo.plan.service;
 
 import static com.tripbiseo.common.exception.ApiException.fail;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
@@ -42,6 +43,7 @@ public class CaptureServiceImpl implements CaptureService {
     private static final List<String> GENERIC_WORDS = List.of("예약", "확정", "완료", "안내", "확인", "변경", "알림", "문자", "내역",
             "방문", "디저트", "식당", "음식점", "맛집", "카페", "레스토랑");
     private static final int MIN_STORE_NAME_LENGTH = 2;
+    private static final int SUM_TOLERANCE_WON = 10; // 품목 합 - 할인과 합계 차이가 이보다 크면 "확인 필요" (반올림 정도는 봐줌)
     private static final long MAX_AMOUNT = 10_000_000; // 영수증 합계 상한 (1천만 원). 넘으면 잘못 읽은 것으로 봄
 
     private final AiService aiService;
@@ -64,7 +66,7 @@ public class CaptureServiceImpl implements CaptureService {
         }
         CaptureResponse response = new CaptureResponse();
         response.setName(capture.getName().trim());
-        response.setDate(matchesOrNull(capture.getDate(), DATE_PATTERN));
+        response.setDate(fixYear(matchesOrNull(capture.getDate(), DATE_PATTERN), capture.getHasYear(), false));
         response.setTime(matchesOrNull(capture.getTime(), TIME_PATTERN));
         response.setAddress(capture.getAddress());
         fillPlace(response);
@@ -82,9 +84,14 @@ public class CaptureServiceImpl implements CaptureService {
         StayCaptureResponse response = new StayCaptureResponse();
         response.setName(capture.getName().trim());
         response.setAddress(capture.getAddress());
-        response.setCheckInDate(matchesOrNull(capture.getCheckInDate(), DATE_PATTERN));
+        String checkIn = fixYear(matchesOrNull(capture.getCheckInDate(), DATE_PATTERN), capture.getHasYear(), false);
+        String checkOut = matchesOrNull(capture.getCheckOutDate(), DATE_PATTERN);
+        if (checkIn != null && checkOut != null && Boolean.FALSE.equals(capture.getHasYear())) {
+            checkOut = CaptureDates.afterCheckIn(checkOut, checkIn); // 연도가 없으면 체크아웃은 체크인 다음 날짜로
+        }
+        response.setCheckInDate(checkIn);
         response.setCheckInTime(matchesOrNull(capture.getCheckInTime(), TIME_PATTERN));
-        response.setCheckOutDate(matchesOrNull(capture.getCheckOutDate(), DATE_PATTERN));
+        response.setCheckOutDate(checkOut);
         response.setCheckOutTime(matchesOrNull(capture.getCheckOutTime(), TIME_PATTERN));
         fillStayLocation(response);
         return response;
@@ -105,7 +112,7 @@ public class CaptureServiceImpl implements CaptureService {
         }
         ReceiptResponse response = new ReceiptResponse();
         response.setTotalAmount(toAmount(receipt.getTotalAmount()));
-        String date = matchesOrNull(receipt.getPaidDate(), DATE_PATTERN);
+        String date = fixYear(matchesOrNull(receipt.getPaidDate(), DATE_PATTERN), receipt.getHasYear(), true);
         String time = matchesOrNull(receipt.getPaidTime(), TIME_PATTERN);
         response.setPaidAt(date == null || time == null ? null : date + " " + time);
         fillReceiptPlace(response, receipt);
@@ -115,15 +122,62 @@ public class CaptureServiceImpl implements CaptureService {
 
     // ---------------------------------------------------------------- 도우미
 
-    /** 영수증에서 필요한 다섯 가지만 (카드번호·승인번호·가맹점번호·사업자번호·전화번호는 받지 않음) */
+    /**
+     * 화면에 연도가 없었으면(hasYear=false) 서버가 연도를 정함 (11/16: AI에게 맡기면 영수증 11/15를 2025년으로 읽었어요).
+     * 영수증은 오늘 이전 가장 가까운 날, 예약·숙소는 오늘 이후 가장 가까운 날. 연도가 있었거나 모르면 읽은 그대로
+     */
+    private String fixYear(String date, Boolean hasYear, boolean isPast) {
+        if (date == null || !Boolean.FALSE.equals(hasYear)) {
+            return date;
+        }
+        LocalDate today = Geo.now().toLocalDate();
+        return isPast ? CaptureDates.latestUntilToday(date, today) : CaptureDates.nextFromToday(date, today);
+    }
+
+    /**
+     * 품목 합 - 할인 = 합계인지 서버가 직접 계산 (11/16: AI가 할인 줄을 빼먹고 "다르다"고 해서 할인 영수증이 늘 "확인 필요"였어요).
+     * 품목 합을 못 읽었으면 다르다고 하지 않음 (모르는 걸 틀렸다고 안 함)
+     */
+    boolean isSumDifferent(AiReceipt receipt, Integer total) {
+        Integer items = toAmount(receipt.getItemsTotal());
+        if (total == null || items == null) {
+            return false;
+        }
+        Integer discount = toAmount(receipt.getDiscountTotal());
+        int expected = items - (discount == null ? 0 : discount);
+        return Math.abs(expected - total) > SUM_TOLERANCE_WON;
+    }
+
+    /** 영어 이름("TEDDY BEURRE HOUSE")으로 DB 가게를 못 찾았을 때 AI가 알려 준 한글 이름("테디뵈르하우스")으로 다시 찾기 */
+    private void fillPlaceByKoreanName(CaptureResponse response, String koreanName) {
+        CaptureResponse retry = new CaptureResponse();
+        retry.setName(koreanName);
+        retry.setAddress(response.getAddress());
+        fillPlace(retry);
+        boolean isSameName = retry.getName() != null && retry.getName().replace(" ", "").contains(koreanName.replace(" ", ""));
+        if (retry.getPlaceId() == null || !isSameName) {
+            return; // 한글 이름으로도 없거나, 건물(더현대 서울) 같은 다른 곳이 잡히면 처음 읽은 값 그대로
+        }
+        response.setName(retry.getName());
+        response.setPlaceId(retry.getPlaceId());
+        response.setLat(retry.getLat());
+        response.setLng(retry.getLng());
+        response.setAddress(retry.getAddress());
+    }
+
+    private boolean hasText(String text) {
+        return text != null && !text.isBlank();
+    }
+
+    /** 영수증에서 필요한 값만 (카드번호·승인번호·가맹점번호·사업자번호·전화번호는 받지 않음). 연도·합계 비교는 서버가 (11/16) */
     private String makeReceiptPrompt() {
         return "이 사진은 식당·카페·가게의 영수증이야. 아래 값만 읽어서 JSON으로 답해. 안 보이면 null.\n"
              + "totalAmount는 '합계'·'결제 금액'·'받을 금액' 줄의 최종 금액(할인 뒤, 숫자만)이야. 품목 금액이나 부가세 줄이 아니야.\n"
-             + "품목 금액을 더한 값(할인 반영)이 합계와 다르면 isSumDifferent를 true로.\n"
-             + "날짜는 연·월·일을 모두 채워. 연도가 없으면 오늘(" + Geo.now().toLocalDate() + ")과 가장 가까운 그 날짜의 연도로 채워.\n"
+             + "itemsTotal은 품목 금액을 모두 더한 값(할인 빼기 전), discountTotal은 할인·쿠폰 줄 금액을 더한 값(양수, 없으면 null)이야.\n"
+             + "날짜는 YYYY-MM-DD로. 영수증에 연도가 보이면 hasYear는 true, 월·일만 있으면 연도 자리는 " + Geo.now().getYear() + "로 두고 hasYear는 false.\n"
              + "카드번호, 승인번호, 가맹점번호, 사업자번호, 전화번호, 사람 이름은 적지 마.\n"
              + "{\"storeName\": \"가게 이름\", \"paidDate\": \"YYYY-MM-DD\", \"paidTime\": \"HH:mm\", \"totalAmount\": \"합계 금액\", "
-             + "\"address\": \"가게 주소\", \"isSumDifferent\": false}";
+             + "\"address\": \"가게 주소\", \"itemsTotal\": \"품목 합\", \"discountTotal\": null, \"hasYear\": true}";
     }
 
     /** "150,000원" → 150000. 숫자가 아니거나 1원~1천만 원 밖이면 null (사람이 확인) */
@@ -181,19 +235,21 @@ public class CaptureServiceImpl implements CaptureService {
     private String makePrompt() {
         return "이 사진은 공연·식당·전시 같은 예약 확인 화면이야. 아래 네 가지만 읽어서 JSON으로 답해. 안 보이면 null.\n"
              + "예약이 여러 개 보이면 맨 위 첫 번째 예약 하나만 읽고, 배열이 아니라 객체 하나로 답해.\n"
-             + "날짜는 연·월·일을 모두 채워. 화면에 연도가 없으면 오늘(" + Geo.now().toLocalDate() + ") 이후 가장 가까운 그 날짜의 연도로 채워.\n"
+             + "날짜는 YYYY-MM-DD로. 화면에 연도가 보이면 hasYear는 true, 월·일만 있으면 연도 자리는 " + Geo.now().getYear() + "로 두고 hasYear는 false.\n"
+             + "장소 이름이 영어(로마자)면 그 가게(브랜드)의 한글 이름만 koreanName에 (예: TEDDY BEURRE HOUSE → 테디뵈르하우스). 건물·백화점·지점 이름은 넣지 마. 모르면 null.\n"
              + "예약 번호, 전화번호, 이름, 결제·카드 정보는 적지 마.\n"
-             + "{\"name\": \"장소 또는 공연 이름\", \"date\": \"YYYY-MM-DD\", \"time\": \"HH:mm (입장·예약 시각)\", \"address\": \"주소\"}";
+             + "{\"name\": \"장소 또는 공연 이름\", \"date\": \"YYYY-MM-DD\", \"time\": \"HH:mm (입장·예약 시각)\", \"address\": \"주소\", "
+             + "\"hasYear\": true, \"koreanName\": null}";
     }
 
     /** 숙소 예약 화면에서 여섯 가지만 (예약 번호·이름·전화번호·결제 정보는 받지 않음). 연도가 없는 화면(11.14(토))이 많아서 오늘 날짜를 알려 줌 */
     private String makeStayPrompt() {
         return "이 사진은 호텔·모텔·게스트하우스 같은 숙소 예약 확인 화면이야 (야놀자·여기어때·아고다·트립닷컴·네이버 등). "
              + "아래 여섯 가지만 읽어서 JSON으로 답해. 안 보이면 null.\n"
-             + "날짜는 연·월·일을 모두 채워. 화면에 연도가 없으면 오늘(" + Geo.now().toLocalDate() + ") 이후 가장 가까운 그 날짜의 연도로 채워.\n"
+             + "날짜는 YYYY-MM-DD로. 화면에 연도가 보이면 hasYear는 true, 월·일만 있으면 연도 자리는 " + Geo.now().getYear() + "로 두고 hasYear는 false.\n"
              + "예약 번호, 예약자 이름, 전화번호, 결제·카드 정보는 적지 마. 객실 이름은 숙소 이름에 넣지 마.\n"
              + "{\"name\": \"숙소 이름\", \"address\": \"숙소 주소\", \"checkInDate\": \"YYYY-MM-DD\", \"checkInTime\": \"HH:mm\", "
-             + "\"checkOutDate\": \"YYYY-MM-DD\", \"checkOutTime\": \"HH:mm\"}";
+             + "\"checkOutDate\": \"YYYY-MM-DD\", \"checkOutTime\": \"HH:mm\", \"hasYear\": true}";
     }
 
     /** 주소로 먼저, 못 찾으면 숙소 이름으로 카카오에서 위치를 찾아 좌표를 붙임 (못 찾으면 좌표 없이) */
