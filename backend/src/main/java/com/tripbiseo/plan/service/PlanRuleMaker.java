@@ -74,6 +74,11 @@ public class PlanRuleMaker {
     private static final int DINNER_START_MIN = 17 * 60 + 30;  // 저녁 칸
     private static final int DINNER_END_MIN = 19 * 60 + 30;
     private static final int BAR_FROM_MIN = 18 * 60;           // 술집 칸은 이때부터
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(PlanRuleMaker.class); // 서버 기록 (AI가 고른 곳을 바꾼 이유)
+    private static final String GU_SUFFIX = "구";
+    private static final List<String> SIGHT_FAMILY = List.of("tour", "culture"); // 볼거리끼리는 서로 칸을 바꿔 써도 됨
+    private static final int MEAL_APART_MIN = 120;             // 밥과 밥 사이는 적어도 2시간 (11/14)
+    private static final int MAX_EXTEND_MIN = 20;              // 가까운 곳이면 앞 곳에 더 머무는 최대 분 (11/14)
     private static final int TIMED_GAP_MIN = 20;               // 칸 사이 이동 여유
     private static final int MIN_SLOT_MIN = 40;                // 남은 시간이 이보다 적으면 칸을 안 만듦
     private static final String FOOD_KIND = "food";
@@ -263,7 +268,10 @@ public class PlanRuleMaker {
         return name.endsWith("역") || name.contains("터미널") || name.contains("공항");
     }
 
-    /** 숙소: 체크인 날 마지막 일정 뒤에 숙소 칸 (마지막 일정 끝 + 30분, 체크인 시각보다 이르지 않게, 23:30까지) */
+    /**
+     * 숙소: 체크인 날 마지막 일정 뒤에 숙소 칸 (마지막 일정 끝 + 거기서 숙소까지 이동 분, 체크인 시각보다 이르지 않게, 23:30까지).
+     * 11/14: 예전엔 늘 30분을 더해서 끝 21:00인데 숙소 칸이 21:30이 됐어요 → 실제 거리로 어림 (가까우면 5~10분)
+     */
     public void addStayStops(PlanGenerateResponse response, PlanConditions conditions, int days) {
         if (conditions.getStays() == null) {
             return;
@@ -274,9 +282,11 @@ public class PlanRuleMaker {
                 continue; // 여행 기간 밖이거나 위치가 없는 숙소
             }
             int clock = stay.getCheckInTime() == null ? 0 : Geo.toMinutes(stay.getCheckInTime());
+            double[] stayPoint = new double[] {stay.getLat(), stay.getLng()};
             for (Stop stop : response.getStops()) {
                 if (stop.getDay() == day) {
-                    clock = Math.max(clock, Geo.toMinutes(stop.getTime()) + stop.getStay() + STAY_AFTER_LAST_MIN);
+                    int move = stop.getLat() == null ? STAY_AFTER_LAST_MIN : PlanTravelTime.minutesBetween(new double[] {stop.getLat(), stop.getLng()}, stayPoint);
+                    clock = Math.max(clock, roundUp(Geo.toMinutes(stop.getTime()) + stop.getStay() + move));
                 }
             }
             response.getStops().add(toStayStop(stay, day, Math.min(clock, LATEST_STAY_MIN)));
@@ -597,6 +607,9 @@ public class PlanRuleMaker {
                 point = extraPlace == null || extraPlace.getLat() == null ? point : new double[] {extraPlace.getLat(), extraPlace.getLng()};
             }
             List<String> slotKinds = withoutExtraCafe(Arrays.asList(slots.get(i)[0].split(",")), lastKind, cafeCount);
+            if (isNearUserMeal(extras, candidates, day, start)) {
+                slotKinds = withoutMeal(slotKinds, lastKind, cafeCount); // 꼭 갈 식당·예약 식당 앞뒤 2시간엔 또 밥 안 먹게 (11/14)
+            }
             int stay = Integer.parseInt(slots.get(i)[2]);
             boolean isAfterEnd = dayEndMin != null && start + stay > dayEndMin; // 끝 장소로 가야 해서 못 쓰는 칸
             if (isAfterEnd || overlapsExtra(extras, day, start, stay)) {
@@ -604,7 +617,7 @@ public class PlanRuleMaker {
             }
             AiDraftStop pick = slotPicks.get(day + "/S" + (i + 1));
             // 여러 구면 이 칸은 정해진 구의 후보에서 먼저 (없으면 전체)
-            Map<String, Place> slotCandidates = candidatesOfSlot(candidates, areas, (day - 1) * slots.size() + i, days * slots.size());
+            Map<String, Place> slotCandidates = candidatesOfSlot(candidates, areas, singleGuOf(conditions), (day - 1) * slots.size() + i, days * slots.size());
             Set<String> blocked = withNearSameKind(used, candidates, stops); // 11/12 같은 곳 다른 이름(남대문·숭례문, DDP·역사문화공원)이 또 안 들어가게
             Place place = pick == null ? null : checkPick(pick, slotKinds, slotCandidates, blocked, conditions, date, start, stay, point, maxWalkMeters);
             String reason = place == null ? null : pick.getReason();
@@ -632,9 +645,13 @@ public class PlanRuleMaker {
             }
             // 11/12 실제 시각: 앞 일정 끝 + 이동 시간보다 이르지 않게, 다음 예약(+ 거기까지 이동)·하루 끝 전에 끝나게 머무는 시간을 줄임
             double[] placePoint = new double[] {place.getLat(), place.getLng()};
-            int actualStart = prevEnd < 0 ? start : roundUp(Math.max(start, prevEnd + PlanTravelTime.minutesBetween(point, placePoint)));
+            int travel = PlanTravelTime.minutesBetween(point, placePoint);
+            int actualStart = prevEnd < 0 ? start : roundUp(Math.max(start, prevEnd + travel));
+            if (prevEnd >= 0) {
+                extendLastStay(stops, candidates, day, date, prevEnd, actualStart - travel); // 바로 옆이면 20분 띄우지 않고 앞 곳에 더 머묾 (11/14)
+            }
             int latestEnd = Math.min(dayEnd, nextExtraLimit(extras, candidates, day, actualStart, placePoint));
-            int actualStay = Math.min(stay, latestEnd - actualStart);
+            int actualStay = Math.min(Math.min(stay, latestEnd - actualStart), minutesUntilClose(place, date, actualStart, stay));
             if (actualStay < SHORTEST_STAY_MIN) {
                 continue; // 이동까지 넣으면 이 칸은 시간이 모자람
             }
@@ -650,6 +667,43 @@ public class PlanRuleMaker {
             cafeCount += CAFE_KIND.equals(lastKind) ? 1 : 0;
         }
         return replaced;
+    }
+
+    /**
+     * 실제 도착 시각에 닫을 때까지 남은 분 (11/14). 고를 때는 칸 시각으로 영업을 봤는데, 이동 시간 때문에 늦게 도착하면
+     * 마감을 넘겼어요 (19:30 도착 40분 → 20:10, 마감 20:00). 닫혀 있으면 0, 모르면 stay 그대로
+     */
+    private int minutesUntilClose(Place place, LocalDate date, int start, int stay) {
+        OpenInfo open = placeService.getOpenInfo(place, date, start, stay);
+        if (Boolean.FALSE.equals(open.getOpen())) {
+            return 0;
+        }
+        return open.getMinutesLeft() == null ? stay : open.getMinutesLeft();
+    }
+
+    /**
+     * 칸 사이가 이동 시간보다 많이 남으면 앞 칸에 더 머물게 (11/14).
+     * 칸은 20분 간격으로 미리 나눠 둬서, 57m 옆 가게로 가는데도 20분이 비었어요 → 그만큼(최대 20분) 앞 곳에 더 있어요.
+     * 식사·예약 시각은 그대로라 뒤 칸이 당겨지지 않아요. 앞 곳이 그때 닫으면 늘리지 않음
+     */
+    private void extendLastStay(List<AiDraftStop> stops, Map<String, Place> candidates, int day, LocalDate date, int prevEnd, int leaveBy) {
+        if (stops.isEmpty()) {
+            return;
+        }
+        AiDraftStop last = stops.get(stops.size() - 1);
+        if (dayOf(last) != day || last.getTime() == null || last.getStay() == null) {
+            return;
+        }
+        int lastStart = Geo.toMinutes(last.getTime());
+        if (lastStart + last.getStay() != prevEnd) {
+            return; // 바로 앞이 예약·담은 곳이면 그대로
+        }
+        int spare = Math.min(MAX_EXTEND_MIN, (leaveBy - prevEnd) / TIME_STEP_MIN * TIME_STEP_MIN);
+        Place place = last.getId() == null ? null : candidates.get(last.getId());
+        if (spare < TIME_STEP_MIN || place == null || !isOpenFor(place, date, lastStart, last.getStay() + spare)) {
+            return;
+        }
+        last.setStay(last.getStay() + spare);
     }
 
     /**
@@ -848,7 +902,7 @@ public class PlanRuleMaker {
             return false;
         }
         for (String item : names) {
-            if (planCandidateFinder.isSameName(name, item)) { // 띄어쓰기 무시 (11/06)
+            if (planCandidateFinder.isSameName(name, item) && !planCandidateFinder.isInnerSpot(name, item)) { // 띄어쓰기 무시 (11/06), 박물관 안 정원은 박물관이 아님 (11/14)
                 return true;
             }
         }
@@ -882,12 +936,19 @@ public class PlanRuleMaker {
         return Geo.distanceMeters(point[0], point[1], area.getLat(), area.getLng());
     }
 
-    /** 이 칸의 후보: 칸을 구 수만큼 나눠 차례로 그 구의 장소만. 구가 하나 이하이거나 그 구에 후보가 없으면 전체 */
-    private Map<String, Place> candidatesOfSlot(Map<String, Place> candidates, List<PlanArea> areas, int slotIndex, int slotTotal) {
-        if (areas.size() < 2) {
+    /**
+     * 이 칸의 후보: 칸을 구 수만큼 나눠 차례로 그 구의 장소만. 그 구에 후보가 없으면 전체.
+     * 11/16: 구를 하나만 골랐을 때도 그 구 장소 먼저 (예전엔 전체라 강남구 1박 2일의 2일차가 다리 건너 성수로만 갔어요)
+     */
+    private Map<String, Place> candidatesOfSlot(Map<String, Place> candidates, List<PlanArea> areas, String singleGu, int slotIndex, int slotTotal) {
+        String name;
+        if (areas.size() >= 2) {
+            name = areas.get(slotIndex * areas.size() / slotTotal).getName();
+        } else if (singleGu != null) {
+            name = singleGu;
+        } else {
             return candidates;
         }
-        String name = areas.get(slotIndex * areas.size() / slotTotal).getName();
         Map<String, Place> inArea = new LinkedHashMap<>();
         for (Place place : candidates.values()) {
             if (place.getAddress() != null && place.getAddress().contains(name)) {
@@ -897,21 +958,61 @@ public class PlanRuleMaker {
         return inArea.isEmpty() ? candidates : inArea;
     }
 
+    /** 고른 구가 하나면 그 이름 ("강남구"). 지도로 골랐으면 areas, 검색·말로 골랐으면 지역 글자의 마지막 낱말. 동·여러 구·모르면 null */
+    String singleGuOf(PlanConditions conditions) {
+        if (conditions.getAreas() != null && conditions.getAreas().size() == 1) {
+            String name = conditions.getAreas().get(0).getName();
+            return name != null && name.endsWith(GU_SUFFIX) ? name : null;
+        }
+        if ((conditions.getAreas() == null || conditions.getAreas().isEmpty()) && conditions.getRegion() != null) {
+            String[] words = conditions.getRegion().trim().split("\\s+");
+            String last = words[words.length - 1];
+            return last.endsWith(GU_SUFFIX) && last.length() > 1 ? last : null;
+        }
+        return null;
+    }
+
     /** Gemini가 고른 곳 검사: 후보 안 · 아직 안 씀 · 칸 종류와 같음(꼭 갈 곳은 예외) · 도착할 때 영업. 어기면 null */
     private Place checkPick(AiDraftStop pick, List<String> slotKinds, Map<String, Place> candidates, Set<String> used,
                             PlanConditions conditions, LocalDate date, int start, int stay, double[] point, Integer maxWalkMeters) {
         Place place = pick.getId() == null ? null : candidates.get(pick.getId()); // 후보 밖 id는 믿지 않음
-        if (place == null || used.contains(place.getId()) || isTooFar(point, place, maxWalkMeters)) {
+        String reason = rejectReasonOf(place, pick, slotKinds, used, conditions, date, start, stay, point, maxWalkMeters);
+        if (reason != null) {
+            log.info("AI가 고른 곳 바꿈: {} · {}", pick.getName(), reason); // 11/16: "N곳 바꿨어요"가 왜 많은지 보려고
             return null;
+        }
+        return place;
+    }
+
+    /**
+     * 볼거리끼리는 칸 종류가 달라도 됨: 관광(tour) 칸에 박물관(culture), 전시 칸에 공원 (11/16).
+     * 예전엔 "칸 종류 다름"으로 AI가 고른 한성백제박물관·논현문화마루도서관을 갈아 끼워서 "N곳 바꿨어요"가 커졌어요
+     */
+    private boolean isSameSightKind(String kind, List<String> slotKinds) {
+        return SIGHT_FAMILY.contains(kind) && (slotKinds.contains(SIGHT_FAMILY.get(0)) || slotKinds.contains(SIGHT_FAMILY.get(1)));
+    }
+
+    /** AI가 고른 곳을 못 쓰는 이유 (쓸 수 있으면 null) */
+    private String rejectReasonOf(Place place, AiDraftStop pick, List<String> slotKinds, Set<String> used, PlanConditions conditions,
+                                  LocalDate date, int start, int stay, double[] point, Integer maxWalkMeters) {
+        if (place == null) {
+            return pick.getId() == null ? "번호 없음" : "후보 밖 번호 또는 다른 구";
+        }
+        if (used.contains(place.getId())) {
+            return "이미 넣은 곳(또는 50m 안 같은 종류)";
+        }
+        if (isTooFar(point, place, maxWalkMeters)) {
+            return "걷는 거리 상한 넘음";
         }
         boolean isUserWish = planCandidateFinder.isMustVisit(place, conditions.getMustVisit()) || planCandidateFinder.isMustVisit(place, conditions.getWishVisit());
         if (!isUserWish && isTooFar(point, place, AI_PICK_LIMIT_M)) {
-            return null; // 사용자가 말한 곳이 아니면 앞 장소에서 2km 안에서
+            return "앞 장소에서 2km 넘음"; // 사용자가 말한 곳이 아니면 앞 장소에서 2km 안에서
         }
         // 꼭 갈 곳·가능하면 갈 곳은 칸 종류와 달라도 됨 (사용자가 직접 말한 곳)
-        boolean isKindOk = slotKinds.contains(place.getKind()) || planCandidateFinder.isMustVisit(place, conditions.getMustVisit())
-                || planCandidateFinder.isMustVisit(place, conditions.getWishVisit());
-        return isKindOk && isOpenFor(place, date, start, stay) ? place : null;
+        if (!slotKinds.contains(place.getKind()) && !isUserWish && !isSameSightKind(place.getKind(), slotKinds)) {
+            return "칸 종류 다름(" + place.getKind() + " ≠ " + slotKinds + ")";
+        }
+        return isOpenFor(place, date, start, stay) ? null : "그 시각 영업 안 함";
     }
 
     /** 도착 시각에 열려 있고 머무는 동안 안 닫는지. 영업시간 정보가 없으면 통과 (모르는 걸 틀렸다고 하지 않음) */
@@ -1165,6 +1266,32 @@ public class PlanRuleMaker {
     }
 
     /** 앞 칸이 카페이거나 오늘 카페를 2곳 넣었으면 이 칸 종류에서 카페를 뺌 */
+    /**
+     * 그날 사용자가 말한 식당(꼭 갈 곳·예약)이 이 칸 시작과 2시간 안에 있는지 (11/14).
+     * 예전엔 꼭 갈 곳 "명동교자 본점" 12:30 앞 11:00 칸에 또 피자집이 들어가서 1시간 반 사이 두 끼가 됐어요
+     */
+    private boolean isNearUserMeal(List<AiDraftStop> extras, Map<String, Place> candidates, int day, int start) {
+        for (AiDraftStop extra : extras) {
+            if (dayOf(extra) != day || extra.getTime() == null || !extra.getTime().matches("\\d{2}:\\d{2}")) {
+                continue;
+            }
+            Place place = findPlaceOf(extra, candidates);
+            boolean isMeal = place != null && (FOOD_KIND.equals(place.getKind()) || BAR_KIND.equals(place.getKind()));
+            if (isMeal && Math.abs(Geo.toMinutes(extra.getTime()) - start) < MEAL_APART_MIN) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** 칸 종류에서 밥집·술집을 뺌. 다 빠지면(끼니 칸) 볼거리·카페 칸으로 (카페·디저트는 밥이 아니라 그대로) */
+    private List<String> withoutMeal(List<String> kinds, String lastKind, int cafeCount) {
+        List<String> rest = new ArrayList<>(kinds);
+        rest.remove(FOOD_KIND);
+        rest.remove(BAR_KIND);
+        return rest.isEmpty() ? withoutExtraCafe(FALLBACK_KINDS, lastKind, cafeCount) : rest;
+    }
+
     private List<String> withoutExtraCafe(List<String> kinds, String lastKind, int cafeCount) {
         if (!CAFE_KIND.equals(lastKind) && cafeCount < MAX_CAFES_PER_DAY) {
             return kinds;

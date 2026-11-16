@@ -66,3 +66,7 @@ CREATE TABLE IF NOT EXISTS card (
 
 -- 11/07 박석진: 더치페이 금액 직접 정하기. NULL이면 자동(나머지를 똑같이 나눔)
 ALTER TABLE trip_companion ADD COLUMN IF NOT EXISTS share_amount INT CHECK (share_amount >= 0);
+
+-- 11/16 박석진: 카드 승인번호. 같은 가게·시각·금액 결제가 두 번 있어도 둘 다 가져오게 (예전에는 가게·시각·금액으로 비교해서 두 번째를 못 가져옴)
+--  카드 내역에서 가져온 결제만 들어가고, 직접 입력·영수증은 NULL
+ALTER TABLE payment ADD COLUMN IF NOT EXISTS approval_no VARCHAR(30);

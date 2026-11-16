@@ -72,7 +72,7 @@ async function onFilesPicked(event) {
     const result = await uploadPhotos(files, uploadTripId)
     snack.value = result.savedCount + '개 올렸어요'
     if (result.unmatchedCount > 0) {
-      snack.value += ' · ' + result.unmatchedCount + '개는 그날 여행이 없어요'
+      snack.value += ' · ' + result.unmatchedCount + '개는 여행 날짜 밖이라 빠졌어요' // 고른 여행 기간 밖이거나, 그날 여행이 없음
     }
     openTripId.value = null
     await loadAlbums()
