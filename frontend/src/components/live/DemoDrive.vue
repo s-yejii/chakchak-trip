@@ -301,6 +301,7 @@ async function rideHangang(option) {
   const boardMin = toMinutes(option.boardAt)
   const leaveMin = boardMin - BOARD_EARLY_MIN - option.toBoardMin
   if (leaveMin > minutesOf(appNow())) await setClock(date, leaveMin)
+  clearLiveNotices() // 숙소에서 "나갈 시간이에요" 같은 지난 알림이 배 타는 동안 위를 덮지 않게
   showLiveNotice({ key: 'hangang-' + next.id, at: hhmm(appNow()), title: '한강버스로 가요', body: option.boardPier + ' 선착장 ' + option.boardAt + ' 배 · ' + option.alightPier + ' ' + option.alightAt + ' 도착', warn: false })
   await wait(NOTICE_MS)
   const from = props.live.position.value || { lat: current.lat, lng: current.lng }
