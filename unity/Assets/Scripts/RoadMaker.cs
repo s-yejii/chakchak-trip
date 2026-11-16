@@ -78,6 +78,8 @@ public class RoadMaker
         public Vector2 to;
         public float halfWidth;
         public int id; // 어느 길의 조각인지
+        public bool isRoadStart; // 그 길의 첫 조각 (from이 길의 시작점)
+        public bool isRoadEnd;   // 그 길의 마지막 조각 (to가 길의 끝점)
     }
     private readonly Dictionary<Vector2Int, List<RoadPiece>> pieces = new Dictionary<Vector2Int, List<RoadPiece>>(); // 칸 → 그 칸에 걸친 찻길 조각들
     private readonly Dictionary<RoadData, int> roadIds = new Dictionary<RoadData, int>(); // 길 → 길 번호
@@ -464,6 +466,8 @@ public class RoadMaker
                     to = new Vector2(road.points[i + 2], road.points[i + 3]),
                     halfWidth = road.width / 2,
                     id = id,
+                    isRoadStart = i == 0,
+                    isRoadEnd = i + 4 >= road.points.Length,
                 };
                 AddPiece(piece);
             }
@@ -493,7 +497,8 @@ public class RoadMaker
 
     // 이 자리가 ownerId가 아닌 다른 찻길의 바닥 위인지
     //   ownHalfWidth를 주면(찻길 바닥끼리) 더 넓은 길만 셈. 폭이 같으면 번호가 작은 길이 이김 (둘 중 하나만 그리려고)
-    private bool IsOnOtherRoad(Vector2 point, int ownerId, float ownHalfWidth = 0)
+    //   isWiderOnly: 나보다 넓은 찻길만 따짐 (폭이 같은 길은 빼고)
+    private bool IsOnOtherRoad(Vector2 point, int ownerId, float ownHalfWidth = 0, bool isWiderOnly = false)
     {
         if (ownerId == NO_ROAD) return false;
         if (!pieces.TryGetValue(new Vector2Int(PieceCell(point.x), PieceCell(point.y)), out List<RoadPiece> list)) return false;
@@ -502,9 +507,25 @@ public class RoadMaker
             if (piece.id == ownerId) continue;
             bool isWinner = piece.halfWidth > ownHalfWidth || (piece.halfWidth == ownHalfWidth && piece.id < ownerId);
             if (ownHalfWidth > 0 && !isWinner) continue;
+            if (isWiderOnly && piece.halfWidth <= ownHalfWidth) continue;
+            // 폭이 같은 두 길이 끝과 끝으로 이어진 곳: 상대 길의 끝점 바깥은 "그 길 위"가 아님
+            //   (전에는 끝점 둘레 반원까지 그 길 위로 봐서, 이어지는 길의 마지막 칸을 비움 → 이음매마다 풀밭 틈이 생겼음)
+            if (ownHalfWidth > 0 && piece.halfWidth == ownHalfWidth && IsPastRoadEnd(point, piece)) continue;
             if (DistanceToPiece(point, piece) < piece.halfWidth - ON_ROAD_MARGIN_M) return true;
         }
         return false;
+    }
+
+    // 점이 이 조각이 속한 길의 시작점·끝점 바깥쪽(또는 끝에서 ON_ROAD_MARGIN_M 안)인지
+    //   예) 조각이 서쪽 → 동쪽으로 100m이고 그 길의 마지막 조각이면, 동쪽 끝에서 0.5m 안쪽부터 그 너머는 true
+    private static bool IsPastRoadEnd(Vector2 point, RoadPiece piece)
+    {
+        Vector2 along = piece.to - piece.from;
+        float length = along.magnitude;
+        if (length < 0.0001f) return true; // 길이가 없는 조각 위에는 설 자리가 없음
+        float distance = Vector2.Dot(point - piece.from, along / length); // 조각 시작점에서 길 방향으로 간 거리(m)
+        if (piece.isRoadStart && distance < ON_ROAD_MARGIN_M) return true;
+        return piece.isRoadEnd && distance > length - ON_ROAD_MARGIN_M;
     }
 
     // 점에서 조각(선분)까지 가장 가까운 거리
@@ -525,7 +546,19 @@ public class RoadMaker
             Vector2 from = line[i] + SideAt(line, i) * offset;
             Vector2 to = line[i + 1] + SideAt(line, i + 1) * offset;
             int checks = Mathf.Max(1, Mathf.CeilToInt(Vector2.Distance(from, to) / HOLE_STEP_M));
-            for (int k = 0; k <= checks && !result[i]; k++) result[i] = IsOnOtherRoad(Vector2.Lerp(from, to, (float)k / checks), ownerId, ownHalfWidth);
+            bool isRoadBed = ownHalfWidth > 0; // 찻길 바닥 (아니면 차선·인도)
+            bool isAllCovered = true;          // 확인한 점이 전부 다른 찻길 위인지
+            for (int k = 0; k <= checks && !result[i]; k++)
+            {
+                Vector2 point = Vector2.Lerp(from, to, (float)k / checks);
+                bool isCovered = IsOnOtherRoad(point, ownerId, ownHalfWidth);
+                if (!isCovered) isAllCovered = false;
+                // 차선·인도: 한 점이라도 찻길 위면 비움. 찻길 바닥: 한 점이라도 "더 넓은" 찻길 위면 비움
+                result[i] = isRoadBed ? IsOnOtherRoad(point, ownerId, ownHalfWidth, true) : isCovered;
+            }
+            // 찻길 바닥이 폭이 같은 찻길과 겹칠 때는 칸 전체가 덮였을 때만 비움
+            //   (일부만 덮인 칸까지 비우면, 상대 길이 끝난 자리에 풀밭 틈이 남음. 겹쳐 그려도 같은 아스팔트라 안 보임)
+            if (isRoadBed && isAllCovered) result[i] = true;
         }
         return result;
     }
