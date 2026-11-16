@@ -404,6 +404,12 @@ onMounted(() => {
   if (!store.planAutoNext) return
   store.planAutoNext = false
   const isPicked = (step.value.id === 'where' && store.planArea) || (step.value.id === 'from' && store.planOrigin)
+  // 11/14: 검색으로 "구"를 고르면 지도(planAreas)가 비어 있어서 동 단계를 건너뛰었어요 → 지도로 고른 것처럼 채워서 동도 고를 수 있게
+  const area = store.planArea
+  const isInMap = store.planAreas.some((item) => area && item.name === area.name)
+  if (step.value.id === 'where' && area && area.type === 'gu' && !isInMap) {
+    store.planAreas = [{ name: area.name, lat: area.lat, lng: area.lng, dongs: [] }]
+  }
   if (isPicked) moveStep(1)
 })
 // 시연 계정(개발자 모드): 발표 이야기대로 출발지(11/12 종로3가역)를 미리 채워 둠 (11/08 주형)
@@ -433,12 +439,12 @@ function lastFixedOf(fixedList) {
   }
   return last
 }
-// "시간 추천": 추천 시작·끝 시각으로 맞춤 (지금은 기본값, 통계가 오면 utils/timeRecommend.js만 바꿈)
+// "시간 추천": 기본 11:00~20:00, 이미 넣은 예약이 그 밖이면 예약에 맞춰 넓힘 (utils/timeRecommend.js)
 function useRecommendedTime() {
   // 시연 계정: 시나리오 시각으로 (11/08 주형). 시작은 첫날(11/12 종로3가 11:30), 끝은 마지막 날 예약 기준
   //   값은 서버 DemoScenario.java 한 곳 (startTime, fixed). 시작·끝은 PlanRuleMaker가 첫날·마지막 날에만 써요
   if (scenario.value) {
-    const last = lastFixedOf(scenario.value.fixed) // 마지막 날 가장 늦은 예약 (11/12: 16:00 동서울터미널 버스)
+    const last = lastFixedOf(scenario.value.fixed) // 마지막 날 가장 늦은 예약 (11/15: 16:40 동서울터미널 버스)
     const isBoarding = /역$|터미널|공항/.test(last.name)
     const end = toTime(toMinutes(last.time) + (isBoarding ? -BOARDING_EARLY_MIN : MEAL_AFTER_MIN))
     store.planFromTime = scenario.value.startTime
@@ -447,11 +453,13 @@ function useRecommendedTime() {
     return
   }
   // 오늘 여행이면 지금 이후로 맞추고 날짜는 그대로 (하루가 거의 끝났을 때만 내일로, 11/09)
-  const time = recommendTimeFor(isToday(), nowMinutes())
+  // 11/14: 이미 넣은 첫날 예약(캡처·검색)이 있으면 그 시각에 맞춰 넓힘
+  const firstDayTimes = fixedList.value.filter((item) => !item.day || item.day === 1).map((item) => item.time)
+  const time = recommendTimeFor(isToday(), nowMinutes(), firstDayTimes)
   if (time.isTomorrow) moveToTomorrow()
   store.planFromTime = time.start
   store.planToTime = time.end
-  showToast('추천 시간 ' + time.start + '~' + time.end + '로 맞췄어요')
+  showToast((time.why ? time.why + ' ' : '') + '추천 시간 ' + time.start + '~' + time.end + '로 맞췄어요')
 }
 </script>
 

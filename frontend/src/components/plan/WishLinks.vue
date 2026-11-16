@@ -19,6 +19,7 @@ const hint = ref('') // 회색 안내 (오류 아님)
 const loading = ref(false)
 const found = ref(null) // 찾은 장소 카드 목록 (찾기 전에는 null)
 const picked = ref({}) // 찾은 장소 중 고른 것 { 이름: true }
+const missed = ref([]) // 글에는 있었지만 장소를 못 찾은 이름 (11/14: 3곳 중 2곳만 나오면 왜인지 몰랐어요)
 
 const wish = computed(() => store.planConditions?.mustVisit || [])
 const pickCount = computed(() => (found.value ? found.value.filter((place) => picked.value[place.name]).length : 0))
@@ -60,6 +61,7 @@ async function findPlaces() {
       return
     }
     found.value = result.places
+    missed.value = result.missed || []
     picked.value = {}
     for (const place of result.places) {
       if (!wish.value.includes(place.name)) picked.value[place.name] = true
@@ -73,6 +75,7 @@ async function findPlaces() {
 }
 function cancel() {
   found.value = null
+  missed.value = []
   url.value = ''
   caption.value = ''
   showCaption.value = false
@@ -138,6 +141,7 @@ function removeWish(name) {
         <span class="check" :class="{ 'is-on': picked[place.name] }"><i class="ic ic--s i-check" aria-hidden="true"></i></span>
       </button>
     </template>
+    <p v-if="missed.length" class="t-cap muted" style="margin: 0"><i class="ic ic--s i-info" aria-hidden="true"></i> 글에 있었지만 못 찾은 곳: {{ missed.join(', ') }}</p>
     <div class="cta__row">
       <button type="button" class="btn btn--secondary btn--md" @click="cancel">{{ found.length ? '취소' : '닫기' }}</button>
       <button v-if="found.length" type="button" class="btn btn--primary btn--md" :disabled="!pickCount" @click="addPicked">{{ pickCount ? pickCount + '곳 담기' : '골라 주세요' }}</button>

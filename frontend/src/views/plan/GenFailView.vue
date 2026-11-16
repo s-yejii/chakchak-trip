@@ -2,7 +2,7 @@
 // S08-b 일정 생성 실패 (③): 서버가 일정을 못 만든 진짜 이유를 보여 주고, 어떻게 할지 골라요 (11/04)
 // 주소: /plan/fail?why=서버 오류 문구&code=오류 번호 (일정 만드는 중 화면이 붙여 줘요)
 //   422 위치 없음 → 여행 정보에서 지역 고르기 추천 / 422 장소 못 찾음 → 원하는 것 다시 말하기 추천
-//   그 밖(서버 오류·연결 끊김) → 그대로 다시 만들기 추천
+//   400·404(조건이 잘못됨·장소 없음) → 여행 정보 고치기 추천 (11/14) / 그 밖(서버 오류·연결 끊김) → 그대로 다시 만들기 추천
 // (예전엔 "7곳이 하루에 다 안 들어가요 · 37분 넘쳐요" 가짜 값이었어요. 서버는 넘치는 곳을 알아서 빼고 짜서 그런 실패는 없어요)
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -16,11 +16,14 @@ const reason = computed(() => route.query.why || DEFAULT_REASON)
 const code = computed(() => (route.query.code ? Number(route.query.code) : null))
 const isLocation = computed(() => code.value === 422 && reason.value.includes('위치'))
 const isNoPlace = computed(() => code.value === 422 && !isLocation.value)
+// 11/14: 400(조건이 잘못됨)·404(장소를 못 찾음)는 같은 조건으로 다시 해도 또 실패해서 "여행 정보 고치기"를 추천
+const NEEDS_FIX_CODES = [400, 404]
+const isFixNeeded = computed(() => isLocation.value || isNoPlace.value || NEEDS_FIX_CODES.includes(code.value))
 
 // 고를 수 있는 것 (추천은 이유에 맞게 하나)
 const choices = computed(() => [
-  { key: 'retry', icon: 'i-undo', title: '그대로 다시 만들기', desc: '같은 조건으로 한 번 더 짜 봐요', to: '/plan/generating', isBest: !isLocation.value && !isNoPlace.value },
-  { key: 'info', icon: 'i-edit', title: '여행 정보 고치기', desc: '지역·출발지·어디 위주로를 바꿔요', to: '/plan/info', isBest: isLocation.value || isNoPlace.value },
+  { key: 'retry', icon: 'i-undo', title: '그대로 다시 만들기', desc: '같은 조건으로 한 번 더 짜 봐요', to: '/plan/generating', isBest: !isFixNeeded.value },
+  { key: 'info', icon: 'i-edit', title: '여행 정보 고치기', desc: '지역·출발지·어디 위주로를 바꿔요', to: '/plan/info', isBest: isFixNeeded.value },
 ])
 const choice = ref(choices.value.find((item) => item.isBest).key)
 
