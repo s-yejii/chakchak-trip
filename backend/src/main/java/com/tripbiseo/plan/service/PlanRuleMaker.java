@@ -74,6 +74,9 @@ public class PlanRuleMaker {
     private static final int DINNER_START_MIN = 17 * 60 + 30;  // 저녁 칸
     private static final int DINNER_END_MIN = 19 * 60 + 30;
     private static final int BAR_FROM_MIN = 18 * 60;           // 술집 칸은 이때부터
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(PlanRuleMaker.class); // 서버 기록 (AI가 고른 곳을 바꾼 이유)
+    private static final String GU_SUFFIX = "구";
+    private static final List<String> SIGHT_FAMILY = List.of("tour", "culture"); // 볼거리끼리는 서로 칸을 바꿔 써도 됨
     private static final int MEAL_APART_MIN = 120;             // 밥과 밥 사이는 적어도 2시간 (11/14)
     private static final int MAX_EXTEND_MIN = 20;              // 가까운 곳이면 앞 곳에 더 머무는 최대 분 (11/14)
     private static final int TIMED_GAP_MIN = 20;               // 칸 사이 이동 여유
@@ -614,7 +617,7 @@ public class PlanRuleMaker {
             }
             AiDraftStop pick = slotPicks.get(day + "/S" + (i + 1));
             // 여러 구면 이 칸은 정해진 구의 후보에서 먼저 (없으면 전체)
-            Map<String, Place> slotCandidates = candidatesOfSlot(candidates, areas, (day - 1) * slots.size() + i, days * slots.size());
+            Map<String, Place> slotCandidates = candidatesOfSlot(candidates, areas, singleGuOf(conditions), (day - 1) * slots.size() + i, days * slots.size());
             Set<String> blocked = withNearSameKind(used, candidates, stops); // 11/12 같은 곳 다른 이름(남대문·숭례문, DDP·역사문화공원)이 또 안 들어가게
             Place place = pick == null ? null : checkPick(pick, slotKinds, slotCandidates, blocked, conditions, date, start, stay, point, maxWalkMeters);
             String reason = place == null ? null : pick.getReason();
@@ -933,9 +936,17 @@ public class PlanRuleMaker {
         return Geo.distanceMeters(point[0], point[1], area.getLat(), area.getLng());
     }
 
-    /** 이 칸의 후보: 칸을 구 수만큼 나눠 차례로 그 구의 장소만. 구가 하나 이하이거나 그 구에 후보가 없으면 전체 */
-    private Map<String, Place> candidatesOfSlot(Map<String, Place> candidates, List<PlanArea> areas, int slotIndex, int slotTotal) {
-        if (areas.size() < 2) {
+    /**
+     * 이 칸의 후보: 칸을 구 수만큼 나눠 차례로 그 구의 장소만. 그 구에 후보가 없으면 전체.
+     * 11/16: 구를 하나만 골랐을 때도 그 구 장소 먼저 (예전엔 전체라 강남구 1박 2일의 2일차가 다리 건너 성수로만 갔어요)
+     */
+    private Map<String, Place> candidatesOfSlot(Map<String, Place> candidates, List<PlanArea> areas, String singleGu, int slotIndex, int slotTotal) {
+        String name;
+        if (areas.size() >= 2) {
+            name = areas.get(slotIndex * areas.size() / slotTotal).getName();
+        } else if (singleGu != null) {
+            name = singleGu;
+        } else {
             return candidates;
         }
         String name = areas.get(slotIndex * areas.size() / slotTotal).getName();
@@ -946,6 +957,20 @@ public class PlanRuleMaker {
             }
         }
         return inArea.isEmpty() ? candidates : inArea;
+    }
+
+    /** 고른 구가 하나면 그 이름 ("강남구"). 지도로 골랐으면 areas, 검색·말로 골랐으면 지역 글자의 마지막 낱말. 동·여러 구·모르면 null */
+    String singleGuOf(PlanConditions conditions) {
+        if (conditions.getAreas() != null && conditions.getAreas().size() == 1) {
+            String name = conditions.getAreas().get(0).getName();
+            return name != null && name.endsWith(GU_SUFFIX) ? name : null;
+        }
+        if ((conditions.getAreas() == null || conditions.getAreas().isEmpty()) && conditions.getRegion() != null) {
+            String[] words = conditions.getRegion().trim().split("\\s+");
+            String last = words[words.length - 1];
+            return last.endsWith(GU_SUFFIX) && last.length() > 1 ? last : null;
+        }
+        return null;
     }
 
     /** Gemini가 고른 곳 검사: 후보 안 · 아직 안 씀 · 칸 종류와 같음(꼭 갈 곳은 예외) · 도착할 때 영업. 어기면 null */
