@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  ③ 한강버스 추천 (11/16). 선착장·시간표는 ① 상재 db/24_hangang_bus.sql 표 (읽기만).
+  ST_DWithin: 반경 안 선착장만 / geom <-> 점: 가까운 순
+-->
+<mapper namespace="com.tripbiseo.plan.mapper.HangangBusMapper">
+
+  <select id="selectPierList" resultType="com.tripbiseo.plan.dto.HangangBusPier">
+    SELECT id, name, latitude AS lat, longitude AS lng,
+           ST_Distance(geom::geography, ST_SetSRID(ST_MakePoint(#{lng}, #{lat}), 4326)::geography)::int AS meters
+    FROM retrip_place
+    WHERE source = 'hangang'
+      AND ST_DWithin(geom::geography, ST_SetSRID(ST_MakePoint(#{lng}, #{lat}), 4326)::geography, #{meters})
+    ORDER BY geom &lt;-&gt; ST_SetSRID(ST_MakePoint(#{lng}, #{lat}), 4326)
+    LIMIT #{limit}
+  </select>
+
+  <select id="selectTimeList" resultType="com.tripbiseo.plan.dto.HangangBusTime">
+    SELECT pier_id, route, direction, run_no, time_min, is_arrival AS arrival
+    FROM hangang_bus_time
+    ORDER BY route, direction, run_no, time_min
+  </select>
+
+</mapper>

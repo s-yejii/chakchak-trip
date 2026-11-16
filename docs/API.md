@@ -112,6 +112,7 @@
 | `POST /api/plans/route-order` | [동선 정리] 하루 일정의 새 순서 (최근접 이웃 + 2-opt). AI 일정과 같은 함수 | trip/PlanManualView | 있음 |
 | `POST /api/plans/links` | 인스타·유튜브·네이버(블로그·지도) 링크 → 장소 추출 | plan/PlanAiView (WishLinks) | 있음 |
 | `GET /api/plans/weather` | 여행 날짜 날씨(기온·습도·하늘·비 시작 시각) + 기온별 옷차림. 기상청 단기예보라 3일 뒤까지 | trip/PlanCheckView (TripWeather) | 있음 (11/06) |
+| `GET /api/plans/hangang-bus` | 예약까지 시간이 많이 뜰 때 한강버스로 가는 방법 하나 (없으면 204) | after/RouteGuideView (HangangBusOption, ⑤ 석진 OK) | 있음 (11/16) |
 | (주소 미정) | 숙소 핀 | plan/StayPinView | 확인 필요 |
 | `GET /api/dev/status` | [개발자 모드] 시연 계정인지 + 시연 시계 상태 | member/MyView (VersionTap), live/DevDot | 있음 (11/06) |
 | `POST /api/dev/clock` · `POST /api/dev/clock/forward` · `POST /api/dev/clock/speed` · `DELETE /api/dev/clock` | [개발자 모드] 시연 시계 맞추기 · 빨리 감기 · 진짜 시각으로 (시연 계정만) | live/DevDot | 있음 (11/06) |
@@ -1180,6 +1181,28 @@
 - `minTemp`·`maxTemp`: 기상청 최저·최고(TMN·TMX). 오늘이라 그 칸이 지났으면 남은 시간 기온 중 낮은·높은 값.
 - `rainFrom`: 낮에 비·눈(PTY ≠ 0)이거나 강수확률 60% 이상인 첫 시각. 없으면 null.
 - 오류: 날짜 범위가 이상하면 400, 기상청 키가 없으면 503, 기상청 오류 502.
+
+### `GET /api/plans/hangang-bus` (11/16)
+
+길 안내에서 다음 칸이 예약(고정)일 때, 지하철·버스로 바로 가면 한참 기다려야 하면 "한강버스로도 가요" 한 줄. 선착장·시간표는 ① `db/24_hangang_bus.sql`(읽기만), 길찾기는 `RouteClient`(걸어서 15분 안이면 걷기, 넘으면 버스·지하철. 내린 선착장 → 목적지를 거리로 어림했으면 10분 더), 비는 ④ `LiveWeatherChecker`(시연 비 포함).
+
+- 요청: `?fromLat=37.5616&fromLng=126.9827&toLat=37.5126&toLng=127.1020&arriveBy=15:00` (+ `now=12:40` 없으면 지금 시각, 시연 계정은 시연 시계) · 로그인 필요
+- 보여 주는 조건 (모두): ① 탈 선착장에 배 5분 전까지 감 ② 예약 10분 전까지 도착 ③ 바로 가면 예약 전 30분 넘게 기다림 ④ 배에서 내리기 전에 비가 시작하지 않음. 하나라도 아니면 **204 (내용 없음)**
+- 후보가 여러 개면 목적지에 가장 빨리 도착하는 배. 탈 선착장은 6km 안 가까운 3곳, 내릴 선착장은 목적지 4km 안 가장 가까운 1곳 (중간에 내려 지하철로 갈아타는 안은 안 권함). 여의도 갈아타기는 안 봐요
+- 응답 200:
+
+```json
+{ "boardPier": "옥수", "alightPier": "잠실", "boardAt": "13:13", "alightAt": "14:03",
+  "toBoardMode": "transit", "toBoardMin": 23, "afterAlightMode": "transit", "afterAlightMin": 25,
+  "busNo": "3317", "afterAlightDetail": "버스 3317 잠일고등학교→잠실역.롯데월드 6정거장",
+  "doorArriveAt": "14:28", "arriveBy": "15:00", "slackMin": 32,
+  "directArriveAt": "13:25", "directWaitMin": 95,
+  "restMin": 15, "leaveAt": "14:18", "relaxedArriveAt": "14:43" }
+```
+
+- 수단: `walk` 걷기 / `transit` 버스·지하철. `busNo`는 내려서 탈 첫 버스 (없으면 null)
+- `restMin`: 내린 선착장 근처(한강공원)에서 쉬었다 가도 되는 분. 예약 15분 전 도착 목표로 남는 시간을 5분 단위로 내림, 0~30. `leaveAt`은 쉬고 떠나는 시각, `relaxedArriveAt`은 그때 목적지 도착. 화면은 10분 이상이면 "한강공원에서 15분 둘러보고 14:18 버스 3317 · 14:43 도착 (예약 17분 전)"
+- 오류: 로그인 안 하면 401, `arriveBy`·`now`가 HH:mm가 아니면 400
 
 ## ④ 여행 중 판별 (live)
 
