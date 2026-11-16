@@ -74,6 +74,8 @@ public class PlanRuleMaker {
     private static final int DINNER_START_MIN = 17 * 60 + 30;  // 저녁 칸
     private static final int DINNER_END_MIN = 19 * 60 + 30;
     private static final int BAR_FROM_MIN = 18 * 60;           // 술집 칸은 이때부터
+    private static final int MEAL_APART_MIN = 120;             // 밥과 밥 사이는 적어도 2시간 (11/14)
+    private static final int MAX_EXTEND_MIN = 20;              // 가까운 곳이면 앞 곳에 더 머무는 최대 분 (11/14)
     private static final int TIMED_GAP_MIN = 20;               // 칸 사이 이동 여유
     private static final int MIN_SLOT_MIN = 40;                // 남은 시간이 이보다 적으면 칸을 안 만듦
     private static final String FOOD_KIND = "food";
@@ -597,6 +599,9 @@ public class PlanRuleMaker {
                 point = extraPlace == null || extraPlace.getLat() == null ? point : new double[] {extraPlace.getLat(), extraPlace.getLng()};
             }
             List<String> slotKinds = withoutExtraCafe(Arrays.asList(slots.get(i)[0].split(",")), lastKind, cafeCount);
+            if (isNearUserMeal(extras, candidates, day, start)) {
+                slotKinds = withoutMeal(slotKinds, lastKind, cafeCount); // 꼭 갈 식당·예약 식당 앞뒤 2시간엔 또 밥 안 먹게 (11/14)
+            }
             int stay = Integer.parseInt(slots.get(i)[2]);
             boolean isAfterEnd = dayEndMin != null && start + stay > dayEndMin; // 끝 장소로 가야 해서 못 쓰는 칸
             if (isAfterEnd || overlapsExtra(extras, day, start, stay)) {
@@ -632,7 +637,11 @@ public class PlanRuleMaker {
             }
             // 11/12 실제 시각: 앞 일정 끝 + 이동 시간보다 이르지 않게, 다음 예약(+ 거기까지 이동)·하루 끝 전에 끝나게 머무는 시간을 줄임
             double[] placePoint = new double[] {place.getLat(), place.getLng()};
-            int actualStart = prevEnd < 0 ? start : roundUp(Math.max(start, prevEnd + PlanTravelTime.minutesBetween(point, placePoint)));
+            int travel = PlanTravelTime.minutesBetween(point, placePoint);
+            int actualStart = prevEnd < 0 ? start : roundUp(Math.max(start, prevEnd + travel));
+            if (prevEnd >= 0) {
+                extendLastStay(stops, candidates, day, date, prevEnd, actualStart - travel); // 바로 옆이면 20분 띄우지 않고 앞 곳에 더 머묾 (11/14)
+            }
             int latestEnd = Math.min(dayEnd, nextExtraLimit(extras, candidates, day, actualStart, placePoint));
             int actualStay = Math.min(stay, latestEnd - actualStart);
             if (actualStay < SHORTEST_STAY_MIN) {
@@ -650,6 +659,31 @@ public class PlanRuleMaker {
             cafeCount += CAFE_KIND.equals(lastKind) ? 1 : 0;
         }
         return replaced;
+    }
+
+    /**
+     * 칸 사이가 이동 시간보다 많이 남으면 앞 칸에 더 머물게 (11/14).
+     * 칸은 20분 간격으로 미리 나눠 둬서, 57m 옆 가게로 가는데도 20분이 비었어요 → 그만큼(최대 20분) 앞 곳에 더 있어요.
+     * 식사·예약 시각은 그대로라 뒤 칸이 당겨지지 않아요. 앞 곳이 그때 닫으면 늘리지 않음
+     */
+    private void extendLastStay(List<AiDraftStop> stops, Map<String, Place> candidates, int day, LocalDate date, int prevEnd, int leaveBy) {
+        if (stops.isEmpty()) {
+            return;
+        }
+        AiDraftStop last = stops.get(stops.size() - 1);
+        if (dayOf(last) != day || last.getTime() == null || last.getStay() == null) {
+            return;
+        }
+        int lastStart = Geo.toMinutes(last.getTime());
+        if (lastStart + last.getStay() != prevEnd) {
+            return; // 바로 앞이 예약·담은 곳이면 그대로
+        }
+        int spare = Math.min(MAX_EXTEND_MIN, (leaveBy - prevEnd) / TIME_STEP_MIN * TIME_STEP_MIN);
+        Place place = last.getId() == null ? null : candidates.get(last.getId());
+        if (spare < TIME_STEP_MIN || place == null || !isOpenFor(place, date, lastStart, last.getStay() + spare)) {
+            return;
+        }
+        last.setStay(last.getStay() + spare);
     }
 
     /**
@@ -848,7 +882,7 @@ public class PlanRuleMaker {
             return false;
         }
         for (String item : names) {
-            if (planCandidateFinder.isSameName(name, item)) { // 띄어쓰기 무시 (11/06)
+            if (planCandidateFinder.isSameName(name, item) && !planCandidateFinder.isInnerSpot(name, item)) { // 띄어쓰기 무시 (11/06), 박물관 안 정원은 박물관이 아님 (11/14)
                 return true;
             }
         }
@@ -1165,6 +1199,32 @@ public class PlanRuleMaker {
     }
 
     /** 앞 칸이 카페이거나 오늘 카페를 2곳 넣었으면 이 칸 종류에서 카페를 뺌 */
+    /**
+     * 그날 사용자가 말한 식당(꼭 갈 곳·예약)이 이 칸 시작과 2시간 안에 있는지 (11/14).
+     * 예전엔 꼭 갈 곳 "명동교자 본점" 12:30 앞 11:00 칸에 또 피자집이 들어가서 1시간 반 사이 두 끼가 됐어요
+     */
+    private boolean isNearUserMeal(List<AiDraftStop> extras, Map<String, Place> candidates, int day, int start) {
+        for (AiDraftStop extra : extras) {
+            if (dayOf(extra) != day || extra.getTime() == null || !extra.getTime().matches("\\d{2}:\\d{2}")) {
+                continue;
+            }
+            Place place = findPlaceOf(extra, candidates);
+            boolean isMeal = place != null && (FOOD_KIND.equals(place.getKind()) || BAR_KIND.equals(place.getKind()));
+            if (isMeal && Math.abs(Geo.toMinutes(extra.getTime()) - start) < MEAL_APART_MIN) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** 칸 종류에서 밥집·술집을 뺌. 다 빠지면(끼니 칸) 볼거리·카페 칸으로 (카페·디저트는 밥이 아니라 그대로) */
+    private List<String> withoutMeal(List<String> kinds, String lastKind, int cafeCount) {
+        List<String> rest = new ArrayList<>(kinds);
+        rest.remove(FOOD_KIND);
+        rest.remove(BAR_KIND);
+        return rest.isEmpty() ? withoutExtraCafe(FALLBACK_KINDS, lastKind, cafeCount) : rest;
+    }
+
     private List<String> withoutExtraCafe(List<String> kinds, String lastKind, int cafeCount) {
         if (!CAFE_KIND.equals(lastKind) && cafeCount < MAX_CAFES_PER_DAY) {
             return kinds;

@@ -35,6 +35,7 @@ public class PlanVerifier {
     private static final String STAY_CATEGORY = "숙소";
     private static final String MUST = "must";
     private static final int MAX_LINES = 6; // 안내 목록이 너무 길어지지 않게
+    private static final int MIN_FACT_REVIEWS = 10; // 이 이상 리뷰가 있어야 평점을 이유로 씀
 
     private static final String UNLOCATED_MARK = "위치 확인 필요"; // 위치를 못 찾은 예약 칸 메모 앞부분 (PlanServiceImpl)
     private static final int CROWD_FIRST_HOUR = 7;  // 생활인구 데이터는 7~23시만
@@ -65,6 +66,38 @@ public class PlanVerifier {
             note.setText(line);
             response.getNotes().add(note);
         }
+    }
+
+    /**
+     * 이유 줄이 빈 칸에 서버가 아는 사실로 한 줄 채우기 (11/14). 예) "평점 4.8 · 리뷰 320개 · 앞 장소에서 이동 7분"
+     * AI가 이유를 안 쓰거나(대체 일정은 전부) 근거 없는 말이라 뺀 칸이 절반 넘게 빈칸이었어요.
+     * 평점은 리뷰가 10개 이상일 때만, 이동 분은 시각 순으로 바로 앞 칸에서 (일정 다 짜고 정렬한 뒤에 불러야 맞아요)
+     */
+    public void fillEmptyMemos(PlanGenerateResponse response) {
+        Stop previous = null;
+        for (Stop stop : response.getStops()) {
+            boolean isSameDay = previous != null && dayOf(previous) == dayOf(stop);
+            boolean isEmpty = stop.getMemo() == null || stop.getMemo().isBlank();
+            if (isEmpty && !Boolean.TRUE.equals(stop.getFixed()) && !STAY_CATEGORY.equals(stop.getCategory())) {
+                String memo = factMemoOf(stop, isSameDay ? previous : null);
+                stop.setMemo(memo.isEmpty() ? null : memo);
+            }
+            previous = stop;
+        }
+    }
+
+    private String factMemoOf(Stop stop, Stop previous) {
+        List<String> parts = new ArrayList<>();
+        Place place = stop.getPlaceId() == null ? null : findPlace(stop.getPlaceId());
+        if (place != null && place.getRating() != null && place.getReviewCount() != null && place.getReviewCount() >= MIN_FACT_REVIEWS) {
+            parts.add("평점 " + place.getRating() + " · 리뷰 " + place.getReviewCount() + "개");
+        }
+        boolean hasPoints = previous != null && previous.getLat() != null && stop.getLat() != null;
+        if (hasPoints) {
+            int minutes = PlanTravelTime.minutesBetween(new double[] {previous.getLat(), previous.getLng()}, new double[] {stop.getLat(), stop.getLng()});
+            parts.add("앞 장소에서 이동 " + minutes + "분");
+        }
+        return String.join(" · ", parts);
     }
 
     /** 예약(고정)이거나 꼭 갈 곳인 칸 (숙소 칸은 뺌) */

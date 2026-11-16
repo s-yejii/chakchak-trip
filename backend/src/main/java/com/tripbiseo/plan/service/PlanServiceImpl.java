@@ -69,6 +69,7 @@ public class PlanServiceImpl implements PlanService {
     private static final int MAX_TITLE_LENGTH = 60;
     private static final int MAX_PROMPT_CANDIDATES = 90;
     private static final int MAX_REASON_LENGTH = 40;      // Gemini 이유 한 줄
+    private static final java.util.regex.Pattern GUESS_REASON = java.util.regex.Pattern.compile("걸어서|도보|가까|가깝|인접|근처|바로 옆|인근|위치|동선|니다$|평점|리뷰 ?[\\d,]+개|에 있어|에 있는|편리"); // 확인 안 된 거리 말·숫자·뻔한 말 (11/14)
     private static final int MAX_MEMO_LENGTH = 200;       // trip_stop.memo 저장 규칙
     private static final java.util.regex.Pattern WEAK_EVIDENCE = java.util.regex.Pattern.compile("리뷰 \\d+개 중 (\\d+)개");
     private static final int MIN_EVIDENCE_COUNT = 3;      // 리뷰에서 이만큼은 나와야 근거로 붙임 (11/12)
@@ -246,6 +247,7 @@ public class PlanServiceImpl implements PlanService {
         // day → time 순 (sort에 넘기는 규칙: day가 같으면 time 글자 순, "09:00" < "10:00")
         response.getStops().sort((first, second) -> first.getDay().equals(second.getDay())
                 ? first.getTime().compareTo(second.getTime()) : first.getDay() - second.getDay());
+        planVerifier.fillEmptyMemos(response); // 이유 빈 칸은 평점·이동 분 같은 사실로 (11/14)
         planVerifier.addVerifyNotes(response); // 예약·꼭 갈 곳을 DB 영업시간·거리로 다시 확인한 줄 (11/13)
         return response;
     }
@@ -518,7 +520,7 @@ public class PlanServiceImpl implements PlanService {
     /** 일정에 그 이름이 들어간 칸이 있는지 ("한강" → "뚝섬한강공원"도 같은 곳으로 봄) */
     private boolean hasStopNamed(List<Stop> stops, String name) {
         for (Stop stop : stops) {
-            if (isSameName(stop.getName(), name)) {
+            if (isSameName(stop.getName(), name) && !planCandidateFinder.isInnerSpot(stop.getName(), name)) { // 박물관 안 정원은 박물관이 아님 (11/14)
                 return true;
             }
         }
@@ -1026,7 +1028,8 @@ public class PlanServiceImpl implements PlanService {
              + "- 앞 칸 장소와 주소(구·동)가 가까운 곳으로 이어서 동선이 짧게.\n"
              + "- 꼭 갈 곳과 시간 고정 일정은 slot을 null로, time은 고정 시각(꼭 갈 곳은 알맞은 시각)으로 넣어. 고정 일정의 day는 적힌 일차 그대로. 그 시간과 겹치는 칸은 비워.\n"
              + "- reason은 왜 골랐는지 30자 이내 해요체 한마디. 후보 목록에 있는 정보(종류·평점·리뷰 근거·위치)만 근거로 써.\n"
-             + "  '~입니다', '대표적인', '인기 있는', '즐길 수 있는' 같은 뻔한 말 말고 그곳만의 근거를 써 (예: \"리뷰에 단체석 넓다는 말이 많아요\", \"평점 4.8 · 다음 장소까지 걸어서 5분\").\n"
+             + "  '~입니다', '대표적인', '인기 있는', '즐길 수 있는' 같은 뻔한 말 말고 그곳만의 근거를 써 (예: \"리뷰에 단체석 넓다는 말이 많아요\").\n"
+             + "  평점·리뷰 수·거리·걸어서 몇 분·가깝다는 말은 쓰지 마 (서버가 확인한 숫자로 따로 붙여).\n"
              + "  시간 고정 일정은 reason을 비워 (예약 시각이 칸에 이미 보여서).\n"
              + "후보(id | 이름 | 종류 | 분류 | 평점(리뷰 수) | 리뷰 근거 | 주소):\n" + makeCandidateText(conditions, candidates, reasons)
              + "JSON만: {\"title\": \"여행 이름\", \"stops\": [{\"day\": 1, \"slot\": \"S1 또는 null\", \"id\": \"후보 id 또는 null\", "
@@ -1237,7 +1240,7 @@ public class PlanServiceImpl implements PlanService {
     /** 일정 칸 메모 = Gemini가 쓴 이유 + 리뷰 근거 ("성수 감성 카페 · 분위기 좋아요 · 리뷰 10개 중 6개"). 둘 다 없으면 null, 200자까지 */
     private String makeMemo(String reason, List<String> evidence, String companion) {
         List<String> parts = new ArrayList<>();
-        if (hasText(reason) && isFitReason(reason, companion)) {
+        if (hasText(reason) && isFitReason(reason, companion) && !isGuessReason(reason)) {
             parts.add(cut(reason.trim(), MAX_REASON_LENGTH));
         }
         if (evidence != null) {
@@ -1258,6 +1261,15 @@ public class PlanServiceImpl implements PlanService {
             return false;
         }
         return !text.contains("혼밥") || "혼자".equals(companion);
+    }
+
+    /**
+     * AI가 확인 없이 쓴 이유인지 (11/14): 거리·가깝다는 말(서버가 이동 분을 따로 붙임), "~위치한 ~입니다" 같은 뻔한 말,
+     * 평점·리뷰 수(AI가 예시 숫자 "평점 4.8 · 리뷰 300개"를 그대로 베껴 쓴 적이 있어서, 숫자는 서버가 DB 값으로만 붙임).
+     * 예전엔 마지막 칸에 "다음 장소와 걸어서 가까워요"가 붙었어요(다음 장소가 없는데)
+     */
+    private boolean isGuessReason(String reason) {
+        return GUESS_REASON.matcher(reason).find();
     }
 
     /** 근거 앞부분 ("분위기 좋아요 · 리뷰 10개 중 6개" → "분위기") */
