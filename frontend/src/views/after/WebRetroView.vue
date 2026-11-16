@@ -710,9 +710,10 @@ function startShareEdit(person) {
   shareEdit.value = { id: person.id, amount: String(person.should) }
 }
 
-// 낼 돈 저장. amount가 null이면 자동(똑같이 나누기)으로 되돌림
+// 낼 돈 저장. amount가 null이거나 빈칸이면 자동(똑같이 나누기)으로 되돌림 (빈칸을 0원으로 저장하지 않게)
 function saveShare(personId, amount) {
-  const value = amount === null ? null : Number(String(amount).replace(/,/g, ''))
+  const text = amount === null ? '' : String(amount).replace(/[,\s원]/g, '') // "18,280원" → "18280"
+  const value = text === '' ? null : Number(text)
   if (value !== null && !(value >= 0)) {
     settleMessage.value = '0원 이상 숫자로 넣어 주세요'
     return
