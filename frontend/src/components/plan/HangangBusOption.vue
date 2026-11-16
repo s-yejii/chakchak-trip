@@ -4,7 +4,9 @@
 // GET /api/plans/hangang-bus → 권할 게 없으면 204(null)라 아무것도 안 보여요. 실패해도 조용히 숨김 (길 안내가 본 기능)
 // 규칙(서버): 예약 10분 전 도착 · 바로 가면 30분 넘게 기다림 · 배에서 내리기 전 비 없음 · 탈 배가 시간표에 있음
 import { onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { get } from '@/api/http'
+import { isFakeGps, sendCommand } from '@/utils/devMode'
 import { toDuration, toMinutes, toTime } from '@/utils/time'
 
 const REST_SHOW_MIN = 10 // 쉬는 시간이 이 이상이면 "둘러보고 가요" 문구
@@ -19,6 +21,13 @@ const props = defineProps({
 })
 
 const option = ref(null)
+const router = useRouter()
+
+// 시연 계정(가짜 GPS)만: [배 타고 갈게요] → 여행 중 화면에서 숙소 → 선착장 → 배 → 버스로 움직여요 (DemoDrive). 일반 계정은 버튼 없음
+function rideDemo() {
+  sendCommand({ type: 'hangang', option: option.value })
+  router.push('/live')
+}
 
 async function load() {
   const query = `fromLat=${props.fromLat}&fromLng=${props.fromLng}&toLat=${props.toLat}&toLng=${props.toLng}&arriveBy=${props.arriveBy}`
@@ -63,6 +72,7 @@ function afterAlightText(item) {
       <b>한강버스로도 가요</b>
       <span class="tn">{{ leaveText(option) }} · 배 {{ option.boardAt }} → {{ option.alightPier }} {{ option.alightAt }} · {{ restText(option) }}</span>
     </p>
+    <button v-if="isFakeGps()" type="button" class="btn btn--secondary btn--sm" @click="rideDemo">⛴ 배 타고 갈게요</button>
     <p class="t-cap tn hb-option__sub">
       가장 빠른 길로 바로 가면 {{ option.directArriveAt }} 도착, 예약 전 {{ toDuration(option.directWaitMin) }} 기다려요 · 한강버스도 교통카드로 타요
     </p>

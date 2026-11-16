@@ -267,6 +267,74 @@ async function busDown(current, from) {
   await props.live.refresh()
 }
 
+// ---- 11/16 장면 3 뒤: 한강버스 카드 [배 타고 갈게요] (시연 계정만) ----
+// 숙소 → 탈 선착장(대중교통) → 강을 따라 배(선착장 순서대로) → 내린 선착장에서 쉬기 → 버스로 예약한 가게. 시계도 카드 시각대로
+//   선착장 좌표는 db/24_hangang_bus.sql과 같아요 (동부 노선 순서). 시연에서 쓰는 옥수 → 잠실 말고도 동부 노선 안이면 그대로 돼요
+const EAST_PIERS = [
+  { name: '여의도', lat: 37.528882169655944, lng: 126.93439744866133 },
+  { name: '압구정', lat: 37.526686379656766, lng: 127.01647963172924 },
+  { name: '옥수', lat: 37.538855999436464, lng: 127.01786950750945 },
+  { name: '서울숲', lat: 37.53776088589692, lng: 127.04111182474081 },
+  { name: '뚝섬', lat: 37.52880508535853, lng: 127.0664951037918 },
+  { name: '잠실', lat: 37.51871205060492, lng: 127.08479426715436 },
+]
+const BOARD_EARLY_MIN = 5 // 배 떠나기 이만큼 전에 선착장 도착 (서버 규칙과 같음)
+
+// 한 구간을 화면에서 움직이며 시계도 그만큼 흐르게. 마지막 점은 서버에도 보냄 (다녀온 길이 회고에 남게)
+async function moveAlong(path, minutes) {
+  await setSpeed(Math.max(1, Math.round((minutes * 60 * 1000) / MOVE_MS)))
+  for (let step = 1; step <= MOVE_STEPS; step++) {
+    const [lat, lng] = pointAlong(path, step / MOVE_STEPS)
+    if (step % 4 === 0) await props.live.placeAt(lat, lng, false)
+    else props.live.showAt(lat, lng)
+    await wait(MOVE_MS / MOVE_STEPS)
+  }
+}
+
+async function rideHangang(option) {
+  const current = currentStop()
+  const next = orderedStops()[current ? orderedStops().indexOf(current) + 1 : 0]
+  const board = EAST_PIERS.findIndex((pier) => pier.name === option.boardPier)
+  const alight = EAST_PIERS.findIndex((pier) => pier.name === option.alightPier)
+  if (!current || !next || board < 0 || alight <= board) return showToast('한강버스 길을 만들지 못했어요')
+  const date = dateText(appNow())
+  const boardMin = toMinutes(option.boardAt)
+  const leaveMin = boardMin - BOARD_EARLY_MIN - option.toBoardMin
+  if (leaveMin > minutesOf(appNow())) await setClock(date, leaveMin)
+  showLiveNotice({ key: 'hangang-' + next.id, at: hhmm(appNow()), title: '한강버스로 가요', body: option.boardPier + ' 선착장 ' + option.boardAt + ' 배 · ' + option.alightPier + ' ' + option.alightAt + ' 도착', warn: false })
+  await wait(NOTICE_MS)
+  const from = props.live.position.value || { lat: current.lat, lng: current.lng }
+  const piers = EAST_PIERS.slice(board, alight + 1)
+  // ① 숙소 → 탈 선착장 (대중교통)
+  await moveAlong([[from.lat, from.lng], [piers[0].lat, piers[0].lng]], option.toBoardMin)
+  await setSpeed(STAY_SPEED)
+  await setClock(date, boardMin) // 선착장에서 배 기다림 → 배 떠나는 시각
+  // ② 배: 선착장 순서대로 강을 따라 (육지를 가로지르지 않게)
+  demoRoute.value = piers.map((pier) => [pier.lat, pier.lng])
+  await moveAlong(demoRoute.value, toMinutes(option.alightAt) - boardMin)
+  demoRoute.value = null
+  await setSpeed(STAY_SPEED)
+  await setClock(date, toMinutes(option.leaveAt)) // ③ 내린 선착장 근처 한강공원에서 쉬기 (restMin)
+  // ④ 버스로 예약한 가게
+  const last = piers[piers.length - 1]
+  await moveAlong([[last.lat, last.lng], [next.lat, next.lng]], option.afterAlightMin)
+  await arrive(next, date, toMinutes(option.leaveAt) + option.afterAlightMin)
+}
+
+watch(() => devMode.command, async (command) => {
+  if (!command || command.type !== 'hangang' || isBusy.value) return
+  clearCommand()
+  for (let i = 0; i < 20 && !(props.live.trip.value && props.live.trip.value.stops); i++) await wait(500) // 길 안내에서 막 넘어왔으면 여행을 읽을 때까지
+  isBusy.value = true
+  try {
+    await rideHangang(command.option)
+  } catch (e) {
+    showToast(e.message)
+  } finally {
+    isBusy.value = false
+  }
+}, { immediate: true })
+
 // 도착: 시계를 정확히 도착 시각으로, 다시 실제 시간으로
 async function arrive(next, date, minutes) {
   demoRoute.value = null // 도착하면 고정한 길을 풀어요
