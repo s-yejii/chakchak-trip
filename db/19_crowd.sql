@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS crowd_hour (
     seoul_pct  SMALLINT NOT NULL,                -- 같은 day_kind·hour 서울 칸 중 순위 (0~100, 높을수록 붐빔) → "원래 붐비는 동네"
     self_pct   SMALLINT NOT NULL,                -- 이 칸 가장 붐빈 때 대비 % (0~100) → "지금은 덜 붐벼요 / 가장 붐빌 때"
     PRIMARY KEY (cell_id, day_kind, hour)
-);  -- 지금은 중구·강남구·종로구만: 1,076칸, 146,135줄 (최근 8주 평균 2026-09-05~10-31, 공휴일만 1년치)
+);  -- 11/16 6개 구로 넓힘 (종로·중구·용산·영등포·강남·송파 = 장소 크롤링한 구): 2,232칸, 302,985줄 (최근 8주 평균 2026-09-05~10-31, 공휴일만 1년치). 그 전에는 중구·강남·종로 1,076칸
 
 TRUNCATE crowd_hour, crowd_cell;
 \copy crowd_cell (cell_id, dong_code, x5179, y5179) FROM 'db/crowd/crowd_cell.csv' WITH (FORMAT csv, HEADER true, ENCODING 'UTF8')
