@@ -480,6 +480,8 @@ const statusText = computed(() => {
 
           <template v-else>
             <p v-if="fareText || guide.source" class="t-cap tn" style="margin: 0">{{ (guide.meters / 1000).toFixed(1) }}km{{ fareText ? ' · ' + fareText : '' }} · {{ guide.source === 'odsay' ? 'ODsay' : 'TMAP' }} 길찾기</p>
+            <!-- ③ 다음 칸이 예약(고정)이고 지하철·버스를 볼 때만: 시간이 많이 뜨면 한강버스 한 줄. 목록 위에 둬야 아래 "도착 예상" 바에 안 가려요 (11/16 사용성 평가) -->
+            <HangangBusOption v-if="destination.fixed && destination.time && position && (modeKey === 'subway' || modeKey === 'bus')" :from-lat="position.lat" :from-lng="position.lng" :to-lat="destination.lat" :to-lng="destination.lng" :arrive-by="destination.time" />
             <ol ref="stepList" class="rg-steps">
               <li v-for="(step, i) in steps" :key="i" :class="{ 'is-key': step.key, 'is-next': step.isNext, 'is-passed': step.isPassed }">
                 <span class="rg-dot"><i class="ic ic--s" :class="step.icon" aria-hidden="true"></i></span>
@@ -490,8 +492,6 @@ const statusText = computed(() => {
               </li>
             </ol>
           </template>
-          <!-- ③ 다음 칸이 예약(고정)이고 지하철·버스를 볼 때만: 시간이 많이 뜨면 한강버스 한 줄 (권할 게 없으면 안 보임) -->
-          <HangangBusOption v-if="destination.fixed && destination.time && position && (modeKey === 'subway' || modeKey === 'bus')" :from-lat="position.lat" :from-lng="position.lng" :to-lat="destination.lat" :to-lng="destination.lng" :arrive-by="destination.time" />
         </BottomSheet>
 
         <div class="cta cta--white">
