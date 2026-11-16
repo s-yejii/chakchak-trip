@@ -107,7 +107,7 @@ public class DemoScenario {
         response.setTitle(TITLE);
         response.setStartDate(startDate);
         response.setEndDate(LocalDate.parse(startDate).plusDays(NIGHTS).toString());
-        response.setPeople(conditions.getPeople() == null ? DEFAULT_PEOPLE : conditions.getPeople());
+        response.setPeople(DEFAULT_PEOPLE); // 11/16 리허설: 대본은 다섯 명. 단계에서 인원을 안 바꿔도(기본 2명) 시연 일정은 늘 5명
         response.setTransports(new ArrayList<>(List.of("subway", "walk", "bus")));
         for (Object[] row : STOPS) {
             response.getStops().add(toStop(row));
