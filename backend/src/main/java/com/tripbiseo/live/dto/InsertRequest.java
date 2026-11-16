@@ -10,4 +10,5 @@ public class InsertRequest {
     private Double lng;
     private Long replaceStopId; // 이 칸 자리에 넣기 (놓친 예약 바꾸기). 그 칸은 skipped가 됨 (선택, 11/12)
     private Long afterStopId;   // 이 칸 다음에 넣기 (선택, 11/13). 없으면 바로 다음(맨 앞)에
+    private String reservedTime; // 예약 시각 "15:00" (선택, 11/16 ③ 예지 OK). 있으면 새 칸을 고정 일정 + 그 시각으로
 }

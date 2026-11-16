@@ -50,6 +50,7 @@ public class LiveServiceImpl implements LiveService {
     private static final int MIN_RADIUS_M = 100;
     private static final int MAX_RADIUS_M = 3000;
     private static final int RECOMMEND_COUNT = 3;
+    private static final String HHMM = "([01]\\d|2[0-3]):[0-5]\\d"; // 예약 시각 15:00 (11/16 ③)
     private static final int CAFE_STAY_MIN = 40;          // 일정에 넣기: 카페·디저트면 40분, 아니면 60분 (API.md)
     private static final int OTHER_STAY_MIN = 60;
     private static final double WALK_METERS_PER_MIN = 75; // 도착 예상: 걸어서 분당 75m, 길 돌아감 1.3배
@@ -154,6 +155,7 @@ public class LiveServiceImpl implements LiveService {
             after = findRemainingStop(todayStops, current, request.getAfterStopId(), "넣을 자리를 찾을 수 없어요."); // 남은 칸이 아니면 400
         }
         Stop newStop = toNewStop(place, liveStopFinder.getToday(trip));
+        setReservedTime(newStop, request.getReservedTime()); // 예약했으면 고정 일정으로 (11/16)
         List<Stop> plan = makeInsertPlan(todayStops, current, newStop, request.getReplaceStopId(), request.getAfterStopId());
         plan = alternativeCalculator.copyStops(plan); // 원본을 고치지 않게 복사본으로 계산
         Alternative result = alternativeCalculator.calculate(trip, current, plan, request.getLat(), request.getLng());
@@ -331,6 +333,18 @@ public class LiveServiceImpl implements LiveService {
         stop.setFixed(false);
         stop.setState("todo");
         return stop;
+    }
+
+    /** 예약 시각을 받았으면 새 칸을 고정 일정 + 그 시각으로 (예: 놓친 예약 대신 전화로 15:00에 잡은 가게). 형식이 틀리면 400 */
+    static void setReservedTime(Stop newStop, String reservedTime) {
+        if (reservedTime == null || reservedTime.isBlank()) {
+            return; // 예약 안 함: 지금처럼 고정 아닌 칸
+        }
+        if (!reservedTime.matches(HHMM)) {
+            throw fail(400, "예약 시각은 15:00처럼 보내 주세요.");
+        }
+        newStop.setFixed(true);
+        newStop.setTime(reservedTime);
     }
 
     /** 고정 일정에 늦으면 그 바로 앞 칸(고정 아님)의 머묾을 최대 절반까지 줄임. 줄였으면 그 칸 이름, 아니면 null */
