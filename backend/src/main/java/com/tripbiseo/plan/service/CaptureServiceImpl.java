@@ -70,6 +70,9 @@ public class CaptureServiceImpl implements CaptureService {
         response.setTime(matchesOrNull(capture.getTime(), TIME_PATTERN));
         response.setAddress(capture.getAddress());
         fillPlace(response);
+        if (response.getPlaceId() == null && hasText(capture.getKoreanName())) {
+            fillPlaceByKoreanName(response, capture.getKoreanName().trim()); // 영어 이름이면 한글 이름으로 한 번 더 (11/16)
+        }
         return response;
     }
 
