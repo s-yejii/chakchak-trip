@@ -79,7 +79,7 @@ public static class Capture
     // 높이(y)를 "땅에서 몇 m 위"로 보고 실제 높이로 바꿈 (카메라가 땅속에 들어가지 않게)
     private static Vector3 OnGround(RetroMap map, Vector3 point)
     {
-        point.y += map.Ground.HeightAt(point.x, point.z);
+        point.y += Mathf.Max(map.Ground.HeightAt(point.x, point.z), map.WaterLevel); // 강 위면 물 면 기준 (강바닥 기준이면 물속에서 찍힘)
         return point;
     }
 

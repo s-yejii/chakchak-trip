@@ -33,6 +33,15 @@ const STEP_ICONS = { candidates: 'i-pin', reviews: 'i-search', ai: 'i-sparkle', 
 const MAP_PADDING = { top: 40, right: 30, bottom: 30, left: 30 }
 
 const router = useRouter()
+
+// 안내 줄 나누기: 서버가 줄바꿈으로 두 줄(제목 / 확인한 것)을 보내면 첫 줄·둘째 줄로 (11/14)
+const NEW_LINE = '\n'
+function firstLine(text) {
+  return text.split(NEW_LINE)[0]
+}
+function secondLine(text) {
+  return text.split(NEW_LINE)[1] || ''
+}
 const store = useTripStore()
 const conditions = store.planConditions // 여행 정보 단계에서 모은 조건 (없으면 여행 정보 입력으로)
 
@@ -200,7 +209,8 @@ function waitAtHome() {
           </li>
         </ol>
         <ul v-if="draft && draft.notes && draft.notes.length" class="gen-notes" aria-label="일정 안내">
-          <li v-for="(note, i) in draft.notes" :key="i" class="t-cap"><i class="ic ic--s i-info" aria-hidden="true"></i>{{ note.text }}</li>
+          <!-- 11/14: 확인 줄은 두 줄(제목 / 확인한 것)로 와요 → 첫 줄은 진하게, 둘째 줄은 회색 -->
+          <li v-for="(note, i) in draft.notes" :key="i" class="t-cap"><i class="ic ic--s i-info" aria-hidden="true"></i><span class="gen-note"><span>{{ firstLine(note.text) }}</span><span v-if="secondLine(note.text)" class="gen-note__sub">{{ secondLine(note.text) }}</span></span></li>
         </ul>
       </div>
 
@@ -230,4 +240,6 @@ function waitAtHome() {
 .scr-Generating .step.wait .t-strong{color:var(--ink-subtle)}
 .scr-Generating .gen-notes{list-style:none;margin:0;padding:12px;display:flex;flex-direction:column;gap:6px;background:var(--surface);border-radius:var(--radius-md, 12px)}
 .scr-Generating .gen-notes li{display:flex;gap:6px;align-items:flex-start;color:var(--ink)}
+.scr-Generating .gen-note{display:flex;flex-direction:column;gap:2px;min-width:0}
+.scr-Generating .gen-note__sub{color:var(--ink-muted)}
 </style>

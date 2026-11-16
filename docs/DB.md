@@ -26,6 +26,10 @@
 | `db/17_place_area.sql` | 넓은 장소 경계 `place_area` + 여의도한강공원 1줄 (OSM, 11/06, 이상재 확인 필요) | ④ |
 | `db/18_ask_place.sql` | AI에게 묻기(Text-to-SQL)용 뷰 `ask_place`·`ask_review`, 함수 `detour_minutes`, 읽기 전용 계정 `ask_reader`, 리뷰 검색 인덱스 (11/06, 이상재 확인 필요) | ④ |
 | `db/20_review_rag.sql` | 리뷰 RAG: pgvector 확장 + 리뷰 임베딩 `review_embedding` (11/15). pgvector 있는 DB(도커)에서만. 리뷰 RAG 관리 계정 `ragadmin` 한 명도 넣어요 (임베딩·평가 API용, 비밀번호는 팀 카톡, 11/16) | ④ |
+| `db/21_retrip_crawl_6gu.sql`, `21b_…_review.sql` | 네이버 크롤링 6개 구(중구·종로·강남·송파·용산·영등포) 가게 갱신·추가 + 리뷰 (11/15, 크롤러 build 결과) | DB 총괄 |
+| `db/22_retrip_tour_6gu.sql` | 같은 6개 구 TourAPI 관광지(12)·문화시설(14) 391곳 (11/15) | DB 총괄 |
+| `db/23_retrip_cleanup_6gu.sql` | 21·22 정제: 폐업·애매 업종 삭제, 일정 칸이 쓰는 폐업 4곳은 표시만, 스시이세이 주소·업종, 08 규칙 다시 적용 (11/15) | DB 총괄 |
+| `db/24_hangang_bus.sql` | 한강버스 선착장 8곳(`retrip_place`, `source='hangang'`) + 운항 시간표 `hangang_bus_time` (11/15) | DB 총괄 |
 | `db/15_after.sql` | ⑤ 테이블 | ⑤ |
 | `db/90_test_data.sql` | 테스트 계정(tripuser / tripuser1234)·샘플 여행 | DB 총괄 |
 | `db/91_drop_old.sql` | 예전 DB에서 안 쓰는 테이블 정리 (예전 DB만 한 번) | DB 총괄 |
@@ -54,6 +58,7 @@
 | 공통 | `place_menu` | 메뉴·가격 (네이버 크롤링) | ② 읽기 | 있음 (11/07, 영등포만) |
 | 공통 | `place_keyword` | 네이버 방문자 키워드 통계 ("가성비가 좋아요" 표 수) | ③④ 읽기 (태그·조건 점수) | 있음 (11/07, 영등포만) |
 | 공통 | `place_image` | 사진 여러 장 주소 (대표 사진은 `retrip_place.image_url`) | ② 읽기 | 있음 (11/07, 영등포만) |
+| 공통 | `hangang_bus_time` | 한강버스 운항 시간표 (선착장 = `retrip_place`의 `hangang-*`) | ④ 읽기 (늦지 않게 갈 수 있는지 계산) | 있음 (11/15) |
 | ① | `member_style` | 여행 스타일 | ③ 읽기 | 만들 예정 |
 | ① | `notification` | 알림함 | ④⑤는 `NotificationService.send`로 | 있음 (11/03) |
 | ① | `friend` | 친구 | | 만들 예정 (여유) |
@@ -180,6 +185,20 @@
 | PK | (place_id, weekday) | |
 
 > 날짜 붙은 하루 휴무("금(10/9) 휴무")는 임시 휴무로 보고 시각을 NULL로 둬요. `use_time` 원문은 retrip_place에 그대로 있어요.
+
+### hangang_bus_time · 한강버스 운항 시간표 (24, 11/15)
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| route | TEXT NOT NULL | `동부`(여의도~잠실) / `서부`(마곡~여의도). 여의도에서 갈아타요 |
+| direction | TEXT NOT NULL | `잠실행` / `여의도행` / `마곡행` |
+| run_no | SMALLINT NOT NULL | 시간표의 몇 번째 줄. route·direction·run_no가 같으면 같은 배 |
+| pier_id | TEXT → retrip_place (ON DELETE CASCADE) | 선착장 (`hangang-oksu` 등 8곳) |
+| time_min | INT NOT NULL | 자정부터 분 (13:13 → 793) |
+| is_arrival | BOOLEAN NOT NULL DEFAULT FALSE | 종점(마곡·잠실) 도착이면 TRUE, 나머지는 그 선착장 출발 |
+| PK | (route, direction, run_no, pier_id, is_arrival) | |
+
+> 예: 옥수 13:13 잠실행 배가 잠실에 몇 시 도착? → 같은 route·direction·run_no에서 잠실 `is_arrival` 줄 (14:03). 옥수·압구정은 배마다 한 곳만 서요(직항 없음). 시간표는 26.8.15~ 적용분, 바뀌면 `24_hangang_bus.sql`의 시각만 고쳐 다시 실행.
 
 ### place_menu · 메뉴 (07)
 
@@ -394,6 +413,7 @@ AI에게 묻기의 분위기 조건("조용한", "작업하기 좋은")을 글�
 | source | VARCHAR(10) NOT NULL DEFAULT 'manual' | manual(직접 입력) / card(카드 내역 가져옴) / capture(결제 캡처, 나중에) |
 | memo | VARCHAR(200) | 메모 |
 | payer | VARCHAR(20) NOT NULL DEFAULT '나' | 낸 사람: 나 / 동행 1 / 동행 2 … (정산용, 11/07 ALTER로 추가) |
+| approval_no | VARCHAR(30) | 카드 승인번호 (CODEF `resApprovalNo`). 카드 내역에서 가져온 결제만, 나머지는 NULL. 같은 가게·시각·금액 결제를 구별하려고 (11/16 ALTER로 추가) |
 | created_at | TIMESTAMP NOT NULL DEFAULT NOW() | 저장 시각 |
 
 인덱스 `idx_payment_trip (trip_id, paid_at)`.

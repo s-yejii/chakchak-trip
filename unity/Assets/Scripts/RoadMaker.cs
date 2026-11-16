@@ -201,6 +201,10 @@ public class RoadMaker
     // first: AddStrip이 방금 넣은 띠의 첫 꼭짓점 번호, count: 띠의 점 수
     private void AddSkirt(int first, int count)
     {
+        // 벽 위쪽 꼭짓점은 띠의 꼭짓점을 같이 쓰지 않고 같은 자리에 새로 만듦
+        //   왜: 같이 쓰면 바닥(위를 봄)과 벽(옆을 봄)의 빛 방향이 섞여 모서리가 둥글게 칠해짐 → 좁은 길이 회색 관처럼 보였음
+        int wallTop = vertices.Count; // 벽 위쪽 꼭짓점들이 시작되는 번호
+        for (int i = 0; i < count * 2; i++) AddVertex(vertices[first + i], uv[first + i]);
         int bottom = vertices.Count; // 아래쪽 꼭짓점들이 시작되는 번호
         for (int i = 0; i < count * 2; i++) AddVertex(vertices[first + i] + Vector3.down * SKIRT_M, uv[first + i]);
 
@@ -208,7 +212,7 @@ public class RoadMaker
         for (int i = 0; i < count - 1; i++)
         {
             if (holes != null && holes[i]) continue; // 띠를 비운 칸은 벽도 비움
-            int top = first + i * 2;      // 이번 점 왼쪽 위. +1 오른쪽 위, +2 다음 왼쪽 위, +3 다음 오른쪽 위
+            int top = wallTop + i * 2;    // 이번 점 왼쪽 위. +1 오른쪽 위, +2 다음 왼쪽 위, +3 다음 오른쪽 위
             int low = bottom + i * 2;     // 같은 순서의 아래쪽
             list.Add(top + 2); list.Add(top); list.Add(low);             // 왼쪽 벽 (왼쪽에서 봤을 때 보이는 방향)
             list.Add(top + 2); list.Add(low); list.Add(low + 2);

@@ -15,6 +15,7 @@ import { addDays, daysBetween } from '@/utils/dates'
 import { dayStopsOf, retime, setDayStops } from '@/utils/draftEdit'
 import { toShortDate, toViewTrip } from '@/utils/tripView'
 import { showToast } from '@/utils/toast'
+import { withEuroRo } from '@/utils/josa'
 import { useStopPhotos } from '@/utils/useStopPhotos'
 import { toMinutes, toTime } from '@/utils/time'
 import { modes } from '@/data/places'
@@ -251,7 +252,7 @@ async function changeMode(i, mode) {
   list[i].mode = mode
   retime(list, list[0].time)
   await runCheck()
-  showToast(modes[mode].label + '(으)로 바꿨어요')
+  showToast(withEuroRo(modes[mode].label) + ' 바꿨어요')
 }
 
 function editStop(i) {

@@ -3,6 +3,7 @@
 import { imageFor, isStayStop, toMapPositions } from '@/utils/mapView'
 import { toDuration } from '@/utils/time'
 import { appNow } from '@/utils/devMode'
+import { addDays } from '@/utils/dates'
 
 const WEEK = ['일', '월', '화', '수', '목', '금', '토']
 const TRIP_MAP_BOX = { left: 30, top: 110, width: 330, height: 210 } // TripPage 지도 칸 (viewBox 390×344)
@@ -91,7 +92,7 @@ export function toViewTrip(trip, check = null, day = 1, hoursChecked = null) {
   const view = {
     id: trip.id,
     title: trip.title,
-    date: toShortDate(trip.startDate),
+    date: trip.startDate ? toShortDate(addDays(trip.startDate, day - 1)) : '', // 보는 날의 날짜 (2일차면 시작일 + 1일). 시작일이 없으면 빈 글자
     who: (trip.people || 1) + '명',
     move,
     stops,

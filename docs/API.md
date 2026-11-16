@@ -1530,7 +1530,7 @@ key 끝의 숫자가 바뀔 때만 화면이 같은 알림을 다시 띄워요.
 ### `POST /api/trips/{id}/payments`
 결제 하나 저장. 일정 칸(`stopId`)은 서버가 결제 시각으로 붙여요. · 로그인 필요 · 화면: after/RetroView (11/07)
 
-**요청** `{paidAt: "2026-11-04T11:35", storeName, amount, method?, source?, memo?, payer?}` — `payer` 없으면 `나` — `method` 없거나 모르는 값이면 `card`, `source` 없거나 모르는 값이면 `manual`
+**요청** `{paidAt: "2026-11-04T11:35", storeName, amount, method?, source?, memo?, payer?, approvalNo?}` — `payer` 없으면 `나` — `method` 없거나 모르는 값이면 `card`, `source` 없거나 모르는 값이면 `manual` — `approvalNo`는 카드 내역에서 가져올 때 그 승인번호 (11/16 추가, 없어도 됨)
 
 **응답** 저장한 결제 하나 (위 목록과 같은 모양)
 
@@ -1574,7 +1574,7 @@ key 끝의 숫자가 바뀔 때만 화면이 같은 알림을 다시 띄워요.
 ### `GET /api/trips/{id}/card-transactions`
 카드 승인내역. **지금은 목업**: 실제로 다녀온 곳마다 (도착 + 20분, 분류로 정한 금액), 계획 없이 머문 곳마다 (도착 + 20분, 9,800원), 숙소로 보이는 곳은 (도착 + 5분, 89,000원). CODEF 개인카드 승인내역(`/v1/kr/card/p/account/approval-list`)과 연결함(11/07): `CODEF_SERVICE_TYPE`이 `demo`·`product`이고 카드사 연결(connectedId)이 있으면 **진짜 내역**(정상 승인만, 부분취소는 뺀 금액, 여행 기간 안만), `sandbox`면 연결만 확인하고(샌드박스는 값이 `****`로 가려져 옴) 목업, 키가 없으면 목업. 카드사 연결이 없는데 데모 키면 400 "카드사를 먼저 연결해 주세요." CODEF 실패는 502. · 로그인 필요 · 화면: after/RetroView (11/07)
 
-**응답** `[{approvalDate: "20261104", approvalTime: "113500", paidAt: "2026-11-04T11:35", day, storeName, amount, imported}]` 결제 시각 순. `approvalDate`·`approvalTime`은 CODEF 승인내역의 `resUsedDate`·`resUsedTime` 모양, `paidAt`은 가져올 때 POST에 그대로 씀. `imported`: 같은 날·시각·가게·금액이 이미 결제 내역에 있으면 `true`
+**응답** `[{approvalDate: "20261104", approvalTime: "113500", approvalNo, paidAt: "2026-11-04T11:35", day, storeName, amount, imported}]` 결제 시각 순. `approvalDate`·`approvalTime`은 CODEF 승인내역의 `resUsedDate`·`resUsedTime` 모양, `paidAt`·`approvalNo`는 가져올 때 POST에 그대로 씀. `approvalNo`: 승인번호(CODEF `resApprovalNo`, 목업은 날짜·시각·순번으로 만듦, 11/16 추가). `imported`: 같은 승인번호가 이미 결제 내역에 있으면 `true` (승인번호 없이 예전에 가져온 결제는 같은 날·시각·가게·금액으로 비교)
 
 **오류** 404 "여행을 찾을 수 없어요."
 
