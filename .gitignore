@@ -44,6 +44,8 @@ uploads/
 frontend/public/unity3d/
 #   건물 자료(58MB): db/geo/make_buildings_seoul.py로 만듦
 frontend/public/geo/buildings/
+#   바닥 자료(10MB, 도로·보도·횡단보도 면): db/geo/make_ground_seoul.py로 만듦
+frontend/public/geo/ground/
 #   유니티 확인용 시연 자료(74MB)
 unity/Assets/StreamingAssets/*.json
 unity/Assets/StreamingAssets/*.jpg

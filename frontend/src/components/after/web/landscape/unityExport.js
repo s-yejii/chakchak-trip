@@ -120,6 +120,15 @@ export async function buildMapData({ center, halfM, tileUrl, dateText, forest, g
   }
   let roads = allRoads
   if (keep) roads = keep.cutRoads(roads, (x, z) => isWaterAt(water, halfM, gridStepM, x, z))
+  // 실제 도로·보도·횡단보도 면 (수치지형도). 경로 둘레 것만 담음 (전체를 담으면 자료가 너무 커져서)
+  const areas = []
+  for (const ground of await loadGroundAreas(box)) {
+    const points = []
+    let isWanted = isInBox(ground.ring[0][0], ground.ring[0][1])
+    for (const position of ground.ring) points.push(...toMeters(position)) // ...: 목록 [x, z]를 풀어서 하나씩 넣음
+    if (isWanted && keep) isWanted = keep.isNear(points[0], points[1])
+    if (isWanted) areas.push({ kind: ground.kind, points: points })
+  }
   const area = { center: center, box: box, lngScale: lngScale, latScale: METERS_PER_DEGREE_LAT }
   let trees = await plantTrees(area, roads, dateText, forest, guNames)
   if (keep) trees = trees.filter((tree) => keep.isNear(tree.x, tree.z)) // filter: 조건에 맞는 것만 남긴 새 목록
@@ -137,7 +146,7 @@ export async function buildMapData({ center, halfM, tileUrl, dateText, forest, g
   }
   const sun = makeSunTable(center, dateText, startClock, dayCount)
   delete route.hints // 유니티에는 modes만 보냄
-  return { sizeM: halfM * 2, gridCount: gridCount, heights: smooth, buildings: buildings, roads: roads, trees: trees, route: route, stops: pins, landmarks: landmarks, water: water, sun: sun, startClock: startClock }
+  return { sizeM: halfM * 2, gridCount: gridCount, heights: smooth, buildings: buildings, roads: roads, areas: areas, trees: trees, route: route, stops: pins, landmarks: landmarks, water: water, sun: sun, startClock: startClock }
 }
 
 // 여행 시각마다 해 위치 (유니티가 하늘 색·햇빛 방향·밤 불빛을 정함). 날짜·시각·위경도로 천문 공식 계산(utils/sun.js)
@@ -534,7 +543,7 @@ async function loadNationalBuildings(box) {
   const list = []
   for (let cellX = Math.floor(box[0] / CELL_DEG); cellX <= Math.floor(box[2] / CELL_DEG); cellX++) {
     for (let cellY = Math.floor(box[1] / CELL_DEG); cellY <= Math.floor(box[3] / CELL_DEG); cellY++) {
-      for (const item of await fetchCell(cellX + '_' + cellY)) {
+      for (const item of await fetchCell('buildings', cellX + '_' + cellY)) {
         const ring = []
         for (let i = 2; i + 1 < item.length; i += 2) ring.push([cellX * CELL_DEG + item[i] / CELL_UNIT, cellY * CELL_DEG + item[i + 1] / CELL_UNIT])
         list.push({ ring: ring, height: item[0], kind: item[1] })
@@ -544,10 +553,27 @@ async function loadNationalBuildings(box) {
   return list
 }
 
-// 칸 파일 하나. 없는 칸(서울 밖·산·강)은 빈 목록
-async function fetchCell(name) {
+// 실제 도로·보도·횡단보도 면 읽기 (수치지형도 1:1,000): 범위에 걸친 칸 파일(/geo/ground/경도칸_위도칸.json)만 받음
+// 파일은 db/geo/make_ground_seoul.py가 만듦. 한 도형 = [종류, x, y, x, y, …] (종류 0 도로 · 1 보도 · 2 횡단보도)
+// 돌려줌: [{ kind, ring: [[경도, 위도], …] }]. 파일이 없는 곳(자료를 안 받은 구)은 빈 목록 → 전처럼 길 선만 그려짐
+async function loadGroundAreas(box) {
+  const list = []
+  for (let cellX = Math.floor(box[0] / CELL_DEG); cellX <= Math.floor(box[2] / CELL_DEG); cellX++) {
+    for (let cellY = Math.floor(box[1] / CELL_DEG); cellY <= Math.floor(box[3] / CELL_DEG); cellY++) {
+      for (const item of await fetchCell('ground', cellX + '_' + cellY)) {
+        const ring = []
+        for (let i = 1; i + 1 < item.length; i += 2) ring.push([cellX * CELL_DEG + item[i] / CELL_UNIT, cellY * CELL_DEG + item[i + 1] / CELL_UNIT])
+        list.push({ kind: item[0], ring: ring })
+      }
+    }
+  }
+  return list
+}
+
+// 칸 파일 하나 (folder: 'buildings' · 'ground' · 'floors'). 없는 칸(서울 밖·산·강)은 빈 목록
+async function fetchCell(folder, name) {
   try {
-    const response = await fetch('/geo/buildings/' + name + '.json')
+    const response = await fetch('/geo/' + folder + '/' + name + '.json')
     return response.ok ? await response.json() : []
   } catch (e) {
     return [] // 파일이 없으면 개발 서버가 다른 내용을 돌려줘서 JSON으로 못 읽음 → 없는 칸으로 봄

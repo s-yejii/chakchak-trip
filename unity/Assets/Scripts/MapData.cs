@@ -11,6 +11,7 @@ public class MapData
     public float[] heights;          // 격자 점마다 땅 높이(m). 남쪽 줄부터, 한 줄 안에서는 서쪽부터
     public BuildingData[] buildings; // 건물 목록
     public RoadData[] roads;         // 길 목록
+    public AreaData[] areas;         // 실제 도로 면·보도 면 (수치지형도). 자료를 안 받은 곳의 지도면 비어 있음
     public TreeData[] trees;         // 나무 목록
     public RouteData route;          // 걸은 경로
     public StopData[] stops;         // 다녀온 곳
@@ -34,6 +35,13 @@ public class WaterData
     public float level; // 물 높이(m)
     public int[] cells; // 지형 격자 점마다 1 물 · 0 땅 (heights와 같은 순서)
     [NonSerialized] public float[] levels; // 격자 점마다 그 물(한강·호수)의 물 높이. 웹 자료에는 없고 유니티가 채움 (WaterPrep). NonSerialized: JSON에서 읽지 않는 값이라는 표시
+}
+
+[Serializable]
+public class AreaData
+{
+    public int kind;       // 0 도로 면 · 1 보도 면 · 2 횡단보도 면
+    public float[] points; // 면의 둘레: x, z, x, z … 순서
 }
 
 [Serializable]

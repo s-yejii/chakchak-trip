@@ -189,6 +189,7 @@ public class RetroMap : MonoBehaviour
     private void ShowRoads(MapData data, RouteArea area, PropMaker props, PropMaker bridgeLights)
     {
         RoadMaker roads = new RoadMaker(Ground, ROAD_LIFT_M, props, area);
+        roads.hasRealCrosswalks = HasCrosswalkAreas(data);
         bridges = new BridgeMaker(data, Ground, props, bridgeLights);
         List<RoadData> landRoads = new List<RoadData>(); // 땅 위에 그릴 길 (물 위 다리 빼고)
         foreach (RoadData road in data.roads)
@@ -208,6 +209,29 @@ public class RetroMap : MonoBehaviour
             Palette.Get("Pole"), Palette.Get("Curb"), Palette.Get("Wire"), LampMaterial(),
         };
         Show("Roads", roads.BuildMesh(), roadMaterials);
+        ShowAreas(data, roadMaterials[0], roadMaterials[4], roadMaterials[3]); // 찻길 · 인도 · 흰 선 재질을 같이 씀
+    }
+
+    // 실제 도로 면·보도 면 (수치지형도): 넓은 보행 거리·광장·교차로를 실제 모양대로 채움. 자료가 없는 지도는 아무것도 안 그림
+    private void ShowAreas(MapData data, Material road, Material sidewalk, Material white)
+    {
+        AreaMaker maker = new AreaMaker(Ground);
+        if (data.areas != null)
+        {
+            foreach (AreaData area in data.areas) maker.Add(area);
+        }
+        Show("Areas", maker.BuildMesh(), new Material[] { road, sidewalk, white });
+    }
+
+    // 이 지도에 실제 횡단보도 면이 들어 있는지 (있으면 RoadMaker가 교차로마다 어림해 그리던 흰 줄을 안 그림)
+    private static bool HasCrosswalkAreas(MapData data)
+    {
+        if (data.areas == null) return false;
+        foreach (AreaData area in data.areas)
+        {
+            if (area.kind == AreaMaker.CROSSWALK) return true;
+        }
+        return false;
     }
 
     // 나무: 건물 안·벽 바로 옆 나무는 빼고, 걸은 길 가까운 나무는 풍성하게
