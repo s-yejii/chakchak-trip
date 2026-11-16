@@ -58,6 +58,9 @@ public class LiveServiceImpl implements LiveService {
     private static final String FOOD_WORDS = ".*(식당|맛집|음식|밥|한식|중식|일식|양식|고기|분식).*";
     private static final String NOT_FOOD_WORDS = ".*(카페|디저트|베이커리|숙박|관광|문화|공원|쇼핑).*";
     private static final String DRINK_WORDS = ".*(주점|이자카야|호프|맥주|와인|포차|칵테일).*";
+    // 비슷한 가게: 네이버 업종 이름이 달라도 같은 일식으로 봄 (스시도 "일식당" ↔ 스시이세이 "초밥,롤", 11/16 ③ 요청)
+    private static final Set<String> JAPANESE_TYPES = Set.of("일식", "일식당", "초밥", "롤", "스시", "오마카세");
+    private static final String JAPANESE_GROUP = "일식";
 
     private final TripService tripService;
     private final PlaceService placeService;
@@ -438,16 +441,18 @@ public class LiveServiceImpl implements LiveService {
         return similar;
     }
 
-    /** biz_type("일식,초밥")을 낱말 묶음으로 */
+    /** biz_type("일식,초밥")을 낱말 묶음으로. 같은 종류의 다른 이름은 한 이름으로 (일식당·초밥·롤 → 일식) */
     private Set<String> splitTypes(String bizType) {
         Set<String> types = new HashSet<>();
         if (bizType == null) {
             return types;
         }
         for (String word : bizType.split(",")) {
-            if (!word.isBlank()) {
-                types.add(word.trim());
+            if (word.isBlank()) {
+                continue;
             }
+            String type = word.trim();
+            types.add(JAPANESE_TYPES.contains(type) ? JAPANESE_GROUP : type);
         }
         return types;
     }
