@@ -1,144 +1,196 @@
 <script setup>
-// S13-f 결제 메모 (⑤): 카드 결제가 잡히면 누가 얼마 냈는지 적어 그 장소 핀에 남겨요
-import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import BottomSheet from '@/components/common/BottomSheet.vue'
+// S13-f 결제 메모 (⑤ 화면 · 11/16 ③ 주형이 연결, 석진 OK): 여행 중에 쓴 돈을 영수증 사진이나 직접 입력으로 적어 둬요
+// 예전엔 가짜 값(쭈꾸미골목 32,000원 · 나·지은·엄마·민지·준호)만 보였어요. 이제 진짜로:
+//   영수증 사진 → 서버가 읽기(POST /api/plans/capture/receipt, ③) → 가게·금액·시각 확인(고칠 수 있게) → [저장]
+//   → 이 여행 결제 기록(POST /api/trips/{id}/payments, ⑤)에 저장 → 여행 뒤 석진 회고 화면(RetroView)에 그대로 보여요
+// 앱을 처음 쓰는 사람 기준(예지): 맨 위에 할 일 한 줄, 결제가 0개면 빈 화면 안내, 사진 없이 직접 적기도 가능
+// 사진은 서버에 저장하지 않아요 (읽기만). 저장 방식은 회고 화면의 savePayForm·readReceipt와 같아요 (새 저장 방식 안 만듦)
+import { computed, onMounted, ref } from 'vue'
+import TopBar from '@/components/common/TopBar.vue'
+import PageMessage from '@/components/common/PageMessage.vue'
+import { get, post, upload } from '@/api/http'
+import { useTripStore } from '@/stores/trip'
 import { toWon } from '@/utils/time'
 import { showToast } from '@/utils/toast'
 
-const router = useRouter()
+const MAX_AMOUNT = 10000000 // 1천만 원 (서버 영수증 읽기와 같은 상한)
 
-// 가짜 데이터: 결제 내역과 같이 간 사람 (백엔드가 붙으면 expense 테이블)
-const total = 32000
-const people = ref(['나', '지은']) // 계산에 들어간 사람
-const myFriends = ['지은', '엄마', '민지', '준호'] // 친구 목록 (계산에서 뺀 사람도 다시 넣을 수 있어요)
-const amounts = ref({}) // 이름 → 낸 돈
-const adding = ref(false)
+const store = useTripStore()
+const tripId = ref(null)
+const payments = ref([])   // 이 여행 결제 기록 (결제 순)
+const isLoading = ref(true)
+const isReading = ref(false) // 영수증 읽는 중
+const isSaving = ref(false)
+const form = ref(null)       // 적는 칸 { storeName, amount, paidAt, source, note }. null이면 닫힘
+const receiptInput = ref(null)
 
-const friendsLeft = computed(() => myFriends.filter((name) => !people.value.includes(name)))
-const sum = computed(() => people.value.reduce((acc, name) => acc + (amounts.value[name] || 0), 0))
-const sumInfo = computed(() => {
-  if (!sum.value) return { text: '합계 0원 / 결제 32,000원', cls: '', icon: 'i-info' }
-  if (sum.value === total) return { text: '합계 32,000원 · 결제 금액과 같아요', cls: 'c-success', icon: 'i-success' }
-  const diff = total - sum.value
-  return { text: `합계 ${toWon(sum.value)} · ${toWon(Math.abs(diff))} ${diff > 0 ? '남았어요' : '넘었어요'}`, cls: 'c-warning', icon: 'i-warning' }
+const total = computed(() => payments.value.reduce((sum, payment) => sum + payment.amount, 0))
+const canSave = computed(() => {
+  if (!form.value) return false
+  const amount = Number(form.value.amount)
+  return form.value.storeName.trim() !== '' && amount >= 1 && amount <= MAX_AMOUNT && form.value.paidAt !== ''
 })
 
-// 숫자만 받아서 1,000 단위로 보여 줘요
-function setAmount(name, text) {
-  amounts.value[name] = Math.min(Number(text.replace(/\D/g, '').slice(0, 7)) || 0, 9999999)
+onMounted(async () => {
+  tripId.value = await store.findOngoingTripId() // 진행 중(없으면 오늘 날짜) 여행
+  await loadPayments()
+})
+
+async function loadPayments() {
+  if (!tripId.value) {
+    isLoading.value = false
+    return
+  }
+  try {
+    payments.value = await get('/trips/' + tripId.value + '/payments')
+  } catch (e) {
+    showToast(e.message)
+  }
+  isLoading.value = false
 }
-function showAmount(name) {
-  const value = amounts.value[name]
-  return value ? value.toLocaleString('ko-KR') : ''
+
+// 지금 시각 "YYYY-MM-DDTHH:mm" (직접 적기 기본값)
+function nowText() {
+  const now = new Date()
+  const pad = (number) => String(number).padStart(2, '0')
+  return now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) + 'T' + pad(now.getHours()) + ':' + pad(now.getMinutes())
 }
-// 10원 단위로 똑같이 나누고 남는 돈은 첫 사람이
-function splitEven() {
-  const count = people.value.length
-  const each = Math.floor(total / count / 10) * 10
-  people.value.forEach((name, i) => {
-    amounts.value[name] = i === 0 ? total - each * (count - 1) : each
-  })
+
+// [직접 적기]: 빈 칸으로 열기
+function openManual() {
+  form.value = { storeName: '', amount: '', paidAt: nowText(), source: 'manual', note: '' }
 }
-function removePerson(name) {
-  people.value = people.value.filter((x) => x !== name)
-  delete amounts.value[name]
-  showToast(name + ' 님을 이번 계산에서 뺐어요 · 친구 추가하기에서 다시 넣을 수 있어요')
+
+// [영수증 올리기]: 숨겨 둔 사진 고르기 칸을 대신 눌러 줌
+function openReceipt() {
+  receiptInput.value.click()
 }
-function addPerson(name) {
-  people.value.push(name)
-  adding.value = friendsLeft.value.length > 0
-  showToast(name + ' 님을 넣었어요')
+
+// 사진을 고르면: 서버가 가게·금액·시각을 읽어 적는 칸에 채움 (저장은 사용자가 확인하고 [저장])
+async function readReceipt(event) {
+  const file = event.target.files[0]
+  event.target.value = '' // 같은 사진을 다시 골라도 되게
+  if (!file) return
+  isReading.value = true
+  try {
+    const formData = new FormData()
+    formData.append('image', file)
+    const result = await upload('/plans/capture/receipt', formData)
+    form.value = {
+      storeName: result.storeName || '',
+      amount: result.totalAmount || '',
+      paidAt: result.paidAt ? result.paidAt.replace(' ', 'T') : nowText(),
+      source: 'capture',
+      note: result.checkNeeded ? result.note : '',
+    }
+  } catch (e) {
+    showToast(e.message + ' · 직접 적을 수도 있어요')
+  }
+  isReading.value = false
 }
-function save() {
-  router.push('/live')
-  showToast('핀에 저장했어요 · 쭈꾸미 핀을 눌러 보세요')
+
+// [저장]: 이 여행 결제 기록에 저장하고 목록 다시 읽기
+async function save() {
+  if (!canSave.value || isSaving.value) return
+  isSaving.value = true
+  try {
+    await post('/trips/' + tripId.value + '/payments', {
+      paidAt: form.value.paidAt,
+      storeName: form.value.storeName.trim(),
+      amount: Number(form.value.amount),
+      source: form.value.source,
+    })
+    form.value = null
+    showToast('저장했어요 · 여행이 끝나면 회고에서도 볼 수 있어요')
+    await loadPayments()
+  } catch (e) {
+    showToast(e.message)
+  }
+  isSaving.value = false
+}
+
+// 금액 칸: 숫자만
+function setAmount(text) {
+  const digits = text.replace(/\D/g, '').slice(0, 8)
+  form.value.amount = digits === '' ? '' : Number(digits)
 }
 </script>
 
 <template>
   <div class="scr scr-PayMemo">
     <div class="app">
-      <div class="map" aria-hidden="true"><img class="base live" src="/img/mapB.svg" alt="" style="top: -126px" /></div>
-      <span class="pin pin--done pin--sel" style="left: 90px; top: 330px" aria-hidden="true"><i class="ic ic--s i-check" aria-hidden="true"></i></span>
-      <div class="dim" aria-hidden="true"></div>
+      <TopBar title="결제 메모" back="/live" />
+      <div class="scroll" style="padding-top: 8px; gap: 16px; bottom: 24px">
+        <PageMessage v-if="isLoading" is-loading title="결제 기록을 불러오는 중이에요" />
+        <PageMessage v-else-if="!tripId" icon="i-info" title="진행 중인 여행이 없어요" text="여행을 시작하면 쓴 돈을 여기에 적어 둘 수 있어요" to="/trips" button="내 여행 보기" />
 
-      <BottomSheet closable role="dialog" aria-modal="true" style="gap: 14px">
-        <div class="sheet__head" style="gap: 12px">
-          <img class="thumb" src="/img/gamjatang.jpg" alt="" />
-          <div style="flex: 1; min-width: 0"><h1 class="h-title">천호 쭈꾸미골목 · 32,000원</h1><p class="t-cap tn">13:55 카드 결제 · 카드 내역에서 가져왔어요</p></div>
-          <RouterLink to="/live" class="iconbtn iconbtn--soft" aria-label="닫기"><i class="ic i-close" aria-hidden="true"></i></RouterLink>
-        </div>
-
-        <div style="display: flex; flex-direction: column; gap: 8px">
-          <div class="pm-head">
-            <span style="display: flex; flex-direction: column; gap: 2px"><span class="field__label">누가 얼마 냈나요?</span><span class="t-cap">체크를 풀면 계산에서 빠져요</span></span>
-            <button type="button" class="btn btn--secondary btn--sm" @click="splitEven">똑같이 나누기</button>
-          </div>
-          <div class="pm-list" role="group" aria-label="사람별 금액">
-            <div v-for="(name, i) in people" :key="name" class="pm-row" :class="{ 'is-off': !amounts[name] }">
-              <button type="button" class="pm-chk" role="checkbox" aria-checked="true" :aria-label="name + ' 계산에서 빼기'" @click="removePerson(name)">
-                <span class="check is-on"><i class="ic ic--s i-check" aria-hidden="true"></i></span>
-              </button>
-              <label class="pm-name" :for="'pm-a' + i">{{ name }}</label>
-              <span class="pm-amt">
-                <input :id="'pm-a' + i" :value="showAmount(name)" type="text" inputmode="numeric" placeholder="0" autocomplete="off" @input="setAmount(name, $event.target.value); $event.target.value = showAmount(name)" />
-                <span>원</span>
-              </span>
+        <template v-else>
+          <!-- 처음 쓰는 사람용: 할 일 한 줄 + 사진 안내 -->
+          <section class="pm-guide" aria-label="결제 메모 안내">
+            <p class="t-strong" style="margin: 0">영수증 사진을 올리면 가게·금액·시간을 채워 줘요</p>
+            <p class="t-cap" style="margin: 0"><i class="ic ic--s i-info" aria-hidden="true"></i> 사진은 글자만 읽고 저장하지 않아요 · 카드번호는 가려서 올려 주세요</p>
+            <div class="cta__row">
+              <button type="button" class="btn btn--primary btn--md" :disabled="isReading" @click="openReceipt"><i class="ic i-camera" aria-hidden="true"></i>{{ isReading ? '읽는 중…' : '영수증 올리기' }}</button>
+              <button type="button" class="btn btn--secondary btn--md" :disabled="isReading" @click="openManual">직접 적기</button>
             </div>
+            <input ref="receiptInput" type="file" accept="image/*" hidden @change="readReceipt" />
+          </section>
 
-            <div v-if="adding" class="pm-pick" role="group" aria-label="친구 목록에서 추가">
-              <div class="pm-pick__head"><span class="t-cap">내 친구 목록에서 눌러 넣어요</span><button type="button" class="textlink" @click="adding = false">닫기</button></div>
-              <div v-if="friendsLeft.length" class="pm-pick__list">
-                <button v-for="name in friendsLeft" :key="name" type="button" class="pm-fr" :aria-label="name + ' 추가'" @click="addPerson(name)">
-                  <span class="pm-ava" aria-hidden="true">{{ name.slice(0, 1) }}</span>{{ name }}<i class="ic ic--s i-plus" aria-hidden="true"></i>
-                </button>
-              </div>
-              <p v-else class="pm-pick__empty">친구 목록에 있는 사람을 모두 넣었어요. <RouterLink to="/my/friends" class="textlink">친구 추가하러 가기</RouterLink></p>
+          <!-- 적는 칸: 읽은 값 확인·고치기 -->
+          <section v-if="form" class="card card--pad pm-form" aria-label="결제 적기">
+            <p v-if="form.source === 'capture'" class="t-cap" style="margin: 0">영수증에서 읽었어요 · 틀리면 고쳐 주세요</p>
+            <p v-if="form.note" class="field__help c-warning" style="margin: 0"><i class="ic ic--s i-warning" aria-hidden="true"></i>{{ form.note }}</p>
+            <label class="field">
+              <span class="field__label">가게 이름</span>
+              <span class="field__box"><input v-model="form.storeName" type="text" maxlength="60" placeholder="예) 남도분식 익선점" autocomplete="off" /></span>
+            </label>
+            <label class="field">
+              <span class="field__label">금액(원)</span>
+              <span class="field__box"><input :value="form.amount === '' ? '' : Number(form.amount).toLocaleString('ko-KR')" type="text" inputmode="numeric" placeholder="0" autocomplete="off" @input="setAmount($event.target.value)" /></span>
+            </label>
+            <label class="field">
+              <span class="field__label">결제 시각</span>
+              <span class="field__box"><input v-model="form.paidAt" type="datetime-local" /></span>
+            </label>
+            <div class="cta__row">
+              <button type="button" class="btn btn--secondary btn--md" @click="form = null">취소</button>
+              <button type="button" class="btn btn--primary btn--md" :disabled="!canSave || isSaving" @click="save">저장</button>
             </div>
-            <button v-else type="button" class="pm-addrow" @click="adding = true"><span class="pm-ava" aria-hidden="true"><i class="ic ic--s i-plus" aria-hidden="true"></i></span>친구 추가하기</button>
-          </div>
-          <p class="field__help" :class="sumInfo.cls" style="margin: 0"><i class="ic ic--s" :class="sumInfo.icon" aria-hidden="true"></i><span class="tn">{{ sumInfo.text }}</span></p>
-        </div>
-        <p class="t-cap" style="display: flex; gap: 6px; align-items: center"><i class="ic ic--s i-pin c-navy" aria-hidden="true"></i>저장하면 지도 핀을 눌러 다시 볼 수 있어요</p>
+          </section>
 
-        <div class="cta__row">
-          <RouterLink to="/live" class="btn btn--secondary btn--lg">나중에</RouterLink>
-          <button type="button" class="btn btn--primary btn--lg" :disabled="!sum" @click="save">핀에 저장</button>
-        </div>
-      </BottomSheet>
+          <!-- 이 여행 결제 기록 -->
+          <section class="pm-list-sec" aria-label="이 여행 결제 기록">
+            <div class="pm-head">
+              <h2 class="h-title" style="margin: 0">이 여행에서 쓴 돈</h2>
+              <span v-if="payments.length" class="t-strong tn">{{ toWon(total) }}</span>
+            </div>
+            <p v-if="!payments.length" class="pm-empty t-cap">아직 적은 결제가 없어요 · 영수증을 올리거나 직접 적어 보세요</p>
+            <ul v-else class="pm-list">
+              <li v-for="payment in payments" :key="payment.id" class="pm-row">
+                <span class="pm-row__body">
+                  <b class="t-strong">{{ payment.storeName }}</b>
+                  <span class="t-cap tn">{{ payment.day }}일차 {{ payment.paidAt }} · {{ payment.source === 'capture' ? '영수증' : payment.source === 'card' ? '카드 내역' : '직접 적음' }}</span>
+                </span>
+                <b class="tn">{{ toWon(payment.amount) }}</b>
+              </li>
+            </ul>
+            <p class="t-cap" style="margin: 0">여행이 끝나면 회고 화면에서 누가 얼마 냈는지 나눌 수 있어요</p>
+          </section>
+        </template>
+      </div>
     </div>
   </div>
 </template>
 
 <style>
-.scr-PayMemo .pm-list{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:var(--radius-md);background:var(--surface-raised);overflow:hidden}
-.scr-PayMemo .pm-row{display:flex;align-items:center;gap:12px;min-height:56px;padding:0 12px 0 14px;border-top:1px solid var(--line)}
+.scr-PayMemo .pm-guide{display:flex;flex-direction:column;gap:10px}
+.scr-PayMemo .pm-guide .cta__row .btn{flex:1}
+.scr-PayMemo .pm-form{display:flex;flex-direction:column;gap:12px}
+.scr-PayMemo .pm-list-sec{display:flex;flex-direction:column;gap:10px}
+.scr-PayMemo .pm-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.scr-PayMemo .pm-empty{margin:0;padding:20px 12px;text-align:center;border:1px dashed var(--line-strong);border-radius:var(--radius-md)}
+.scr-PayMemo .pm-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;border:1px solid var(--line);border-radius:var(--radius-md);background:var(--surface-raised);overflow:hidden}
+.scr-PayMemo .pm-row{display:flex;align-items:center;gap:12px;min-height:56px;padding:8px 14px;border-top:1px solid var(--line)}
 .scr-PayMemo .pm-row:first-child{border-top:0}
-.scr-PayMemo .pm-ava{flex:none;width:32px;height:32px;border-radius:999px;background:var(--navy-soft);color:var(--navy);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700}
-.scr-PayMemo .pm-name{flex:1;min-width:0;font-size:15px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.scr-PayMemo .pm-amt{flex:none;display:flex;align-items:center;gap:6px;width:148px;height:40px;padding:0 12px;border:1px solid var(--line-strong);border-radius:var(--radius-md);background:#fff;cursor:text;transition:border-color .15s,box-shadow .15s}
-.scr-PayMemo .pm-amt:hover{border-color:var(--navy)}
-.scr-PayMemo .pm-amt:focus-within{border-color:var(--navy);box-shadow:0 0 0 3px var(--navy-soft)}
-.scr-PayMemo .pm-amt input{flex:1;min-width:0;border:0;outline:0;background:none;font:inherit;font-size:16px;font-weight:600;color:var(--ink);text-align:right;font-variant-numeric:tabular-nums;padding:0}
-.scr-PayMemo .pm-amt input::placeholder{color:var(--line-strong);font-weight:400}
-.scr-PayMemo .pm-amt span{font-size:15px;color:var(--ink-2,var(--muted))}
-.scr-PayMemo .pm-row.is-off .pm-ava{background:var(--surface);color:var(--muted)}
-.scr-PayMemo .pm-row.is-off .pm-name{color:var(--muted);font-weight:500}
-.scr-PayMemo .pm-row.is-off .pm-amt{background:var(--surface)}
-.scr-PayMemo .pm-addrow{display:flex;align-items:center;gap:12px;min-height:52px;padding:0 14px;border:0;border-top:1px solid var(--line);background:none;font:inherit;font-size:15px;font-weight:600;color:var(--navy);cursor:pointer;width:100%;text-align:left}
-.scr-PayMemo .pm-addrow:hover{background:var(--navy-soft)}
-.scr-PayMemo .pm-addrow .pm-ava{background:none;border:1px dashed var(--navy)}
-.scr-PayMemo .pm-pick{display:flex;flex-direction:column;gap:10px;padding:12px 14px 14px;border-top:1px solid var(--line);background:var(--surface)}
-.scr-PayMemo .pm-pick__head{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.scr-PayMemo .pm-pick__list{display:flex;flex-wrap:wrap;gap:8px}
-.scr-PayMemo .pm-fr{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 14px 0 6px;border:1px solid var(--line-strong);border-radius:999px;background:#fff;font:inherit;font-size:15px;font-weight:600;color:var(--ink);cursor:pointer;transition:border-color .15s,background .15s}
-.scr-PayMemo .pm-fr:hover{border-color:var(--navy);background:var(--navy-soft)}
-.scr-PayMemo .pm-fr .pm-ava{width:28px;height:28px;font-size:12px}
-.scr-PayMemo .pm-fr .i-plus{color:var(--navy)}
-.scr-PayMemo .pm-pick__empty{margin:0;font-size:14px;color:var(--ink-muted)}
-.scr-PayMemo .pm-chk{flex:none;width:44px;height:44px;margin-left:-8px;border:0;background:none;padding:0;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:999px}
-.scr-PayMemo .pm-chk:hover{background:var(--navy-soft)}
-.scr-PayMemo .pm-chk .check{width:22px;height:22px}
-.scr-PayMemo .pm-head{display:flex;align-items:flex-end;justify-content:space-between;gap:8px}
+.scr-PayMemo .pm-row__body{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
 </style>
