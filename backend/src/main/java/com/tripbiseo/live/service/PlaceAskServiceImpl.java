@@ -17,6 +17,7 @@ import com.tripbiseo.common.util.Geo;
 import com.tripbiseo.live.dto.AskSituation;
 import com.tripbiseo.live.dto.AskedPlace;
 import com.tripbiseo.live.dto.LocationRequest;
+import com.tripbiseo.live.dto.MoodMatch;
 import com.tripbiseo.live.dto.NextRoute;
 import com.tripbiseo.live.dto.PlaceAskResult;
 import com.tripbiseo.live.dto.SqlAnswer;
@@ -53,6 +54,7 @@ public class PlaceAskServiceImpl implements PlaceAskService {
     private static final String SLACK = "slack";
     private static final String PREV = "prev";
     private static final int MAX_PREV_IDS = 10;  // 앞 결과는 많아야 10곳 (AI SQL LIMIT 상한과 같음)
+    private static final int MOOD_WALK_POOL = 5; // 분위기로 고른 뒤 실제 걷는 길로 다시 잴 곳 수 (길찾기 호출 수 때문에, SqlChecker RERANK_POOL과 같음)
 
     private final LiveTripReader liveTripReader;   // 진행 중인 여행인지 확인 (④ 도우미)
     private final StatusService statusService;     // 다음 칸·가는 길·여유 (④)
@@ -63,6 +65,7 @@ public class PlaceAskServiceImpl implements PlaceAskService {
     private final AskSqlRunner askSqlRunner;
     private final PlaceService placeService;       // 영업 중인지 (②)
     private final WalkRanker walkRanker;           // 실제 걷는 길로 다시 줄 세우기 (11/13)
+    private final ReviewRagService reviewRagService; // 분위기 조건은 리뷰 RAG로 고르기 (11/15)
 
     /** 사용자 말로 장소 찾기 (prevPlaceIds가 있으면 그 안에서만) */
     @Override
@@ -176,7 +179,7 @@ public class PlaceAskServiceImpl implements PlaceAskService {
 
     /** SqlChecker 검사 + 지금 값이 없는 빈칸을 썼는지 (예: 대중교통 구간인데 :route) + 이어지는 질문인데 :prev를 빠뜨렸는지 */
     private SqlCheck checkAnswer(SqlAnswer answer, Set<String> usable) {
-        SqlCheck check = sqlChecker.checkSql(answer.getSql());
+        SqlCheck check = sqlChecker.checkSql(answer.getSql(), hasMood(answer));
         if (!check.isOk()) {
             return check;
         }
@@ -209,6 +212,12 @@ public class PlaceAskServiceImpl implements PlaceAskService {
             return makeFallback();
         }
         log.info("AI에게 묻기 SQL: {} → {}곳", answer.getSql(), places.size());
+        if (hasMood(answer)) {
+            places = applyMood(places, answer);
+            if (check.getOrderBy() != null) {
+                places = keepFirst(places, MOOD_WALK_POOL);
+            }
+        }
         if (check.getOrderBy() != null) {
             places = walkRanker.rank(places, situation, check.getOrderBy()); // 직선 → 실제 걷는 시간
         }
@@ -218,6 +227,40 @@ public class PlaceAskServiceImpl implements PlaceAskService {
             band = askSqlRunner.getRouteBand(situation.getRoute(), BAND_METERS);
         }
         return makeResult(answer, situation.getSlack(), band, openPlaces);
+    }
+
+    /** 분위기 조건(mood)이 있는 질문인지 */
+    private boolean hasMood(SqlAnswer answer) {
+        return answer.getMood() != null && !answer.getMood().isBlank();
+    }
+
+    /** 분위기 질문: 리뷰 RAG로 분위기에 맞는 곳만 그 순서로 남기고, 고른 이유·근거 리뷰를 붙임 */
+    private List<AskedPlace> applyMood(List<AskedPlace> places, SqlAnswer answer) {
+        List<String> placeIds = new ArrayList<>();
+        for (AskedPlace place : places) {
+            placeIds.add(place.getId());
+        }
+        List<MoodMatch> matches = reviewRagService.findByMood(placeIds, answer.getMood(), answer.getMoodWord());
+        List<AskedPlace> moodPlaces = new ArrayList<>();
+        for (MoodMatch match : matches) {
+            AskedPlace place = findById(places, match.getPlaceId());
+            if (place != null) {
+                place.setMoodReason(match.getReason());
+                place.setMoodEvidence(match.getQuote());
+                moodPlaces.add(place);
+            }
+        }
+        log.info("AI에게 묻기 분위기 '{}': 후보 {}곳 → {}곳", answer.getMood(), places.size(), moodPlaces.size());
+        return moodPlaces;
+    }
+
+    private AskedPlace findById(List<AskedPlace> places, String id) {
+        for (AskedPlace place : places) {
+            if (place.getId().equals(id)) {
+                return place;
+            }
+        }
+        return null;
     }
 
     /** 지금 닫혀 있는 곳은 빼고, 닫는 시각·들르고 남는 여유를 채움 */
