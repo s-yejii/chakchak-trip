@@ -101,7 +101,8 @@ export const askAssist = (tripId, message, lat, lng, prev) =>
 // similarTo: 놓친 장소 id (비슷한 가게 찾기, 11/12), replaceStopId: 이 칸 자리에 넣기 (놓친 예약 바꾸기). 둘 다 안 넣으면 예전과 같음
 export const askRecommend = (tripId, lat, lng, radius, category, tags, similarTo) => post(`/trips/${tripId}/live/recommend`, { lat, lng, radius, category, tags, similarTo })
 // afterStopId: 이 남은 칸 바로 뒤에 넣기 (11/13, 없으면 바로 다음)
-export const insertPlace = (tripId, placeId, lat, lng, replaceStopId, afterStopId) => post(`/trips/${tripId}/live/insert`, { placeId, lat, lng, replaceStopId, afterStopId })
+// reservedTime "15:00": 예약했으면 그 시각 고정 일정으로 (선택, 11/16 ③)
+export const insertPlace = (tripId, placeId, lat, lng, replaceStopId, afterStopId, reservedTime) => post(`/trips/${tripId}/live/insert`, { placeId, lat, lng, replaceStopId, afterStopId, reservedTime })
 export const skipStop = (tripId, stopId, lat, lng) => post(`/trips/${tripId}/live/skip`, { stopId, lat, lng })
 export const getAlternatives = (tripId, lat, lng, reason = 'delay', request = null) => post(`/trips/${tripId}/live/alternatives`, { lat, lng, reason, request })
 export const applyAlternative = (tripId, key, stops, lat, lng) => post(`/trips/${tripId}/live/apply`, { key, stops, lat, lng })
