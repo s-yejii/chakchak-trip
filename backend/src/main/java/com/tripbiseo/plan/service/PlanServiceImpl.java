@@ -68,7 +68,10 @@ public class PlanServiceImpl implements PlanService {
     private static final int MAX_MESSAGE_LENGTH = 300;
     private static final int MAX_TITLE_LENGTH = 60;
     private static final int MAX_PROMPT_CANDIDATES = 90;
+    private static final java.util.regex.Pattern COUPLE_WORDS = java.util.regex.Pattern.compile("데이트|연인|커플");
+    private static final java.util.regex.Pattern SOLO_WORDS = java.util.regex.Pattern.compile("혼밥|혼자|1인");
     private static final int MAX_REASON_LENGTH = 40;      // Gemini 이유 한 줄
+    private static final java.util.regex.Pattern GUESS_REASON = java.util.regex.Pattern.compile("걸어서|도보|가까|가깝|인접|근처|바로 옆|인근|위치|동선|니다$|평점|리뷰 ?[\\d,]+개|에 있어|에 있는|편리|즐길 수 있|다양한|유명한|대표적|의미가 있|의미 있는|꼭 방문|가득한"); // 확인 안 된 거리 말·숫자·뻔한 말 (11/14)
     private static final int MAX_MEMO_LENGTH = 200;       // trip_stop.memo 저장 규칙
     private static final java.util.regex.Pattern WEAK_EVIDENCE = java.util.regex.Pattern.compile("리뷰 \\d+개 중 (\\d+)개");
     private static final int MIN_EVIDENCE_COUNT = 3;      // 리뷰에서 이만큼은 나와야 근거로 붙임 (11/12)
@@ -246,6 +249,7 @@ public class PlanServiceImpl implements PlanService {
         // day → time 순 (sort에 넘기는 규칙: day가 같으면 time 글자 순, "09:00" < "10:00")
         response.getStops().sort((first, second) -> first.getDay().equals(second.getDay())
                 ? first.getTime().compareTo(second.getTime()) : first.getDay() - second.getDay());
+        planVerifier.fillEmptyMemos(response); // 이유 빈 칸은 평점·이동 분 같은 사실로 (11/14)
         planVerifier.addVerifyNotes(response); // 예약·꼭 갈 곳을 DB 영업시간·거리로 다시 확인한 줄 (11/13)
         return response;
     }
@@ -518,7 +522,7 @@ public class PlanServiceImpl implements PlanService {
     /** 일정에 그 이름이 들어간 칸이 있는지 ("한강" → "뚝섬한강공원"도 같은 곳으로 봄) */
     private boolean hasStopNamed(List<Stop> stops, String name) {
         for (Stop stop : stops) {
-            if (isSameName(stop.getName(), name)) {
+            if (isSameName(stop.getName(), name) && !planCandidateFinder.isInnerSpot(stop.getName(), name)) { // 박물관 안 정원은 박물관이 아님 (11/14)
                 return true;
             }
         }
@@ -571,7 +575,7 @@ public class PlanServiceImpl implements PlanService {
             { "candidates", "20", "장소 후보 찾기" },
             { "reviews", "40", "리뷰로 단체석·분위기 확인" },
             { "ai", "80", "AI가 일정 고르기" },
-            { "fixed", "95", "1일차 19:00 회식 · 2일차 12:30 스시도 · 16:00 버스 시간에 맞추기" }, // 11/12 촬영 시나리오
+            { "fixed", "95", "1일차 19:00 회식 · 2일차 12:30 스시도 · 16:40 버스 시간에 맞추기" }, // 11/12 촬영 시나리오
         };
         for (String[] step : steps) {
             waitDemoStep();
@@ -1026,7 +1030,8 @@ public class PlanServiceImpl implements PlanService {
              + "- 앞 칸 장소와 주소(구·동)가 가까운 곳으로 이어서 동선이 짧게.\n"
              + "- 꼭 갈 곳과 시간 고정 일정은 slot을 null로, time은 고정 시각(꼭 갈 곳은 알맞은 시각)으로 넣어. 고정 일정의 day는 적힌 일차 그대로. 그 시간과 겹치는 칸은 비워.\n"
              + "- reason은 왜 골랐는지 30자 이내 해요체 한마디. 후보 목록에 있는 정보(종류·평점·리뷰 근거·위치)만 근거로 써.\n"
-             + "  '~입니다', '대표적인', '인기 있는', '즐길 수 있는' 같은 뻔한 말 말고 그곳만의 근거를 써 (예: \"리뷰에 단체석 넓다는 말이 많아요\", \"평점 4.8 · 다음 장소까지 걸어서 5분\").\n"
+             + "  '~입니다', '대표적인', '인기 있는', '즐길 수 있는' 같은 뻔한 말 말고 그곳만의 근거를 써 (예: \"리뷰에 단체석 넓다는 말이 많아요\").\n"
+             + "  평점·리뷰 수·거리·걸어서 몇 분·가깝다는 말은 쓰지 마 (서버가 확인한 숫자로 따로 붙여).\n"
              + "  시간 고정 일정은 reason을 비워 (예약 시각이 칸에 이미 보여서).\n"
              + "후보(id | 이름 | 종류 | 분류 | 평점(리뷰 수) | 리뷰 근거 | 주소):\n" + makeCandidateText(conditions, candidates, reasons)
              + "JSON만: {\"title\": \"여행 이름\", \"stops\": [{\"day\": 1, \"slot\": \"S1 또는 null\", \"id\": \"후보 id 또는 null\", "
@@ -1202,7 +1207,8 @@ public class PlanServiceImpl implements PlanService {
             if (place == null) {
                 place = placeService.getPlaceByName(pick.getName(), nearLat, nearLng);
             }
-            if (place == null && Boolean.TRUE.equals(pick.getFixed()) && hasText(pick.getName()) && nearLat != null && nearLng != null) {
+            boolean isReserved = Boolean.TRUE.equals(pick.getFixed()) && isFixedName(pick.getName(), conditions); // 사용자가 넣은 예약만 (11/14: 못 찾은 꼭 갈 곳이 "예약" 칸으로 들어갔어요)
+            if (place == null && isReserved && hasText(pick.getName()) && nearLat != null && nearLng != null) {
                 // 11/13: 예약(고정)은 위치를 못 찾아도 빼지 않고 읽은 이름·시각 그대로 둠 (예전엔 빠져서 그 자리가 4시간 넘게 비었어요)
                 double centerLat = conditions.getAreaLat() != null ? conditions.getAreaLat() : nearLat; // 고른 지역 가운데, 없으면 첫 후보 근처
                 double centerLng = conditions.getAreaLng() != null ? conditions.getAreaLng() : nearLng;
@@ -1212,7 +1218,9 @@ public class PlanServiceImpl implements PlanService {
             }
             if (place == null) {
                 String name = pick.getName() == null ? "" : pick.getName();
-                response.getNotes().add(makeNote(name + "의 위치를 찾지 못해 뺐어요", placeService.getNaverUrl(name, null)));
+                if (!hasNoteAbout(response.getNotes(), name)) { // 11/16: 후보 찾을 때 이미 "위치를 찾지 못했어요"라고 했으면 또 안 씀
+                    response.getNotes().add(makeNote(name + "의 위치를 찾지 못해 뺐어요", placeService.getNaverUrl(name, null)));
+                }
                 continue;
             }
             Stop stop = toDraftStop(pick, place, days);
@@ -1237,7 +1245,7 @@ public class PlanServiceImpl implements PlanService {
     /** 일정 칸 메모 = Gemini가 쓴 이유 + 리뷰 근거 ("성수 감성 카페 · 분위기 좋아요 · 리뷰 10개 중 6개"). 둘 다 없으면 null, 200자까지 */
     private String makeMemo(String reason, List<String> evidence, String companion) {
         List<String> parts = new ArrayList<>();
-        if (hasText(reason) && isFitReason(reason, companion)) {
+        if (hasText(reason) && isFitReason(reason, companion) && !isGuessReason(reason)) {
             parts.add(cut(reason.trim(), MAX_REASON_LENGTH));
         }
         if (evidence != null) {
@@ -1254,10 +1262,20 @@ public class PlanServiceImpl implements PlanService {
 
     /** 누구랑에 안 맞는 이유인지: 연인이 아니면 "데이트", 혼자가 아니면 "혼밥" 이유는 안 붙임 */
     private boolean isFitReason(String text, String companion) {
-        if (text.contains("데이트") && !"연인".equals(companion)) {
+        // 11/16: '데이트'·'혼밥'만 거르던 것 → '연인·커플'·'혼자·1인'도 (2명인데 "연인과 함께…", "혼자 와서 먹기 편하다"가 붙었어요)
+        if (COUPLE_WORDS.matcher(text).find() && !"연인".equals(companion)) {
             return false;
         }
-        return !text.contains("혼밥") || "혼자".equals(companion);
+        return !SOLO_WORDS.matcher(text).find() || "혼자".equals(companion);
+    }
+
+    /**
+     * AI가 확인 없이 쓴 이유인지 (11/14): 거리·가깝다는 말(서버가 이동 분을 따로 붙임), "~위치한 ~입니다" 같은 뻔한 말,
+     * 평점·리뷰 수(AI가 예시 숫자 "평점 4.8 · 리뷰 300개"를 그대로 베껴 쓴 적이 있어서, 숫자는 서버가 DB 값으로만 붙임).
+     * 예전엔 마지막 칸에 "다음 장소와 걸어서 가까워요"가 붙었어요(다음 장소가 없는데)
+     */
+    private boolean isGuessReason(String reason) {
+        return GUESS_REASON.matcher(reason).find();
     }
 
     /** 근거 앞부분 ("분위기 좋아요 · 리뷰 10개 중 6개" → "분위기") */
@@ -1412,6 +1430,19 @@ public class PlanServiceImpl implements PlanService {
     }
 
     /** 사용자가 말한 곳(꼭 갈 곳·가능하면 갈 곳·시간 고정)의 이름인지 */
+    /** 사용자가 넣은 예약(고정 일정) 이름인지 */
+    private boolean isFixedName(String name, PlanConditions conditions) {
+        if (name == null || conditions.getFixed() == null) {
+            return false;
+        }
+        for (FixedVisit fixed : conditions.getFixed()) {
+            if (isSameName(name, fixed.getName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private boolean isNamedByUser(String name, PlanConditions conditions) {
         List<String> names = new ArrayList<>();
         if (conditions.getMustVisit() != null) {
@@ -1494,6 +1525,16 @@ public class PlanServiceImpl implements PlanService {
     private boolean hasNote(PlanGenerateResponse response, String text) {
         for (PlanNote note : response.getNotes()) {
             if (text.equals(note.getText())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** 이미 이 이름으로 시작하는 안내가 있는지 (같은 곳 안내를 두 번 안 쓰게) */
+    private boolean hasNoteAbout(List<PlanNote> notes, String name) {
+        for (PlanNote note : notes) {
+            if (!name.isEmpty() && note.getText() != null && note.getText().startsWith(name + "의 위치를")) {
                 return true;
             }
         }
