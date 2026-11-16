@@ -17,6 +17,7 @@ import TripBudget from '@/components/trip/TripBudget.vue'
 import TripTimeline from '@/components/trip/TripTimeline.vue'
 import CheckList from '@/components/trip/CheckList.vue'
 import KakaoMap from '@/components/common/KakaoMap.vue'
+import { toDuration } from '@/utils/time'
 
 const props = defineProps({
   trip: { type: Object, required: true },
@@ -31,6 +32,7 @@ const props = defineProps({
   activeStop: { type: Number, default: null }, // 이동 미리보기로 지금 머무는 칸
   tripId: { type: Number, default: null }, // 저장된 여행 번호. 있으면 장소 상세에 &trip=으로 넘겨 "이 일정에 담겨 있어요"로 보이게
   showHoursHelp: { type: Boolean, default: false }, // 영업시간 모르는 칸 아래 안내 상자 (일정 점검만, TripTimeline에 그대로 넘김)
+  resetKey: { type: [Number, String], default: null }, // 보는 날(일차). 바뀌면 고른 칸·말풍선을 비움 (고른 칸 번호는 "그날 몇 번째"라 다른 날엔 맞지 않음)
 })
 const emit = defineEmits(['reorder', 'change-mode', 'hours-checked'])
 const route = useRoute() // 지금 주소 (일정 점검은 ?day=N으로 일차를 알려 줘요)
@@ -105,6 +107,7 @@ function closeTip() { isTipOnPin.value = false; pickedPoint.value = null }
 function followPin() {
   if (!isTipOnPin.value || selected.value === null || !mapRef.value) return
   const stop = props.trip.stops[selected.value]
+  if (!stop) return // 고른 칸이 목록에 없음 (칸을 빼서 번호가 범위를 넘음)
   const point = mapRef.value.pointOf(stop.lat, stop.lng)
   if (point) pickedPoint.value = point
 }
@@ -190,6 +193,7 @@ const tipScale = computed(() => {
 const tooltip = computed(() => {
   if (selected.value === null) return null
   const stop = props.trip.stops[selected.value]
+  if (!stop) return null // 고른 칸이 목록에 없으면 말풍선도 없음 (안 고른 것처럼)
   const point = isKakao.value ? pickedPoint.value : stop
   if (!point || point.isInside === false) return null // 핀이 지도 밖으로 나가면 말풍선도 숨김
   const width = tipWidth.value
@@ -221,6 +225,12 @@ watch(() => props.activeStop, async (i) => {
 // 일차를 바꾸면(주소의 ?day= 가 바뀌면) 시트 안 목록을 맨 위로 → 다음 날도 첫 칸부터 보이게
 watch(() => route.query.day, () => {
   if (scrollBox.value) scrollBox.value.scrollTop = 0
+})
+
+// 보는 날이 바뀌면(resetKey) 고른 칸과 말풍선을 비움. 같은 날 안에서 다시 계산(순서·수단 바꾸기)될 땐 그대로 남게 stops가 아니라 이 값만 봐요
+watch(() => props.resetKey, () => {
+  selected.value = null
+  closeTip()
 })
 
 // 핀이나 목록을 누르면 같이 강조하고, 목록은 그 칸이 보이게 스크롤
@@ -289,7 +299,7 @@ function slackBadge(slack) {
             <span v-if="badge" class="badge" :class="badge.cls" style="height: 20px; margin-right: 6px">{{ badge.text }}</span>{{ subText }}
           </p>
         </div>
-        <span v-if="trip.slack !== undefined" class="badge tn" :class="slackBadge(trip.slack).cls"><i class="ic ic--s" :class="slackBadge(trip.slack).icon" aria-hidden="true"></i>{{ trip.slack < 0 ? '예약에 ' + -trip.slack + '분 늦어요' : '예약 여유 ' + trip.slack + '분' }}</span>
+        <span v-if="trip.slack !== undefined" class="badge tn" :class="slackBadge(trip.slack).cls"><i class="ic ic--s" :class="slackBadge(trip.slack).icon" aria-hidden="true"></i>{{ trip.slack < 0 ? '예약에 ' + toDuration(-trip.slack) + ' 늦어요' : '예약 여유 ' + toDuration(trip.slack) }}</span>
       </div>
       <TripBudget v-if="showBudget && trip.stops.length" :stops="trip.stops" />
       <slot name="head"></slot>
