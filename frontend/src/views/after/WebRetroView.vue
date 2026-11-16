@@ -2345,7 +2345,7 @@ watch(shownPhotos, drawPhotoMarkers)
 
         <!-- 재생 막대 -->
         <div class="wr-player">
-          <button type="button" class="wr-player__play" :disabled="!canPlay" @click="togglePlay">{{ playing ? '일시정지' : '▶ 내비로 다시 걷기' }}</button>
+          <button type="button" class="wr-player__play" :disabled="!canPlay" @click="togglePlay">{{ playing ? '일시정지' : '▶ 재생' }}</button>
           <button type="button" class="wr-btn" :disabled="!canPlay" @click="goToStart">처음으로</button>
           <div class="wr-seg wr-seg--view">
             <button type="button" :class="{ 'is-on': viewMode === 'top' }" @click="changeView('top')">위에서</button>
