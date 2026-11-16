@@ -1,3 +1,8 @@
+<script>
+// 새로고침 뒤 되살리기는 페이지를 연 뒤 한 번만 (이 화면을 다시 들어와도 또 되살리지 않게)
+let isRestoreChecked = false
+</script>
+
 <script setup>
 // S06 여행 정보 입력 (③): 한 화면에 하나씩 묻고 "이전"·"다음"으로 넘겨요 (11/04: 긴 스크롤 → 단계별, 11/06: 건너뛰기 버튼 없앰)
 // 주소: /plan/info (AI로 짜기) · /plan/info?method=me (직접 고르기)
@@ -20,7 +25,6 @@ import DongPicker from '@/components/plan/DongPicker.vue'
 import OriginPicker from '@/components/plan/OriginPicker.vue'
 import ChoiceCard from '@/components/plan/ChoiceCard.vue'
 import TimeRangePicker from '@/components/plan/TimeRangePicker.vue'
-import VerifiedBadge from '@/components/common/VerifiedBadge.vue'
 import { KIND_CHIPS, MOVE_CODES, TAG_CHIPS } from '@/utils/styleCodes'
 // 서비스 아이콘: Simple Icons (CC0, 상표는 각 회사 소유). 그 서비스 바로가기에만 써요
 import youtubeLogo from '@/assets/brand/youtube.svg'
@@ -55,6 +59,41 @@ const router = useRouter()
 const byMe = route.query.method === 'me'
 const store = useTripStore()
 
+// 11/13: 새로고침해도 고른 값이 남게. 고를 때마다 이 탭에만 저장(sessionStorage)하고,
+//   이 화면(또는 만드는 중 화면)을 새로고침했을 때만 되살려요. 새 여행을 시작할 때는 되살리지 않아요
+const SAVE_KEY = 'tripbiseo.planInfo'
+const SAVED_FIELDS = ['planArea', 'planAreas', 'planStartDate', 'planEndDate', 'planFromTime', 'planToTime', 'planOrigin', 'planStays',
+  'planKinds', 'planTags', 'planPeople', 'planCompanion', 'planMoves', 'planStep', 'planConditions']
+restoreAfterReload()
+watch(() => SAVED_FIELDS.map((field) => store[field]), savePlanInfo, { deep: true })
+
+function savePlanInfo() {
+  const data = {}
+  for (const field of SAVED_FIELDS) data[field] = store[field]
+  try {
+    sessionStorage.setItem(SAVE_KEY, JSON.stringify(data))
+  } catch (e) {
+    // 저장이 막힌 브라우저면 그냥 넘어감 (새로고침하면 처음부터)
+  }
+}
+
+function restoreAfterReload() {
+  if (isRestoreChecked) return
+  isRestoreChecked = true
+  const page = performance.getEntriesByType('navigation')[0] // 이 페이지를 처음 연 방법 (새로고침이면 type이 'reload')
+  if (!page || page.type !== 'reload') return
+  if (!page.name.includes('/plan/info') && !page.name.includes('/plan/generating')) return
+  try {
+    const data = JSON.parse(sessionStorage.getItem(SAVE_KEY))
+    if (!data) return
+    for (const field of SAVED_FIELDS) {
+      if (field in data) store[field] = data[field]
+    }
+  } catch (e) {
+    // 저장한 값이 깨졌으면 처음부터
+  }
+}
+
 const step = computed(() => STEPS[store.planStep] || STEPS[0])
 const isLast = computed(() => store.planStep === STEPS.length - 1)
 const progress = computed(() => Math.round(((store.planStep + 1) / STEPS.length) * 100) + '%')
@@ -65,15 +104,13 @@ const canNext = computed(() => !step.value.isRequired || !!store.planArea)
 const YOUTUBE_WORD = '서울 핫플 브이로그'
 const NAVER_WORD = '서울 가볼만한곳'
 const INSTAGRAM_ACCOUNT_URL = 'https://www.instagram.com/yeohaenge_ottae/' // 여행어때 인스타그램 계정 (모든 계정 같음)
+// 11/13: 실제 제휴가 아닌 "착착트립 파트너스" 인증 배지·방송 이미지(먹을텐데·흑백요리사)·미쉐린 로고는 뺌. 실제로 여는 검색 바로가기만 둠
 const SEARCH_LINKS = [
-  { key: 'mukeul', label: '먹을텐데', caption: '착착트립 파트너스', isVerified: true, img: '/img/shortcut/mukeul.jpg', text: '유튜브에서 먹을텐데 서울 찾기', url: () => 'https://www.youtube.com/results?search_query=' + encodeURIComponent('성시경 먹을텐데 서울') },
   { key: 'youtube', label: 'YouTube', logo: youtubeLogo, cls: 'pa-sns--yt', url: () => 'https://www.youtube.com/results?search_query=' + encodeURIComponent(YOUTUBE_WORD) },
   { key: 'instagram', label: 'Instagram', labelCls: 'pa-sns__script', logo: instagramLogo, cls: 'pa-sns--ig', url: () => INSTAGRAM_ACCOUNT_URL }, // 11/08 주형: 인스타는 우리 계정 페이지로
   { key: 'naver', label: '네이버', logo: naverLogo, cls: 'pa-sns--nv', url: () => 'https://search.naver.com/search.naver?query=' + encodeURIComponent(NAVER_WORD) }, // 통합검색: 플레이스 지도·사진 목록이 나와요
   // 캐치테이블: 아이콘은 공식 사이트 favicon. 주소는 캐치테이블 웹에서 "서울"을 검색했을 때 뜨는 지도 + 가게 목록 화면
   { key: 'catchtable', label: '캐치테이블', img: '/img/shortcut/catchtable.png', text: '캐치테이블에서 서울 가게 찾기', url: () => 'https://app.catchtable.co.kr/ct/map/search-map?showTabs=true&bottomSheetHeightType=PARTIAL_MAP&serviceType=INTEGRATION&keyword=' + encodeURIComponent('서울') + '&keywordSearch=' + encodeURIComponent('서울') + '&isInitSearch=1' },
-  { key: 'blackwhite', label: '흑백요리사', img: '/img/shortcut/blackwhite.jpg', isTitle: true, text: '네이버에서 흑백요리사 찾기', url: () => 'https://search.naver.com/search.naver?query=' + encodeURIComponent('흑백요리사') },
-  { key: 'michelin', label: '미쉐린 가이드', img: '/img/shortcut/michelin.png', isLogo: true, text: '미쉐린 가이드 사이트 열기', url: () => 'https://guide.michelin.com/kr/ko' },
 ]
 const PLATFORM_LABEL = { instagram: '인스타', youtube: 'YouTube', naver: '네이버' }
 const recommended = ref([]) // 추천 게시물 (없으면 칸을 숨김)
@@ -245,14 +282,31 @@ const stayNights = computed(() => {
   return total
 })
 // 일차 칸 글: 위 "2일차"(당일치기면 "당일"), 아래 "12/5"
+// 11/13: 예약이 여행 날짜·시간 밖인지 (밖이면 서버가 말없이 마지막 날로 옮기거나 끝에 붙여서 화면에서 미리 알림)
+//   날짜: 여행 일수보다 뒤 / 시간: 첫날은 시작 시각 전, 마지막 날은 끝 시각 뒤 (가운데 날은 시간 검사 안 함)
+function fixedOutsideText(item) {
+  const day = item.day || 1
+  if (day > nights.value + 1) return '여행 날짜 밖이에요 · 그대로 만들면 마지막 날로 들어가요'
+  const isFirstDay = day === 1
+  const isLastDay = day === nights.value + 1
+  if (isFirstDay && store.planFromTime && item.time < store.planFromTime) return '여행 시작 시각(' + store.planFromTime + ') 전이에요'
+  if (isLastDay && store.planToTime && item.time >= store.planToTime) return '여행 끝 시각(' + store.planToTime + ') 뒤예요 · 그대로 만들면 일정 끝에 붙어요'
+  return ''
+}
+const hasOutsideFixed = computed(() => fixedList.value.some((item) => fixedOutsideText(item) !== ''))
+let isOutsideWarned = false // 밖인 예약이 있을 때 [일정 만들기]를 한 번은 막고 알려 줬는지
+
 function dayTileOf(day) {
   const index = (day || 1) - 1
   return { title: nights.value ? index + 1 + '일차' : '당일', date: toMonthDay(addDays(store.planStartDate, index)) }
 }
 // 꼭 지킬 시간 빼기 (일정 만들기 조건과 직접 고르기 초안에서 같이)
-function removeFixed(name) {
-  store.planConditions = { ...store.planConditions, fixed: fixedList.value.filter((item) => item.name !== name) }
-  store.draft.stops = store.draft.stops.filter((stop) => !(stop.fixed && stop.name === name))
+// 예약 하나만 빼기 (11/13: 이름으로만 지워서 같은 이름 예약이 둘이면 X 하나에 둘 다 빠지던 문제)
+function removeFixed(index) {
+  const target = fixedList.value[index]
+  store.planConditions = { ...store.planConditions, fixed: fixedList.value.filter((item, i) => i !== index) }
+  const stopIndex = store.draft.stops.findIndex((stop) => stop.fixed && stop.name === target.name && stop.time === target.time)
+  if (stopIndex >= 0) store.draft.stops.splice(stopIndex, 1)
 }
 // 칩 켜고 끄기 (코드 목록에 넣거나 빼기)
 function toggleCode(list, code) {
@@ -297,13 +351,28 @@ function moveStep(direction) {
   let next = store.planStep + direction
   if (STEPS[next] && STEPS[next].id === 'dong' && !store.planAreas.length) next += direction
   store.planStep = next
+  // 11/13: 단계를 주소(?step=)에도 적어서 폰·브라우저 뒤로가기가 앞 단계로 가게. 앞으로 갈 때만 기록을 쌓고, 뒤로 갈 때는 바꾸기만
+  const query = { ...route.query, step: String(next) }
+  if (direction > 0) router.push({ query })
+  else router.replace({ query })
 }
+
+// 브라우저 뒤로·앞으로로 주소의 단계가 바뀌면 화면 단계도 맞춤
+watch(() => route.query.step, (value) => {
+  if (route.path !== '/plan/info') return
+  const stepIndex = Number(value || 0)
+  if (stepIndex !== store.planStep) store.planStep = stepIndex
+})
 
 // 다음 칸으로 (이미 고른 지역 칸은 건너뜀). 마지막 칸이면 바로 일정 만들기로
 // (11/06: 단계에서 다 물어봐서 "원하는 것 말하기" 대화 화면은 흐름에서 뺌. 화면 파일·주소는 남겨 둠)
 function goNext() {
   if (!canNext.value) return showToast('어디로 가는지 알려 주세요')
   if (isLast.value) {
+    if (hasOutsideFixed.value && !isOutsideWarned) {
+      isOutsideWarned = true
+      return showToast('여행 날짜·시간 밖 예약이 있어요 · 고치거나, 그대로 만들려면 한 번 더 눌러 주세요')
+    }
     saveConditions()
     if (!byMe) store.planMessages = [] // 예전 대화가 남아 있으면 일정 만들기에 섞이지 않게
     router.push(byMe ? '/plan/manual' : '/plan/generating')
@@ -315,24 +384,33 @@ function goPrev() {
   if (store.planStep === 0) return goBack('/new')
   moveStep(-1)
 }
-// 인스타로 담으면: 지역이 정해졌으니 "어디로"를 건너뛰고 "언제"로
+// 인스타로 담으면: 담은 곳의 구를 지도에도 미리 골라 두고 "어디로" 단계로 (11/13: 예전엔 "어디로·동"을 건너뛰어서 지역을 확인할 수 없었어요)
 function onLinkAdded() {
-  store.planStep = store.planArea ? STEPS.findIndex((item) => item.id === 'when') : STEPS.findIndex((item) => item.id === 'where')
+  const area = store.planArea
+  if (area && area.isAuto && !store.planAreas.length) {
+    store.planAreas = [{ name: area.name, lat: area.lat, lng: area.lng, dongs: [] }] // 지도(GuMapPicker)가 쓰는 모양
+  }
+  store.planStep = STEPS.findIndex((item) => item.id === 'where')
 }
 // 검색 화면으로 갈 때 표시해 두면, 고르고 돌아왔을 때 바로 다음 칸으로
 function markAutoNext() {
   store.planAutoNext = true
 }
+// 공유로 들어온 링크(/share → ?link=)가 있으면 링크 칸에 채워 둠 (11/13)
+onMounted(() => {
+  if (typeof route.query.link === 'string' && wishLinks.value) wishLinks.value.fill(route.query.link)
+})
 onMounted(() => {
   if (!store.planAutoNext) return
   store.planAutoNext = false
   const isPicked = (step.value.id === 'where' && store.planArea) || (step.value.id === 'from' && store.planOrigin)
   if (isPicked) moveStep(1)
 })
-// 시연 계정(개발자 모드): 발표 이야기대로 출발지(가마산로 242)·이미 잡은 KTX·숙소를 미리 채워 둠 (11/08 주형)
+// 시연 계정(개발자 모드): 발표 이야기대로 출발지(11/12 종로3가역)를 미리 채워 둠 (11/08 주형)
 //   값은 서버 plan/service/DemoScenario.java 한 곳에 있어요. 사용자가 이미 고른 칸은 안 덮어써요
 const scenario = ref(null)
-const BOARDING_EARLY_MIN = 30 // 시나리오(DEMO.md): KTX 30분 전 서울역 도착
+const BOARDING_EARLY_MIN = 30 // 마지막 날 예약이 역·터미널이면 30분 전 도착
+const MEAL_AFTER_MIN = 90 // 마지막 날 예약이 식당이면 먹고 끝 (11/12 촬영 시나리오: 스시도 12:30 → 14:00 해산)
 onMounted(async () => {
   if (!devMode.isOn) return
   try {
@@ -342,20 +420,30 @@ onMounted(async () => {
   }
   const setup = scenario.value
   if (!store.planOrigin) store.planOrigin = { name: setup.originName, address: setup.originAddress, category: '출발지', lat: setup.originLat, lng: setup.originLng }
-  // 예약(문래 골목집 회식·서울역 KTX)은 미리 넣지 않음. 발표자가 "예약한 곳" 단계에서 장소 검색으로 직접 넣어요 (11/09 상재 제보)
+  // 예약(산청숯불가든 회식·스시도)은 미리 넣지 않음. 발표자가 "예약한 곳" 단계에서 장소 검색으로 직접 넣어요 (11/09 상재 제보)
 })
 // 숙소는 미리 넣지 않음 (11/08 주형: 시연에서 숙소 단계에서 직접 찾아 넣는 모습을 보여 줌)
 
+// 예약 중 마지막 날·가장 늦은 시각인 것 (시연 계정 끝 시각 기준)
+function lastFixedOf(fixedList) {
+  let last = fixedList[0]
+  for (const item of fixedList) {
+    const isLater = item.day > last.day || (item.day === last.day && toMinutes(item.time) > toMinutes(last.time))
+    if (isLater) last = item
+  }
+  return last
+}
 // "시간 추천": 추천 시작·끝 시각으로 맞춤 (지금은 기본값, 통계가 오면 utils/timeRecommend.js만 바꿈)
 function useRecommendedTime() {
-  // 시연 계정: 시나리오 시각으로 (11/08 주형). 시작은 첫날(가마산로 출발 15:00), 끝은 마지막 날(KTX 15분 전 도착)
-  //   값은 서버 DemoScenario.java 한 곳 (startTime, fixed KTX). 시작·끝은 PlanRuleMaker가 첫날·마지막 날에만 써요
+  // 시연 계정: 시나리오 시각으로 (11/08 주형). 시작은 첫날(11/12 종로3가 11:30), 끝은 마지막 날 예약 기준
+  //   값은 서버 DemoScenario.java 한 곳 (startTime, fixed). 시작·끝은 PlanRuleMaker가 첫날·마지막 날에만 써요
   if (scenario.value) {
-    const train = scenario.value.fixed.find((item) => item.day > 1) || scenario.value.fixed[0] // 마지막 날 KTX
-    const end = toTime(toMinutes(train.time) - BOARDING_EARLY_MIN)
+    const last = lastFixedOf(scenario.value.fixed) // 마지막 날 가장 늦은 예약 (11/12: 16:00 동서울터미널 버스)
+    const isBoarding = /역$|터미널|공항/.test(last.name)
+    const end = toTime(toMinutes(last.time) + (isBoarding ? -BOARDING_EARLY_MIN : MEAL_AFTER_MIN))
     store.planFromTime = scenario.value.startTime
     store.planToTime = end
-    showToast('추천 시간 ' + scenario.value.startTime + '~' + end + '로 맞췄어요') // 11/09: 일반 계정과 같은 문구 (아직 안 넣은 KTX·서울역을 미리 말하지 않음)
+    showToast('추천 시간 ' + scenario.value.startTime + '~' + end + '로 맞췄어요') // 11/09: 일반 계정과 같은 문구 (아직 안 넣은 예약을 미리 말하지 않음)
     return
   }
   // 오늘 여행이면 지금 이후로 맞추고 날짜는 그대로 (하루가 거의 끝났을 때만 내일로, 11/09)
@@ -371,7 +459,7 @@ function useRecommendedTime() {
   <div class="scr scr-PlanAI">
     <div class="app" :class="{ 'pa-app--kind': step.id === 'kind' }">
       <header class="topbar">
-        <button type="button" class="iconbtn" aria-label="내 여행으로" @click="router.push('/trips')"><i class="ic ic--l i-back" aria-hidden="true"></i></button>
+        <button type="button" class="iconbtn" aria-label="이전 단계로" @click="goPrev"><i class="ic ic--l i-back" aria-hidden="true"></i></button>
         <div class="pa-bar" role="progressbar" :aria-valuenow="store.planStep + 1" aria-valuemin="1" :aria-valuemax="STEPS.length"><span :style="{ width: progress }"></span></div>
         <span class="topbar__side tn">{{ store.planStep + 1 }} / {{ STEPS.length }}</span>
       </header>
@@ -387,8 +475,12 @@ function useRecommendedTime() {
           <WishLinks ref="wishLinks" @added="onLinkAdded" />
         </section>
 
-        <section v-if="step.id === 'link'" class="pa-sns-sec" aria-label="여긴어때?">
-          <h2 class="t-sub" style="margin: 0">여긴어때?</h2>
+        <section v-if="step.id === 'link'" class="pa-sns-sec" aria-label="어디서 봤어요?">
+          <!-- 11/13 주형: 제목 옆에 트리피(여행 중 화면과 같은 그림) + 한 줄 -->
+          <div class="pa-trippie">
+            <img src="/img/trippie-flag.webp" alt="" class="pa-trippie__img" aria-hidden="true" draggable="false" />
+            <span class="pa-trippie__text"><h2 class="t-sub" style="margin: 0">어디서 봤어요?</h2><span class="t-cap">링크만 주면 트리피가 찾아올게요</span></span>
+          </div>
           <div class="pa-sns">
             <a v-for="item in SEARCH_LINKS" :key="item.key" class="pa-sns__tile" :href="item.url()" target="_blank" rel="noopener noreferrer" :aria-label="(item.text || item.label + '에서 서울 찾기') + ' (새 창)'">
               <small v-if="item.caption" class="pa-sns__caption">{{ item.caption }}</small>
@@ -396,7 +488,7 @@ function useRecommendedTime() {
                 <img v-if="item.img" :src="item.img" :class="{ 'is-logo': item.isLogo, 'is-title': item.isTitle }" alt="" draggable="false" />
                 <i v-else class="pa-sns__logo" :style="{ '--logo': `url(&quot;${item.logo}&quot;)` }" aria-hidden="true"></i>
               </span>
-              <span class="pa-sns__name"><b :class="item.labelCls">{{ item.label }}</b><VerifiedBadge v-if="item.isVerified" /></span>
+              <span class="pa-sns__name"><b :class="item.labelCls">{{ item.label }}</b></span>
             </a>
           </div>
         </section>
@@ -491,11 +583,11 @@ function useRecommendedTime() {
             <ChoiceCard to="/plan/search?mode=fixed" icon="i-search" title="장소 검색" desc="식당·공연 이름으로" />
             <ChoiceCard to="/plan/capture" icon="i-camera" title="예약 캡처" desc="예약 문자·화면으로" />
           </div>
-          <div v-for="item in fixedList" :key="item.name" class="stop is-fixed" style="grid-template-columns: 1fr">
+          <div v-for="(item, index) in fixedList" :key="item.name + item.day + item.time" class="stop is-fixed" style="grid-template-columns: 1fr">
             <div class="stop__card">
               <span class="day-tile"><b>{{ dayTileOf(item.day).title }}</b><span>{{ dayTileOf(item.day).date }}</span></span>
-              <span class="stop__body"><span class="stop__name">{{ item.name }}</span><span class="stop__meta"><b class="c-navy tn">{{ item.time }}</b> · 시간 고정</span></span>
-              <button type="button" class="iconbtn" :aria-label="item.name + ' 빼기'" @click="removeFixed(item.name)"><i class="ic i-close muted" aria-hidden="true"></i></button>
+              <span class="stop__body"><span class="stop__name">{{ item.name }}</span><span class="stop__meta"><b class="c-navy tn">{{ item.time }}</b> · 시간 고정</span><span v-if="fixedOutsideText(item)" class="row__meta c-warning">{{ fixedOutsideText(item) }}</span></span>
+              <button type="button" class="iconbtn" :aria-label="item.name + ' 빼기'" @click="removeFixed(index)"><i class="ic i-close muted" aria-hidden="true"></i></button>
             </div>
           </div>
           <button v-if="!fixedList.length" type="button" class="textlink" style="align-self: center" @click="goNext">예약 없어요</button>
@@ -533,6 +625,9 @@ function useRecommendedTime() {
 .scr-PlanAI .pa-sns__ic:has(img.is-title){overflow:hidden;border-radius:14px;background:#000}
 .scr-PlanAI .pa-sns__ic img.is-title{transform:scale(1.25)}
 .scr-PlanAI .pa-sns__ic img.is-logo{object-fit:contain;padding:0 4px;background:#fff;box-sizing:border-box;box-shadow:inset 0 0 0 1px var(--line)}
+.scr-PlanAI .pa-trippie{display:flex;align-items:center;gap:10px}
+.scr-PlanAI .pa-trippie__img{width:40px;height:40px;flex:none;object-fit:contain;-webkit-user-drag:none}
+.scr-PlanAI .pa-trippie__text{display:flex;flex-direction:column;gap:2px;min-width:0}
 .scr-PlanAI .pa-sns{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
 .scr-PlanAI .pa-sns__tile{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:104px;border:1.5px solid var(--line);border-radius:16px;background:var(--surface-raised);text-decoration:none;color:var(--ink);transition:border-color .15s,transform .1s}
 .scr-PlanAI .pa-sns__tile:hover{border-color:var(--navy)}

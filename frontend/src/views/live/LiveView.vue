@@ -13,11 +13,13 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useLiveTrip } from '@/utils/useLiveTrip'
 import { imageFor } from '@/utils/mapView'
-import { toMinutes, toTime } from '@/utils/time'
+import { toDuration, toMinutes, toTime } from '@/utils/time'
 import { showToast } from '@/utils/toast'
 import { goBack } from '@/utils/back'
 import { rememberAlert, shouldOpenAlert } from '@/utils/alertMemory'
 import { finishTrip, getTripPhotos, skipStop } from '@/api/trips'
+import { chatKey, clearChat } from '@/utils/askChat'
+import { loadPhoto } from '@/utils/placePhoto'
 import BottomSheet from '@/components/common/BottomSheet.vue'
 import AppNoti from '@/components/common/AppNoti.vue'
 import PageMessage from '@/components/common/PageMessage.vue'
@@ -34,6 +36,7 @@ import { devMode, isFakeGps, setFakeGps } from '@/utils/devMode'
 import { isBoardingPlace, missTrainTitle } from '@/utils/departure'
 import SegSheet from '@/components/live/SegSheet.vue'
 import AskPanel from '@/components/live/AskPanel.vue'
+import InsertSlotSheet from '@/components/live/InsertSlotSheet.vue'
 import NearSearch from '@/components/after/NearSearch.vue'
 import SimilarSearch from '@/components/live/SimilarSearch.vue'
 import LinkAddSheet from '@/components/live/LinkAddSheet.vue'
@@ -114,6 +117,14 @@ const stops = computed(() => {
 const currentStop = computed(() => stops.value.find((stop) => stop.reach === 'here') || null)
 const remainingStops = computed(() => stops.value.filter((stop) => stop.reach !== 'done' && stop.reach !== 'here'))
 const nextStop = computed(() => remainingStops.value[0] || null)
+// 지금 있는 곳·남은 일정의 장소 id: 검색 결과 카드에서 이미 일정에 있는 곳은 [일정에 넣기] 대신 '일정에 있어요' (11/13)
+const plannedPlaceIds = computed(() => {
+  const ids = []
+  for (const stop of stops.value) {
+    if (stop.reach !== 'done' && stop.placeId) ids.push(stop.placeId)
+  }
+  return ids
+})
 
 // 이동 중(장소를 떠나 다음 장소로 가는 길): 지도가 내 위치를 크게 확대해 따라가고, 내 위치 점에 진행 방향 화살표 (11/09 시연 피드백)
 // 시연 가짜 GPS가 움직이는 중(demoRoute)이면 서버가 '떠났다'고 답하기 전이라도 바로 따라가요 (출발 직후 시점이 안 따라가던 문제)
@@ -322,15 +333,24 @@ const mapPins = computed(() => {
     const isFit = !(adding.value && nearPlaces.value.length) && !askPlaces.value.length // 근처 찾기·AI 결과가 있으면 결과·내 위치만 보이게 맞춤
     // 다녀온 곳·지금 있는 곳은 점선 동선에서 빼요 (지금 위치 → 다음 장소는 nextPath 진짜 길로)
     const isRoute = stop.reach !== 'done' && stop.reach !== 'here'
-    pins.push({ key: stop.id, id: stop.id, tag: previewId.value === stop.id ? stop.name : '', lat: stop.lat, lng: stop.lng, text: stop.no, icon: pinIcon(stop), cls: pinClass(stop), label: stop.no + ' ' + stop.name, fit: isFit, route: isRoute })
+    const no = shownNo(stop) // 넣을 순서를 고르는 중이면 넣은 뒤 번호
+    pins.push({ key: stop.id, id: stop.id, tag: previewId.value === stop.id ? stop.name : '', lat: stop.lat, lng: stop.lng, text: no, icon: pinIcon(stop), cls: pinClass(stop), label: no + ' ' + stop.name, fit: isFit, route: isRoute })
+  }
+  if (slotPlace.value) {
+    // 넣을 장소: 일정 핀처럼 번호로 (코랄). 순서를 옮기면 번호도 같이 바뀜
+    const no = slotFirstNo.value + slotIndex.value
+    pins.push({ key: 'slot-' + slotPlace.value.id, lat: slotPlace.value.lat, lng: slotPlace.value.lng, text: no, cls: ' pin--new pin--sel', label: no + ' ' + slotPlace.value.name + ' (새로)', route: false })
+    return pins
   }
   for (const place of nearPlaces.value) {
+    if (slotPlace.value && place.id !== slotPlace.value.id) continue // 자리 고르기 중에는 넣을 장소 핀만
     const cls = ' pin--res' + (place.id === nearPickedId.value ? ' pin--sel' : '')
     pins.push({ key: 'near-' + place.id, nearId: place.id, lat: place.lat, lng: place.lng, icon: nearIcon(place.category), cls, label: place.name + ', ' + distText(place.distance), route: false })
   }
   for (const place of askPlaces.value) {
+    if (slotPlace.value && place.id !== slotPlace.value.id) continue
     const cls = ' pin--res' + (place.id === askPickedId.value ? ' pin--sel' : '')
-    const tag = place.detourMinutes != null ? '+' + place.detourMinutes + '분' : '' // 가는 길에서 몇 분 더 (번호는 일정 번호와 헷갈려서 아이콘으로)
+    const tag = place.detourMinutes != null ? '+' + toDuration(place.detourMinutes) : '' // 가는 길에서 몇 분 더 (번호는 일정 번호와 헷갈려서 아이콘으로)
     pins.push({ key: 'ask-' + place.id, askId: place.id, lat: place.lat, lng: place.lng, icon: nearIcon(place.category), tag, cls, label: place.name + (tag ? ', 가는 길 ' + tag : ''), route: false })
   }
   return pins
@@ -350,7 +370,7 @@ const askLinks = computed(() => {
   return links
 })
 const askFitKey = computed(() => (askPlaces.value.length ? 'ask|' + askPlaces.value.map((place) => place.id).join(',') : ''))
-const ASK_MAP_PADDING = { top: 100, right: 40, bottom: 300, left: 40 } // AI 채팅: 아래 채팅 패널만큼 비움
+const ASK_MAP_PADDING = { top: 100, right: 40, bottom: 440, left: 40 } // AI 채팅: 아래 채팅 패널(대화 + 카드 줄)만큼 비움
 
 function toBandRings(geojson) {
   let shape = null
@@ -367,6 +387,16 @@ function toBandRings(geojson) {
   }
   return rings
 }
+// 핀을 고르면 그 장소 카드의 진짜 사진을 받아 둠 (11/13). 길은 넣을 자리를 고를 때 전체 경로로 보여 줘요
+const pickedPlace = computed(() => {
+  if (askPickedId.value) return askPlaces.value.find((place) => place.id === askPickedId.value) || null
+  if (nearPickedId.value) return nearPlaces.value.find((place) => place.id === nearPickedId.value) || null
+  return null
+})
+watch(pickedPlace, (place) => {
+  if (place) loadPhoto(place.id)
+})
+
 function onAskFound(found) {
   askFound.value = found
   askPickedId.value = null
@@ -451,18 +481,18 @@ const head = computed(() => {
     const leaveAt = isTrain ? toMinutes(current.time) : start + (current.stay || 0)
     const left = leaveAt - now
     if (left >= 0) {
-      return { cap: current.name + ' 출발', big: toTime(leaveAt), strong: left + '분 남음', cls: '' }
+      return { cap: current.name + ' 출발', big: toTime(leaveAt), strong: toDuration(left) + ' 남음', cls: '' }
     }
     const next = nextStop.value
     if (!next || !next.fixed) { // 다음이 예약이 아니면 더 있어도 경고하지 않음 (뒤 일정이 밀릴 뿐, 11/08 주형)
-      return { cap: current.name + '에서', big: '+' + -left + '분', small: '계획보다 더 머무는 중', cls: '' }
+      return { cap: current.name + '에서', big: '+' + toDuration(-left), small: '계획보다 더 머무는 중', cls: '' }
     }
-    return { cap: '출발 시간 지남', big: '+' + -left + '분', small: toTime(leaveAt) + ' 출발', cls: 'c-warning' }
+    return { cap: '출발 시간 지남', big: '+' + toDuration(-left), small: toTime(leaveAt) + ' 출발', cls: 'c-warning' }
   }
   const next = nextStop.value
   if (next) {
     const label = doneCount.value === 0 ? '첫 장소 ' : '다음 '
-    const move = next.moveMin != null ? ' ' + (MODE_LABEL[next.moveMode] || '') + ' ' + next.moveMin + '분' : ''
+    const move = next.moveMin != null ? ' ' + (MODE_LABEL[next.moveMode] || '') + ' ' + toDuration(next.moveMin) : ''
     return { cap: label + next.name + '까지' + move, big: next.eta, strong: '도착 예정', cls: isWarnReach(next.reach) ? 'c-warning' : '' }
   }
   return { cap: '오늘 일정을 모두 다녀왔어요', big: status.value.now, strong: '지금', cls: '' }
@@ -471,7 +501,7 @@ const head = computed(() => {
 const fixedBadge = computed(() => {
   if (!fixed.value) return null
   const slack = fixed.value.slackMin
-  return { cls: slack < 0 ? 'badge--warning' : 'badge--success', text: fixed.value.name + (slack < 0 ? ' ' + -slack + '분 늦음' : ' 여유 ' + slack + '분') }
+  return { cls: slack < 0 ? 'badge--warning' : 'badge--success', text: fixed.value.name + (slack < 0 ? ' ' + toDuration(-slack) + ' 늦음' : ' 여유 ' + toDuration(slack)) }
 })
 
 // ------------------------------------------------------------ 장소 사진 (11/09 상재 요청)
@@ -591,18 +621,12 @@ function locate() {
   showToast('아직 지금 위치를 받지 못했어요')
 }
 
-// 오늘 일정 전체가 한 화면에 보이게 지도를 맞춤 (다녀온 곳 + 남은 곳 + 내 위치)
-function showAllRoute() {
-  previewId.value = null
-  if (mapRef.value) mapRef.value.fitAll()
-}
-
 // 같이 간 사람에게 남은 일정 보내기 (휴대폰 공유 창, 없으면 글자 복사)
 async function share() {
   const lines = [(live.trip.value ? live.trip.value.title : '여행') + ' · 지금 ' + status.value.now]
   if (currentStop.value) lines.push('지금 ' + currentStop.value.name)
   for (const stop of remainingStops.value) lines.push(stop.eta + ' ' + stop.name + (stop.fixed ? ' (고정 ' + stop.time + ')' : ''))
-  if (fixed.value) lines.push(fixed.value.name + (fixed.value.slackMin < 0 ? ' ' + -fixed.value.slackMin + '분 늦을 것 같아요' : ' 여유 ' + fixed.value.slackMin + '분'))
+  if (fixed.value) lines.push(fixed.value.name + (fixed.value.slackMin < 0 ? ' ' + toDuration(-fixed.value.slackMin) + ' 늦을 것 같아요' : ' 여유 ' + toDuration(fixed.value.slackMin)))
   const text = lines.join('\n')
   try {
     if (navigator.share) {
@@ -674,6 +698,36 @@ async function onAdded(message) {
   showToast(message)
   await live.refresh()
 }
+// 일정에 넣기 → 넣을 자리 고르기 (11/13). 시트가 고른 자리로 계산한 전체 경로를 지도에 그리고 화면을 맞춤
+const slotPlace = ref(null) // 넣을 장소 (시트가 열려 있으면)
+const slotPath = ref([]) // 고른 자리로 계산한 전체 경로선
+const slotIndex = ref(0) // 새 장소 자리 (0이면 남은 첫 칸 앞)
+const slotFirstNo = computed(() => (remainingStops.value.length ? remainingStops.value[0].no : stops.value.length + 1)) // 남은 첫 칸 번호
+// 지도 핀 번호: 넣을 순서를 고르는 중이면 새 장소 자리부터 뒤 칸은 하나씩 밀림
+function shownNo(stop) {
+  if (!slotPlace.value) return stop.no
+  const index = remainingStops.value.findIndex((item) => item.id === stop.id)
+  return index >= 0 && index >= slotIndex.value ? stop.no + 1 : stop.no
+}
+const SLOT_MAP_PADDING = { top: 110, right: 56, bottom: 440, left: 56 } // 아래 자리 고르기 시트만큼 비움
+function openSlotSheet(place) {
+  slotPlace.value = place
+  slotPath.value = []
+  slotIndex.value = 0
+}
+function closeSlotSheet() {
+  slotPlace.value = null
+  slotPath.value = []
+}
+function onSlotRoute(coords) {
+  slotPath.value = coords
+  if (coords.length > 1 && mapRef.value) mapRef.value.fitPoints(coords, SLOT_MAP_PADDING)
+}
+async function onSlotAdded(message) {
+  closeSlotSheet()
+  await onAdded(message)
+}
+
 async function onAskAdd(place) {
   await onAdded(place.message || place.name + '을(를) 다음 일정으로 넣었어요')
 }
@@ -683,6 +737,7 @@ async function finish() {
   isFinishing.value = true
   try {
     await finishTrip(live.tripId.value)
+    clearChat(chatKey(live.trip.value)) // 끝난 여행의 AI 대화는 이 브라우저에서 지움
     router.replace('/retro?id=' + live.tripId.value)
   } catch (e) {
     showToast(e.message)
@@ -691,14 +746,22 @@ async function finish() {
 }
 
 // ------------------------------------------------------------ 여행 끝 (11/06)
-// 마지막 날의 마지막 칸이 고정 일정(KTX 같은)이고 거기 도착하면 → 끝 시트(총 지출) → "회고 보기"로 여행 끝내기
+// 마지막 날의 마지막 칸에 도착하면 → 끝 시트(총 지출) → "회고 보기"로 여행 끝내기
+// 11/12 ④: 고정 일정이 아니어도 띄움 (마지막이 카페처럼 느슨한 칸이면 여행이 안 끝나던 문제). 닫았거나 일찍 끝낼 때는 카드 줄 끝 [여행 끝내기]
 const endStop = ref(null) // 끝 시트를 띄운 칸 { name, eta }
 let isEndShown = false // 닫아도 다시 안 띄움
+const isAskingEnd = ref(false) // [여행 끝내기] 카드를 눌러 한 번 더 묻는 중
+
+// [여행 끝내기] 확인: 여행을 끝내고 회고로
+function confirmEnd() {
+  isAskingEnd.value = false
+  finish()
+}
 
 watch(status, () => {
   if (isEndShown || !status.value || !live.trip.value) return
   const last = status.value.stops[status.value.stops.length - 1]
-  if (!last || !last.fixed || (last.reach !== 'here' && last.reach !== 'done')) return
+  if (!last || (last.reach !== 'here' && last.reach !== 'done')) return
   if (!isLastDayStop(last.id)) return
   isEndShown = true
   endStop.value = { name: last.name, eta: status.value.now, time: last.time }
@@ -732,6 +795,25 @@ function restartMoving() {
       <DevDot @clock="live.refresh()" @gps="restartMoving" />
       <DemoDrive :live="live" /><!-- 시연 계정만: 작은 "다음 장소로" 버튼 (GPS 이동 + 시계 배속만 자동, 11/08) -->
       <TripEndSheet v-if="endStop && live.trip.value" :trip="live.trip.value" :place-name="endStop.name" :arrived-at="endStop.eta" :planned-at="endStop.time" :is-busy="isFinishing" @finish="finish" @close="endStop = null" />
+      <!-- 여행 끝내기 확인 (11/12): 여행을 마친 트리피가 맞아 주는 창. 위 그림 → 글 → 버튼 -->
+      <template v-if="isAskingEnd">
+        <div class="dim" style="z-index: 8" @click="isAskingEnd = false"></div>
+        <section class="modal end-modal" role="alertdialog" aria-modal="true" aria-labelledby="end-modal-title" style="z-index: 9">
+          <div class="end-modal__art" aria-hidden="true">
+            <span class="end-modal__glow"></span>
+            <img src="/img/trippie-flag.webp" alt="" class="end-modal__img" />
+          </div>
+          <div class="end-modal__text">
+            <span class="end-modal__eyebrow">여행 수고했어요!</span>
+            <h2 id="end-modal-title" class="h-title">여기서 여행을 마무리할까요?</h2>
+            <p class="end-modal__desc">다녀온 길과 남긴 기록을<br />회고에서 돌아볼 수 있어요</p>
+          </div>
+          <div class="modal__btns">
+            <button type="button" class="btn btn--secondary btn--lg" @click="isAskingEnd = false">계속 여행</button>
+            <button type="button" class="btn btn--primary btn--lg" :disabled="isFinishing" @click="confirmEnd"><i class="ic i-flag" aria-hidden="true"></i>마무리하기</button>
+          </div>
+        </section>
+      </template>
       <!-- 진행 중인 여행이 없거나 위치를 기다릴 때 -->
       <template v-if="!isReady">
         <header class="topbar">
@@ -762,10 +844,11 @@ function restartMoving() {
           :follow="isFollowing"
           :smooth="devMode.isOn"
           :heading="devMode.isOn && isMoving ? heading : null"
-          :paths="nextPath"
+          :paths="slotPlace ? [] : nextPath"
           :ring="nearRing"
           :band="askBand"
           :links="askLinks"
+          :preview="slotPath"
           :fit-key="adding ? nearFitKey : askFitKey"
           :padding="mapPadding"
           @pick="onPickPin"
@@ -792,7 +875,7 @@ function restartMoving() {
         <LostFixedCard v-if="isLostOpen" :name="lostStop.name" :text="lostText" :can-find-similar="!!lostStop.placeId && !!lostStop.meal" :is-skipping="isSkipping" @similar="openSimilar" @skip="skipLost" @keep="keepLost" />
         <!-- 위쪽 알림 줄: 한 장씩, 닫아야(위로 밀기) 다음 알림 · 저절로 안 사라짐 (11/08 주형) -->
         <AppNoti
-          v-if="!isCardOpen && liveBanner.queue.length && !adding"
+          v-if="!isCardOpen && !isAskingEnd && liveBanner.queue.length && !adding"
           :key="liveBanner.queue[0].title + liveBanner.queue[0].body"
           :title="liveBanner.queue[0].title"
           :body="liveBanner.queue[0].body + (liveBanner.queue.length > 1 ? ' · 알림 ' + (liveBanner.queue.length - 1) + '개 더' : '')"
@@ -808,12 +891,12 @@ function restartMoving() {
           </template>
         </AppNoti>
         <!-- PC 마우스로도 한 번에 닫게 작은 닫기 버튼 (위로 밀기도 그대로) -->
-        <span v-if="!isCardOpen && liveBanner.queue.length && !adding" class="live-noti-at">{{ liveBanner.queue[0].at || '' }}</span>
-        <button v-if="!isCardOpen && liveBanner.queue.length && !adding" type="button" class="live-noti-x" aria-label="알림 닫기" @click="closeLiveNotice"><i class="ic ic--s i-close" aria-hidden="true"></i></button>
+        <span v-if="!isCardOpen && !isAskingEnd && liveBanner.queue.length && !adding" class="live-noti-at">{{ liveBanner.queue[0].at || '' }}</span>
+        <button v-if="!isCardOpen && !isAskingEnd && liveBanner.queue.length && !adding" type="button" class="live-noti-x" aria-label="알림 닫기" @click="closeLiveNotice"><i class="ic ic--s i-close" aria-hidden="true"></i></button>
         <!-- 다 닫으면 알약: 누르면 지금 알림을 다시 위에 -->
         <template v-else-if="status.alert && !isAlertMuted && !(isLateOff && isLateKey(status.alert.key)) && !adding">
           <button type="button" class="pill-alert live-pill" :aria-label="isLate ? '지연 알림 펼치기' : '알림 펼치기'" @click="openAlert(status.alert)">
-            <i class="ic ic--s i-warning" aria-hidden="true"></i><span class="tn">{{ isLate ? '+' + lateMin + '분' : '알림' }}</span><i class="ic ic--s i-down" aria-hidden="true"></i>
+            <i class="ic ic--s i-warning" aria-hidden="true"></i><span class="tn">{{ isLate ? '+' + toDuration(lateMin) : '알림' }}</span><i class="ic ic--s i-down" aria-hidden="true"></i>
           </button>
         </template>
 
@@ -824,7 +907,6 @@ function restartMoving() {
             <button type="button" role="menuitem" class="live-fab__item" @click="runFab(openLink)"><span class="live-fab__text">링크 추가</span><span class="live-fab__ic live-fab__ic--link"><i class="ic i-link" aria-hidden="true"></i></span></button>
             <button type="button" role="menuitem" class="live-fab__item" @click="runFab(openToday)"><span class="live-fab__text">내 일정 {{ doneCount }}/{{ stops.length }}</span><span class="live-fab__ic live-fab__ic--plan"><i class="ic i-calendar" aria-hidden="true"></i></span></button>
             <button type="button" role="menuitem" class="live-fab__item" @click="runFab(share)"><span class="live-fab__text">일정 공유</span><span class="live-fab__ic live-fab__ic--share"><i class="ic i-share" aria-hidden="true"></i></span></button>
-            <button type="button" role="menuitem" class="live-fab__item" @click="runFab(showAllRoute)"><span class="live-fab__text">전체 경로</span><span class="live-fab__ic live-fab__ic--plan"><i class="ic i-route" aria-hidden="true"></i></span></button>
           </div>
           <!-- 내 위치: + 위에 떠 있다가 메뉴를 열면 아래로 내려가며 사라짐 (메뉴가 + 바로 위에 뜨게) -->
           <button type="button" class="live-fab__me" :class="{ 'is-hidden': fabOpen }" aria-label="내 위치로" :aria-hidden="fabOpen" :tabindex="fabOpen ? -1 : 0" @click="locate"><i class="ic i-locate" aria-hidden="true"></i></button>
@@ -835,6 +917,20 @@ function restartMoving() {
         <LinkAddSheet v-if="linkOpen" :trip-id="live.tripId.value" :position="live.position.value" @close="linkOpen = false" @added="onLinkAdded" />
 
         <!-- 근처 찾기 (⑤) -->
+        <!-- 일정에 넣기 → 넣을 자리 고르기 (④ 11/13): 패널 자리에 띄우고, 패널은 숨기기만 (닫으면 대화·검색 결과 그대로) -->
+        <InsertSlotSheet
+          v-if="slotPlace"
+          :trip-id="live.tripId.value"
+          :position="live.position.value"
+          :place="slotPlace"
+          :stops="remainingStops"
+          :from-name="currentStop ? currentStop.name : '지금 위치'"
+          :first-no="slotFirstNo"
+          @route="onSlotRoute"
+          @slot="slotIndex = $event"
+          @added="onSlotAdded"
+          @close="closeSlotSheet"
+        />
         <!-- 놓친 예약과 비슷한 근처 가게 (④ 11/12): 근처 찾기와 같은 자리·같은 지도 핀 -->
         <SimilarSearch
           v-if="adding && similarStop"
@@ -848,9 +944,12 @@ function restartMoving() {
         />
         <NearSearch
           v-else-if="adding"
+          v-show="!slotPlace"
           v-model:picked-id="nearPickedId"
+          :planned="plannedPlaceIds"
           :trip-id="live.tripId.value"
           :position="live.position.value"
+          @choose="openSlotSheet"
           @results="onNearResults"
           @added="onAdded"
           @close="closeNear"
@@ -858,10 +957,15 @@ function restartMoving() {
 
         <template v-else>
           <!-- AI 채팅(④) -->
-          <AskPanel v-if="asking" :me="mePoint || { x: 195, y: 300 }" :late="isLate" :trip-id="live.tripId.value" :position="live.position.value" @close="asking = false" @add="onAskAdd" :selected="askPickedId" @found="onAskFound" @unpick="askPickedId = null" />
+          <!-- 자리 고르기 중에는 숨기기만 (AskPanel은 뿌리 요소가 둘이라 v-show를 감싸는 div에) -->
+          <div v-if="asking" v-show="!slotPlace">
+            <AskPanel :me="mePoint || { x: 195, y: 300 }" :late="isLate" :trip-id="live.tripId.value" :position="live.position.value" @close="asking = false" @add="onAskAdd" :selected="askPickedId" :chat-key="chatKey(live.trip.value)" :planned="plannedPlaceIds" @choose="openSlotSheet" @found="onAskFound" @pick="askPickedId = $event" />
+          </div>
           <div v-else class="quick live-quick" data-sheet-follow role="group" aria-label="AI 채팅과 근처 찾기">
-            <button type="button" class="chip chip--sm chip--add live-chip" @click="openAsk"><i class="ic ic--s i-sparkle" style="color: #7C3AED" aria-hidden="true"></i>AI에게 묻기</button>
-            <button type="button" class="chip chip--sm chip--add live-chip" @click="openNear"><i class="ic ic--s i-search" style="color: var(--coral)" aria-hidden="true"></i>근처 찾기</button>
+            <button type="button" class="chip chip--sm chip--add live-chip" @click="openAsk"><span class="live-chip__ic live-chip__ic--ai" aria-hidden="true"><i class="ic ic--s i-sparkle"></i></span>AI에게 묻기</button>
+            <button type="button" class="chip chip--sm chip--add live-chip" @click="openNear"><span class="live-chip__ic live-chip__ic--near" aria-hidden="true"><i class="ic ic--s i-search"></i></span>근처 찾기</button>
+            <!-- 결제 메모 입구 (11/12): 화면은 ⑤ PayMemoView (/live/pay) -->
+            <RouterLink to="/live/pay" class="chip chip--sm chip--add live-chip"><span class="live-chip__ic live-chip__ic--pay" aria-hidden="true"><i class="ic ic--s i-receipt"></i></span>결제 메모</RouterLink>
           </div>
 
           <!-- 아래 시트: 오늘 일정 카드 -->
@@ -879,7 +983,7 @@ function restartMoving() {
             </div>
 
             <button v-if="selectedMealFixed && !isLostOpen" type="button" class="btn btn--secondary btn--md" style="align-self: flex-start" @click="manualLostId = selectedMealFixed.id">못 가게 됐어요</button>
-            <LiveCards :cards="cards" :selected="selected" :auto-focus="devMode.isOn" :focus="cardFocus" @pick="pickCard" @seg="segCard = $event" @scrolled="onCardScrolled" />
+            <LiveCards :cards="cards" :selected="selected" :auto-focus="devMode.isOn" :focus="cardFocus" @pick="pickCard" @seg="segCard = $event" @scrolled="onCardScrolled" show-end @end="isAskingEnd = true" />
 
             <p v-if="status.weather" class="t-cap live-event"><i class="ic ic--s i-info" aria-hidden="true"></i>{{ status.weather.time }}부터 비</p>
           </BottomSheet>
@@ -908,6 +1012,17 @@ function restartMoving() {
 </template>
 
 <style>
+/* 여행 끝내기 확인 창 (11/12): 트리피 뒤로 은은한 빛 + 작은 색 점(축하), 글은 가운데 */
+.end-modal { align-items: stretch; text-align: center; padding-top: 16px; }
+.end-modal__art { position: relative; height: 190px; display: flex; align-items: flex-end; justify-content: center; }
+.end-modal__art::before { content: ''; position: absolute; left: 50%; top: 18px; width: 7px; height: 7px; border-radius: 50%; box-shadow: -112px 34px 0 #F2C230, -84px 0 0 var(--coral), -128px 104px 0 var(--navy), 104px 6px 0 #8CC63F, 126px 78px 0 #F2C230, 84px 128px 0 var(--coral), -96px 150px 0 #8CC63F; opacity: .85; }
+.end-modal__glow { position: absolute; left: 50%; bottom: 0; width: 230px; height: 190px; transform: translateX(-50%); border-radius: 50%; background: radial-gradient(closest-side, var(--navy-soft) 0, var(--navy-soft) 62%, rgba(232, 238, 248, 0) 100%); }
+.end-modal__img { position: relative; width: 220px; height: 182px; object-fit: contain; transform-origin: 30% 100%; animation: endTrippieBob 2.6s ease-in-out infinite; }
+.end-modal__text { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.end-modal__eyebrow { font-size: 14px; line-height: 20px; font-weight: 700; color: var(--coral-ink); }
+.end-modal__desc { margin: 0; font-size: 15px; line-height: 22px; color: var(--ink-muted); }
+@keyframes endTrippieBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+@media (prefers-reduced-motion: reduce) { .end-modal__img { animation: none; } }
 .scr-Live .noti { padding-right: 46px; } /* 닫기(X) 자리를 비움 (11/09) */
 .scr-Live .noti .noti__meta > span { visibility: hidden; } /* "지금" 대신 알림이 생긴 시각을 옆에 따로 (지난 알림이 지금 일처럼 안 보이게) */
 .live-noti-at { position: absolute; top: 62px; right: 52px; z-index: 56; font-size: 12px; line-height: 16px; color: var(--ink-muted); font-variant-numeric: tabular-nums; pointer-events: none; }
@@ -926,8 +1041,17 @@ function restartMoving() {
 .scr-Live .live-fab__ic--link { background: linear-gradient(135deg, #F58529, #DD2A7B 55%, #8134AF); }
 .scr-Live .live-fab__ic--plan { background: var(--navy); }
 .scr-Live .live-fab__ic--share { background: var(--success); }
-.scr-Live .live-chip { font-weight: 600; }
-.scr-Live .live-quick { position: absolute; top: 392px; left: 0; right: 70px; z-index: 2; }
+.scr-Live .live-chip { font-weight: 600; height: 34px; padding-left: 10px; padding-right: 10px; gap: 3px; font-size: 13px; letter-spacing: -.02em; }
+/* 11/12: 지도 앱 칩처럼 흰 바탕 + 겹 그림자, 글씨는 진하게 (아이콘 색만 칩마다 다르게) */
+.scr-Live .live-quick .live-chip { border: 0; padding-left: 5px; padding-right: 10px; gap: 4px; background: #fff; color: var(--ink); box-shadow: 0 0 0 1px rgba(24, 33, 58, .05), 0 1px 2px rgba(24, 33, 58, .08), 0 4px 12px rgba(24, 33, 58, .12); }
+.scr-Live .live-quick .live-chip:hover { background: var(--surface); }
+/* 아이콘은 연한 색 동그라미 안에 (AI 보라 · 근처 산호 · 결제 남색) */
+.scr-Live .live-chip__ic { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; }
+.scr-Live .live-chip__ic .ic { width: 13px; height: 13px; }
+.scr-Live .live-chip__ic--ai { background: #F1EAFE; color: #7C3AED; }
+.scr-Live .live-chip__ic--near { background: var(--coral-soft); color: var(--coral-ink); }
+.scr-Live .live-chip__ic--pay { background: var(--navy-soft); color: var(--navy); } /* 11/12: 결제 메모까지 칩 3개가 + 버튼 왼쪽에 다 들어가게 */
+.scr-Live .live-quick { position: absolute; top: 392px; left: 0; right: 58px; z-index: 2; gap: 5px; padding-left: 12px; padding-right: 4px; }
 .scr-Live .live-sheet { top: 440px; padding: 8px 0 0; gap: 12px; }
 .scr-Live .live-head { display: flex; align-items: flex-end; gap: 12px; padding: 0 16px; }
 .scr-Live .live-pill { position: absolute; top: 112px; left: 16px; z-index: 3; }

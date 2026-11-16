@@ -1,3 +1,9 @@
+<script>
+// 이 화면을 여러 번 열어도 하나만 있는 값 (11/13): 마지막으로 시작한 만들기 번호
+// 만드는 중에 뒤로 갔다가 다시 만들면 첫 번째 요청은 서버에서 끝나도 결과를 버려요 (늦게 온 결과가 새 초안을 덮어쓰지 않게)
+let latestRun = 0
+</script>
+
 <script setup>
 // S08 일정 만드는 중 (③): 서버가 일정을 짜는 단계를 실제로 보내 주는 대로(POST /api/plans/generate/stream) 보여 줘요 (11/04)
 //   단계: 장소 후보 찾기 → (요청이 있으면) 리뷰로 확인 → AI가 칸마다 고르기 → 영업시간·종류 검사
@@ -18,6 +24,7 @@ import { isSameStay, isStayStop } from '@/utils/mapView'
 import { getPositionOnce } from '@/utils/position'
 import { showToast } from '@/utils/toast'
 
+const READY_DRAFT_KEY = 'tripbiseo.readyDraft' // 홈에서 기다리다 완성된 초안이 있는지 (NewTripView와 같은 이름)
 const CREEP_MS = 400 // 하는 중인 단계에서 %가 1씩 오르는 간격
 const FIRST_CREEP_TO = 15 // 첫 알림(후보 찾기 끝)이 오기 전까지 올라갈 수 있는 %
 // 단계가 끝날 때의 % (서버 PlanServiceImpl이 보내는 값과 같음) → 하는 중이면 이 값 바로 아래까지만 올라감
@@ -88,18 +95,27 @@ onUnmounted(() => {
 
 // 위치는 브라우저에 물어보고(거절해도 계속), 조건 + 사용자가 한 말로 초안 만들기 (단계마다 onProgress)
 async function makeDraft() {
-  const position = await getPositionOnce()
+  latestRun++
+  const myRun = latestRun // 이번 만들기 번호
+  // 11/13: 지역을 골랐으면 서버가 내 위치를 안 써서 위치 권한을 묻지 않음 (지역이 없을 때만 '내 위치 근처'로 찾으려고 물음)
+  const hasArea = !!store.planArea || store.planAreas.length > 0
+  const position = hasArea ? null : await getPositionOnce()
   try {
     const result = await generatePlanStream(conditions, store.planMessages, position?.lat, position?.lng, onProgress)
+    if (myRun !== latestRun) return // 그사이 새로 만들기를 시작했으면 이 결과는 버림
     store.setDraft(result)
     draft.value = result
-    for (const note of result.notes || []) showToast(note.text)
-    if (isLeft) showToast('일정이 완성됐어요')
+    // 안내(notes)는 토스트로 연달아 띄우면 마지막 하나만 보여서, 아래 목록으로 다 보여 줌 (11/13)
+    if (isLeft) {
+      showToast('일정이 완성됐어요', { actionText: '완성본 보기', action: openResult }) // 홈에서 기다려도 점검 화면으로 갈 수 있게 (11/12)
+      markReadyDraft() // 토스트를 놓쳐도 '새 여행' 화면에서 다시 열 수 있게 (11/13)
+    }
   } catch (e) {
+    if (myRun !== latestRun) return
     failed.value = true
     failReason.value = e.message
     failCode.value = e.status ?? null
-    if (isLeft) showToast('일정을 만들지 못했어요')
+    if (isLeft) showToast('일정을 만들지 못했어요', { actionText: '이유 보기', action: openResult })
   }
   clearInterval(timer)
   percent.value = 100
@@ -121,6 +137,7 @@ function creep() {
 
 // 다 만들었으면 일정 점검, 못 만들었으면 이유를 들고 실패 화면으로
 function openResult() {
+  clearReadyDraft()
   if (!failed.value) {
     router.replace('/plan/check')
     return
@@ -128,6 +145,21 @@ function openResult() {
   const query = { why: failReason.value }
   if (failCode.value != null) query.code = failCode.value
   router.replace({ path: '/plan/fail', query })
+}
+// 홈에서 기다리다 완성된 초안이 있다는 표시 (이 탭에만). 새 여행 화면(NewTripView)이 보고 [완성본 보기] 카드를 띄워요
+function markReadyDraft() {
+  try {
+    sessionStorage.setItem(READY_DRAFT_KEY, '1')
+  } catch (e) {
+    // 저장이 막힌 브라우저면 토스트로만 알림
+  }
+}
+function clearReadyDraft() {
+  try {
+    sessionStorage.removeItem(READY_DRAFT_KEY)
+  } catch (e) {
+    // 저장이 막힌 브라우저면 할 일 없음
+  }
 }
 function waitAtHome() {
   showToast('계속 만들고 있어요. 끝나면 알려 드릴게요')
@@ -138,7 +170,7 @@ function waitAtHome() {
 <template>
   <div class="scr scr-Generating">
     <div class="app">
-      <TopBar title="일정 만들기" back="/plan/info"><span class="topbar__side">4 / 4</span></TopBar>
+      <TopBar title="일정 만들기" back="/plan/info" /><!-- 11/13: 여행 정보는 11단계라 "4 / 4"를 뺌 -->
 
       <!-- 지도: 만드는 동안은 고른 지역, 다 만들면 실제 일정 핀 -->
       <div class="gen-map">
@@ -167,6 +199,9 @@ function waitAtHome() {
             <span class="dotc"><i class="ic ic--s i-pin" aria-hidden="true"></i></span><span class="t-strong">장소 후보 찾는 중…</span>
           </li>
         </ol>
+        <ul v-if="draft && draft.notes && draft.notes.length" class="gen-notes" aria-label="일정 안내">
+          <li v-for="(note, i) in draft.notes" :key="i" class="t-cap"><i class="ic ic--s i-info" aria-hidden="true"></i>{{ note.text }}</li>
+        </ul>
       </div>
 
       <div class="cta">
@@ -193,4 +228,6 @@ function waitAtHome() {
 .scr-Generating .step.now .dotc{border:2px solid var(--navy);color:var(--navy)}
 .scr-Generating .step.wait .dotc{border:2px solid var(--line-strong)}
 .scr-Generating .step.wait .t-strong{color:var(--ink-subtle)}
+.scr-Generating .gen-notes{list-style:none;margin:0;padding:12px;display:flex;flex-direction:column;gap:6px;background:var(--surface);border-radius:var(--radius-md, 12px)}
+.scr-Generating .gen-notes li{display:flex;gap:6px;align-items:flex-start;color:var(--ink)}
 </style>

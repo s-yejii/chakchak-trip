@@ -37,6 +37,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class PlanCandidateFinder {
 
+    private static final String STORE_SUFFIX = "점"; // "○○점" = 건물·공원 안의 한 가게 (11/13)
     private static final int NEAR_ME_RADIUS_M = 2000;
     private static final int NEAR_ME_LIMIT = 60;
     private static final int AROUND_MUST_RADIUS_M = 1000;
@@ -46,6 +47,8 @@ public class PlanCandidateFinder {
     private static final int GU_RADIUS_M = 3000;    // 구를 고르면 3km (구 하나가 대략 이 정도)
     private static final int DONG_RADIUS_M = 1500;  // 동·동네를 고르면 1.5km (걸어서 20분)
     private static final int KIND_LIMIT = 25;       // 종류마다 후보 수 (평점 순)
+    private static final int SIGHT_KIND_LIMIT = 80; // 관광·전시·쇼핑은 더 많이 받고, 고른 구 밖은 keepInAreas가 뺌
+    private static final List<String> SIGHT_KINDS = List.of("tour", "culture", "shop");
     // 화면 태그 코드 → ④ PlaceTagReader가 리뷰에서 세는 태그 이름
     // 종류 코드 → 프롬프트·안내에 쓰는 이름 (PlaceMapper kindCase와 같은 코드)
     private static final String TOUR_KIND = "tour";
@@ -54,6 +57,13 @@ public class PlanCandidateFinder {
     private static final Pattern NOT_SIGHT = Pattern.compile("명예도로|도로$|교차로|사거리|삼거리|나들목|IC$|주차장|표지석|기념비|(?<!둘레|산책|숲|하늘|순라|골목|올레)길$");
     private static final Pattern GOOD_SIGHT = Pattern.compile("공원|시장|거리|골목|전망|전시|미술관|박물관|갤러리|둘레길|산책|숲|천$|강$|마을|창작촌|광장");
     private static final int GOOD_SIGHT_ENOUGH = 3;
+    // 동네 이름만 있는 곳 ("명동", "삼청동"): 관광 정보에 동네 자체가 장소로 들어 있어서, 일정 칸에 "명동 70분"이 들어가던 문제 (11/13)
+    //   "익선동 한옥거리"·"인사동길"처럼 뒤에 말이 더 붙은 곳은 그대로
+    // 먹자골목("남대문 갈치조림골목", "신당동 떡볶이타운"): 관광 정보에 관광지로 들어 있어서 볼거리 칸에 들어가면
+    //   점심 바로 앞뒤로 밥을 두 번 먹는 일정이 됐어요 (11/13). 이런 곳은 밥집으로 봄
+    private static final Pattern FOOD_STREET = Pattern.compile("(떡볶이|갈치|족발|순대|곱창|냉면|칼국수|닭한마리|생선|빈대떡|전골목|맛골목|먹자).*(골목|타운|거리)");
+    private static final String FOOD_KIND = "food";
+    private static final Pattern AREA_NAME_ONLY = Pattern.compile("^[가-힣]{1,4}(동|구|가)$");
     private static final int MAX_SHAPE_LENGTH = 50000; // 동 경계 글자 길이 상한
     private static final int DONG_PLACE_LIMIT = 40;    // 동 하나에서 가져올 장소 수
     private static final int SIGHT_ENOUGH = 6;     // 들를 곳이 이만큼 있으면 카카오를 안 부름
@@ -112,7 +122,9 @@ public class PlanCandidateFinder {
     public void addKinds(Map<String, Place> candidates, double lat, double lng, String areaType, List<String> kinds) {
         int radius = "gu".equals(areaType) ? GU_RADIUS_M : DONG_RADIUS_M;
         for (String kind : kinds) {
-            addAll(candidates, placeService.getKindPlaceList(lat, lng, radius, kind, KIND_LIMIT), KIND_LIMIT);
+            // 관광·전시·쇼핑은 평점 없는 곳이 많아 점수가 같아서, 25곳만 받으면 옆 구 것만 오고 고른 구는 0곳이 됐어요 (11/12 중구 관광 0곳)
+            int limit = SIGHT_KINDS.contains(kind) ? SIGHT_KIND_LIMIT : KIND_LIMIT;
+            addAll(candidates, placeService.getKindPlaceList(lat, lng, radius, kind, limit), limit);
         }
         if (kinds.contains(TOUR_KIND)) {
             addSights(candidates, lat, lng);
@@ -148,6 +160,13 @@ public class PlanCandidateFinder {
         if (hasAny) { // 고른 구 주소인 곳이 하나도 없으면 주변이라도 남김 (0곳으로 실패하지 않게)
             candidates.values().removeIf(place -> !isInAreas(place, areas)); // removeIf: 조건에 맞는 칸을 지움
         }
+    }
+
+    /** 검색으로 고른 구(지도 아님)도 반경으로 모으면 옆 구가 섞여서, 그 구 주소인 곳만 남김 (11/13: 중구인데 종로구 가게가 들어가던 문제) */
+    public void keepInGu(Map<String, Place> candidates, String guName) {
+        PlanArea area = new PlanArea();
+        area.setName(guName);
+        keepInAreas(candidates, List.of(area));
     }
 
     private boolean isInAreas(Place place, List<PlanArea> areas) {
@@ -301,6 +320,23 @@ public class PlanCandidateFinder {
         return a.length() >= 2 && b.length() >= 2 && (a.contains(b) || b.contains(a));
     }
 
+    /**
+     * 예약(고정 일정)·꼭 갈 곳과 같은 곳인지: 이름이 서로 포함되어도 한쪽이 그 이름이 들어간 "○○점" 가게면 다른 곳 (11/13)
+     * 예) "롯데월드타워" ≠ "나이키 롯데월드타워점", "여의도 한강공원" = "여의도한강공원"
+     */
+    public boolean isSamePlaceName(String first, String second) {
+        if (!isSameName(first, second)) {
+            return false;
+        }
+        String a = toCompactName(first);
+        String b = toCompactName(second);
+        if (a.equals(b)) {
+            return true;
+        }
+        String longer = a.length() > b.length() ? a : b;
+        return !longer.endsWith(STORE_SUFFIX); // 긴 쪽이 "○○점"이면 그 이름 안의 다른 가게
+    }
+
     /** 띄어쓰기를 빼고 소문자로 (이름 비교용) */
     private String toCompactName(String name) {
         return name.replace(" ", "").toLowerCase();
@@ -311,6 +347,16 @@ public class PlanCandidateFinder {
         String placeName = toCompactName(place.getName());
         String wanted = toCompactName(name);
         return !placeName.equals(wanted) && placeName.contains(wanted) && placeName.endsWith("점");
+    }
+
+    /** 예약(고정 일정) 장소 찾기: 이름으로 찾은 곳이 그 이름이 든 "○○점" 가게면 건물·공원 자체로 (11/13: 롯데월드타워 → 나이키 롯데월드타워점) */
+    public Place findFixedPlace(String name, Double lat, Double lng) {
+        Place place = findByName(name, lat, lng);
+        if (place != null && isSamePlaceName(place.getName(), name)) {
+            return place;
+        }
+        Place building = findBuilding(name, lat, lng);
+        return building != null ? building : place;
     }
 
     /** 카카오 키워드로 건물·공원 자체 찾기 (이름이 맞고 "○○점"이 아닌 첫 곳). 저장할 때는 장소 연결 없이 이름·좌표만 남음 */
@@ -395,6 +441,12 @@ public class PlanCandidateFinder {
             if (added >= limit) {
                 break;
             }
+            if (place.getName() != null && AREA_NAME_ONLY.matcher(place.getName()).matches()) {
+                continue; // 동네 이름은 장소가 아님
+            }
+            if (TOUR_KIND.equals(place.getKind()) && place.getName() != null && FOOD_STREET.matcher(place.getName()).find()) {
+                place.setKind(FOOD_KIND); // 먹자골목은 밥집 칸으로
+            }
             if (place.getId() != null && !candidates.containsKey(place.getId())) {
                 candidates.put(place.getId(), place);
                 added++;

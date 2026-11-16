@@ -49,8 +49,9 @@ const DAY_MS = 24 * 60 * 60 * 1000 // 하루를 밀리초로
 // 읽은 날짜(yyyy-MM-dd)가 여행 며칠째인지 (여행 시작일 기준). 날짜를 못 읽었으면 1일차, 여행 날짜 밖이면 0
 function dayOfTrip(readDate) {
   const conditions = store.planConditions || {}
-  const start = conditions.startDate || store.planStartDate
-  const end = conditions.endDate || store.planEndDate || start
+  // 11/13: 지금 고른 날짜(store)를 먼저 봄. 예전 조건(conditions)을 먼저 보면 날짜를 바꾼 뒤에도 옛 날짜로 검사했어요
+  const start = store.planStartDate || conditions.startDate
+  const end = store.planStartDate ? store.planEndDate || start : conditions.endDate || start
   if (!readDate || !start) return 1
   if (readDate < start || readDate > end) return 0
   return Math.round((new Date(readDate) - new Date(start)) / DAY_MS) + 1
@@ -110,6 +111,15 @@ async function readFromServer(file) {
   }
 }
 
+// 같은 곳·같은 날·같은 시각 예약이 이미 있는지
+function isAlreadyAdded(placeName, reserveTime, day) {
+  const fixed = (store.planConditions || {}).fixed || []
+  for (const item of fixed) {
+    if (item.name === placeName && item.time === reserveTime && (item.day || 1) === day) return true
+  }
+  return false
+}
+
 function add() {
   const placeName = name.value.trim() || '예약한 곳'
   if (!TIME_PATTERN.test(time.value)) return showToast('시간을 HH:mm으로 적어 주세요')
@@ -117,6 +127,7 @@ function add() {
   // 예전엔 날짜를 버려서 2일차 예약도 1일차에 들어갔어요 (11/11 주형). 손으로 고친 날짜도 그대로 써요
   const day = dayOfTrip(date.value)
   if (day === 0) return showToast('예약 날짜가 여행 날짜 밖이에요 · 여행 날짜를 확인해 주세요')
+  if (isAlreadyAdded(placeName, time.value, day)) return showToast('이미 넣은 예약이에요') // 11/13: 같은 캡처를 두 번 올리면 두 줄이 되던 문제
   if (found.value && found.value.lat != null) {
     store.addDraftPlace({ id: found.value.placeId, name: placeName, address: found.value.address, lat: found.value.lat, lng: found.value.lng }, true, time.value, day)
   }
@@ -147,6 +158,8 @@ function add() {
             <span class="t-cap">예약 문자 · 앱 예약 내역 캡처</span>
             <span class="t-cap">장소 · 날짜 · 시각을 읽어요</span>
             <span class="t-cap">예약이 여러 개면 첫 번째만 읽어요 · 나머지는 다시 올려 주세요</span>
+            <!-- 11/13: 사진이 어디로 가는지 미리 알림 (개인정보) -->
+            <span class="t-cap rc-privacy"><i class="ic ic--s i-info" aria-hidden="true"></i>사진은 글자를 읽으려고 Google AI(Gemini)로 보내요 · 우리 서버엔 저장하지 않아요 · 이름·전화번호가 보이면 가리고 올려 주세요</span>
           </span>
           <span class="btn btn--secondary btn--sm rc-up"><i class="ic ic--s i-camera" aria-hidden="true"></i>{{ photo ? '다른 사진' : '캡처 올리기' }}</span>
           <input id="rc-file" type="file" accept="image/*" class="rc-file" @change="onFile" />
@@ -182,4 +195,5 @@ function add() {
 .scr-ReserveCapture .rc-img{max-width:100%;max-height:100%;object-fit:contain}
 .scr-ReserveCapture .rc-multi{margin-top:-8px}
 .scr-ReserveCapture .rc-shot{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:15px;color:var(--ink);text-align:center}
+.scr-ReserveCapture .rc-privacy{display:flex;gap:4px;align-items:flex-start;margin-top:6px;color:var(--ink-muted, var(--ink));text-align:left}
 </style>
