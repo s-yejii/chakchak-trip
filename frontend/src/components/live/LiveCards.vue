@@ -174,6 +174,14 @@ function onCardClick(card) {
   emit('pick', card)
 }
 
+// 카드 상태 줄 앞 아이콘 (11/16): 주의·문 닫음은 경고, 지금 여기는 핀, 다녀옴은 체크, 나머지는 시계
+function subIcon(card) {
+  if (card.subCls === 'c-warning' || card.subCls === 'c-danger') return 'i-warning'
+  if (card.state === 'now') return 'i-pin'
+  if (card.state === 'done') return 'i-check'
+  return 'i-clock'
+}
+
 // 처음 열 때 지금 있는 곳 카드를 가운데로
 onMounted(() => {
   const el = box.value.querySelector('.hcard.is-now') || box.value.querySelector('.hcard.is-sel')
@@ -195,8 +203,8 @@ onMounted(() => {
           :aria-label="`${modes[card.leg.mode].label} ${toDuration(card.leg.min)}, ${card.leg.dist}, 길찾기`"
           @click="emit('seg', card)"
         >
-          <b class="tn"><i class="ic ic--s" :class="modes[card.leg.mode].icon" aria-hidden="true"></i>{{ toDuration(card.leg.min) }}</b>
-          <span class="tn segc__d">{{ card.leg.dist }}</span>
+          <!-- 11/16: 칩은 수단 + 시간 한 줄만 (거리는 길찾기·화면 읽기용 이름에) -->
+          <b class="tn"><i class="ic ic--s" :class="modes[card.leg.mode].icon" aria-hidden="true"></i>{{ toDuration(card.leg.min) }}<i class="ic segc__more i-down" aria-hidden="true"></i></b>
         </button>
       </span>
       <button
@@ -207,11 +215,14 @@ onMounted(() => {
         @click="onCardClick(card)"
       >
         <span v-if="card.state === 'done'" class="hcard__tag"><i class="ic ic--s i-check" aria-hidden="true"></i>다녀옴</span>
+        <span v-if="card.seq != null" class="hcard__no tn" aria-hidden="true">{{ card.seq }}</span>
         <img :src="card.img" alt="" />
-        <span class="t-strong hcard__name">
-          <i v-if="card.fixed" class="ic ic--s i-lock c-navy" aria-hidden="true"></i>{{ card.title }}
+        <span class="hcard__body">
+          <span class="hcard__name" :title="card.title">
+            <i v-if="card.fixed" class="ic ic--s i-lock c-navy" aria-hidden="true"></i><span class="hcard__name-t">{{ card.name || card.title }}</span>
+          </span>
+          <span class="hcard__sub tn" :class="card.subCls"><i class="ic" :class="subIcon(card)" aria-hidden="true"></i><span class="hcard__sub-t"><template v-if="card.was"><s class="hcard__was" :aria-label="'원래 ' + card.was">{{ card.was }}</s> </template>{{ card.sub }}</span></span>
         </span>
-        <span class="t-cap tn" :class="card.subCls">{{ card.sub }}</span>
       </button>
     </template>
     <!-- 여행 끝내기 (11/12): 마지막 카드 뒤 점선 끝에서 트리피가 말풍선으로 말해요(말풍선 왼쪽, 깃발 든 트리피 오른쪽). 누르면 부모가 한 번 더 물어봐요 -->
@@ -229,7 +240,42 @@ onMounted(() => {
 <style>
 .live-cards { cursor: grab; user-select: none; }
 .live-cards img { -webkit-user-drag: none; user-select: none; }
-.hcard__name { font-size: 14px; display: flex; align-items: center; gap: 4px; }
+/* 11/16 카드 디자인 (지도 앱 경로 카드처럼): 사진을 위에 꽉 채우고 번호는 사진 위 배지, 아래에 이름 한 줄 + 상태 한두 줄.
+   선택은 테두리 1px + 바깥 링 1px = 2px (칠하지 않음, 레이아웃이 안 흔들리게). 공용 yh.css의 .hcard는 이 줄에서만 덮어써요 */
+.live-cards.hscroll { gap: 4px; padding: 6px calc(50% - 78px) 10px; }
+.live-cards .hcard { width: 156px; gap: 0; padding: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 16px; background: #fff; box-shadow: 0 2px 8px rgba(24, 33, 58, .06); }
+.live-cards .hcard img { height: 78px; border-radius: 0; }
+.live-cards .hcard__body { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 9px 11px 11px; }
+.live-cards .hcard__name { display: flex; align-items: center; gap: 4px; min-width: 0; font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: -.01em; color: var(--ink); }
+.live-cards .hcard__name .ic { width: 14px; height: 14px; }
+.live-cards .hcard__name-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.live-cards .hcard__sub { display: flex; align-items: flex-start; gap: 3px; font-size: 12px; line-height: 17px; font-weight: 500; color: var(--ink-muted); }
+.live-cards .hcard__sub .ic { flex: none; width: 12px; height: 12px; margin-top: 2.5px; }
+.live-cards .hcard__sub-t { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.live-cards .hcard__was { margin-right: 4px; color: var(--ink-subtle); font-weight: 500; text-decoration-thickness: 1px; } /* 원래 계획 시각 (줄 그음): 늦어진 걸 경고색 없이 */
+.live-cards .hcard__no { position: absolute; left: 8px; top: 8px; z-index: 1; display: flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; background: var(--navy); color: #fff; font-size: 12px; font-weight: 700; box-shadow: 0 0 0 2px #fff; }
+.live-cards .hcard__tag { left: auto; right: 8px; top: 8px; z-index: 1; height: 22px; padding: 0 8px; border-radius: 999px; }
+.live-cards .hcard:hover { border-color: var(--line-strong); }
+.live-cards .hcard.is-sel { padding: 0; border: 1px solid var(--navy); background: #fff; box-shadow: 0 0 0 1px var(--navy), 0 6px 16px rgba(31, 58, 104, .14); }
+.live-cards .hcard.is-now { padding: 0; border: 1px solid var(--coral); box-shadow: 0 0 0 1px var(--coral), 0 6px 16px rgba(232, 96, 63, .12); }
+.live-cards .hcard.is-done { background: var(--surface); box-shadow: none; }
+.live-cards .hcard.is-done .hcard__name { color: var(--ink-muted); }
+.live-cards .hcard.is-done.is-sel { padding: 0; border: 1px solid var(--ink-subtle); background: var(--surface); box-shadow: 0 0 0 1px var(--ink-subtle); }
+.live-cards .hcard.is-done .hcard__no { background: var(--ink-subtle); }
+/* 카드 사이 이동: 카드와 겹치지 않게 사이 칸을 따로 두고, 회색 점선 위에 수단+시간 알약 (지금 갈 구간만 남색) */
+.live-cards.hscroll .segw { margin: 0; padding: 0 6px; }
+.live-cards.hscroll .segw::before { height: 0; margin-top: -1px; background: none; border-top: 2px dotted var(--line-strong); }
+.live-cards.hscroll .segw--now::before { border-top: 2px solid var(--navy); }
+.live-cards.hscroll .segc { padding: 3px 8px; border: 1px solid var(--line); border-radius: 999px; background: #fff; box-shadow: 0 1px 3px rgba(24, 33, 58, .06); }
+.live-cards.hscroll .segc b { gap: 3px; font-size: 11.5px; line-height: 16px; font-weight: 600; color: var(--ink); }
+.live-cards.hscroll .segc:hover { border-color: var(--navy); }
+/* 펼치기 화살표 (11/16): 누르면 이동 수단·길찾기 시트가 올라온다는 표시. 올리면 살짝 내려가며 "눌러 봐" 느낌 */
+.live-cards.hscroll .segc__more { width: 10px; height: 10px; margin-left: 1px; opacity: .55; transition: transform .15s, opacity .15s; }
+.live-cards.hscroll .segc:hover .segc__more, .live-cards.hscroll .segc:focus-visible .segc__more { opacity: .9; transform: translateY(1px); }
+.live-cards.hscroll .segc--now { border-color: var(--navy); background: var(--navy); }
+.live-cards.hscroll .segc--now b { color: #fff; }
+.live-cards.hscroll .segc--past { background: var(--surface); box-shadow: none; }
+.live-cards.hscroll .segc--past b { color: var(--ink-subtle); }
 /* 여행 끝내기: 테두리 없이 트리피 + 말풍선, 마지막 카드에서 점선으로 이어짐 (11/12) */
 .end-trail { flex: none; align-self: center; width: 44px; height: 6px; margin: 0 2px 0 6px; background: radial-gradient(circle, var(--line-strong) 1.5px, transparent 2px) 0 50% / 9px 6px repeat-x; opacity: .7; }
 .trippie-end { flex: none; align-self: center; display: flex; align-items: center; gap: 8px; padding: 12px 4px 16px 8px; border: 0; border-radius: var(--radius-lg); background: none; color: var(--ink); cursor: pointer; font: inherit; text-align: left; scroll-snap-align: center; transition: transform .12s, background-color .15s; }

@@ -1,0 +1,36 @@
+// 여행 중 화면 첫 안내 (④ 11/16): 처음 여행을 시작한 사람에게 트리피가 버튼을 하나씩 짚어 줘요 (LiveTour.vue)
+//  본 적이 있는지는 이 브라우저에만 남겨요 (localStorage). 시크릿 창·저장 막힘이면 매번 뜰 수 있어서 try로 감쌈
+//  다시 보고 싶으면 주소 끝에 ?tour=1 (시연·촬영용)
+
+const DONE_KEY = 'tripbiseo.liveTour.v1'
+
+// target: 짚을 요소의 data-tour 값 (없으면 가운데 인사 카드) · shape: 구멍 모양 (pill 알약 / circle 동그라미 / card 둥근 네모)
+// demoNoti: 그 단계에서만 안내용 가짜 알림을 띄움
+export const TOUR_STEPS = [
+  { target: null, title: '여행 시작!', text: '트리피가 화면을 빠르게 알려 줄게' },
+  // demoNoti: 진짜 알림이 없어도 안내용 가짜 지연 알림을 위에 띄워 보여 줌 (문구는 서버 LiveAlertMaker와 같은 말투)
+  { target: 'noti', shape: 'card', demoNoti: true, title: '출발 알림', text: '늦기 전에 위에서 먼저 알려 줄게' },
+  { target: 'sheet', shape: 'card', title: '오늘 일정', text: '다음 갈 곳과 도착 시간이 여기 떠' },
+  { target: 'ask', shape: 'pill', title: '어디 갈까?', text: "'조용한 카페'처럼 물어보면 찾아 줄게" },
+  { target: 'near', shape: 'pill', title: '근처 찾기', text: '주변 카페·음식점을 지도에 띄워 줘' },
+  { target: 'pay', shape: 'pill', title: '결제 메모', text: '영수증 찍으면 어디서 얼마 썼는지 정리해 줘' },
+  { target: 'fab', shape: 'circle', title: '더 보기', text: '링크 추가·내 일정·공유는 여기' },
+]
+
+/** 이 브라우저에서 안내를 끝까지 봤거나 건너뛰었는지 */
+export function isTourDone() {
+  try {
+    return localStorage.getItem(DONE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+/** 다시 안 뜨게 표시 */
+export function markTourDone() {
+  try {
+    localStorage.setItem(DONE_KEY, '1')
+  } catch {
+    // 저장이 막힌 브라우저면 다음에 또 뜰 뿐이라 그냥 둠
+  }
+}

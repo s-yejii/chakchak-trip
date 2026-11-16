@@ -46,6 +46,31 @@ public static class RoadPainter
         return ToTexture(pixels);
     }
 
+    // 땅에 겹치는 잔디 무늬 (회색 그림: 128보다 밝으면 땅을 밝게, 어두우면 어둡게 → 평균 128이라 땅 색은 그대로)
+    //   풀 뭉치(8픽셀 칸마다 밝기가 다름) + 풀잎(세로로 4픽셀씩 같은 값이라 짧은 세로 줄로 보임)
+    public static Texture2D GroundGrass()
+    {
+        Color32[] pixels = new Color32[SIZE * SIZE];
+        for (int y = 0; y < SIZE; y++)
+        {
+            for (int x = 0; x < SIZE; x++)
+            {
+                float clump = Noise(x / 8, y / 8) * 44 - 22; // 풀 뭉치 ±22
+                float blade = Noise(x, y / 4) * 56 - 28;     // 풀잎 ±28
+                byte gray = Clamp(128 + clump + blade);
+                pixels[y * SIZE + x] = new Color32(gray, gray, gray, 255);
+            }
+        }
+        return ToTexture(pixels);
+    }
+
+    // 땅에 겹치는 보도블록 무늬 (회색 그림): 30cm 블록 8×8 = 2.4m
+    //   줄눈이 어두워서 평균이 128보다 내려가므로 블록을 그만큼 밝게(138) 잡음
+    public static Texture2D GroundPaving()
+    {
+        return Blocks(8, 8, new Color32(138, 138, 138, 255), 12);
+    }
+
     // 블록 무늬: columns × rows 칸, base 색, tone = 칸마다 밝기 차이(±)
     private static Texture2D Blocks(int columns, int rows, Color32 baseColor, int tone)
     {

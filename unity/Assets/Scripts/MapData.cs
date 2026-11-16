@@ -33,6 +33,7 @@ public class WaterData
 {
     public float level; // 물 높이(m)
     public int[] cells; // 지형 격자 점마다 1 물 · 0 땅 (heights와 같은 순서)
+    [NonSerialized] public float[] levels; // 격자 점마다 그 물(한강·호수)의 물 높이. 웹 자료에는 없고 유니티가 채움 (WaterPrep). NonSerialized: JSON에서 읽지 않는 값이라는 표시
 }
 
 [Serializable]

@@ -13,6 +13,7 @@ import { useRoute } from 'vue-router'
 import BottomSheet from '@/components/common/BottomSheet.vue'
 import KakaoMap from '@/components/common/KakaoMap.vue'
 import { getLocationHere, readStayCapture, searchStays } from '@/api/trips'
+import { fitYearToTrip } from '@/utils/captureYear'
 import { useTripStore } from '@/stores/trip'
 import { addDays, daysBetween } from '@/utils/dates'
 import { toShortDate } from '@/utils/tripView'
@@ -135,7 +136,10 @@ async function onFile(e) {
   try {
     const read = await readStayCapture(file)
     isTimeDefault.value = { in: !read.checkInTime, out: !read.checkOutTime }
-    candidate.value = { ...read, checkInTime: read.checkInTime || DEFAULT_CHECK_IN, checkOutTime: read.checkOutTime || DEFAULT_CHECK_OUT }
+    // 11/16: 연도 없는 화면(11.14(토))은 여행 날짜에 맞춤 (여행 끝은 체크아웃 날이라 하루 뒤까지 봄)
+    const checkInDate = fitYearToTrip(read.checkInDate, tripStart.value, tripEnd.value)
+    const checkOutDate = fitYearToTrip(read.checkOutDate, tripStart.value, addDays(tripEnd.value, 1))
+    candidate.value = { ...read, checkInDate, checkOutDate, checkInTime: read.checkInTime || DEFAULT_CHECK_IN, checkOutTime: read.checkOutTime || DEFAULT_CHECK_OUT }
     keyword.value = read.name
     if (read.lat != null) mapRef.value?.moveTo(read.lat, read.lng, PICK_LEVEL)
     else showToast('숙소 위치를 못 찾았어요 · 맨 위에서 숙소 이름으로 찾아 주세요')

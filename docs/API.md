@@ -48,6 +48,8 @@
 | `GET /api/notifications` | 내 알림 최근 50개 + 안 읽은 수 (열 때 일정 알림을 만듦) | member/NotificationsView, member/NotiBell (홈·여행 중 종 아이콘) | 있음 |
 | `POST /api/notifications/{id}/read` | 알림 하나 읽음 | member/NotificationsView | 있음 |
 | `POST /api/notifications/read-all` | 모두 읽음 | member/NotificationsView | 있음 |
+| `POST /api/share` | 내 여행의 공유 링크 만들기 (이미 있으면 같은 링크) | live/LiveView ([일정 공유]) | 있음 (11/16) |
+| `GET /api/share/{code}` | 공유 링크로 일정 보기 (로그인 없이) | member/ShareView (`/s/{code}`) | 있음 (11/16) |
 | `GET /api/friends` · `GET /api/members/search?q=` · `POST /api/friends/requests` | 친구 목록·아이디 검색·친구 요청 | member/FriendInviteView | 확인 필요 |
 | `GET·PUT·DELETE /api/location-logs` | 내 위치 기록 보기·보관 기간·모두 지우기 | member/LocHistoryView | 확인 필요 |
 | `POST /api/auth/email-code` | 이메일 인증번호 보내기 (회원가입·계정 찾기) | member/SignupView, member/FindAccountView | 있음 |
@@ -110,6 +112,7 @@
 | `POST /api/plans/route-order` | [동선 정리] 하루 일정의 새 순서 (최근접 이웃 + 2-opt). AI 일정과 같은 함수 | trip/PlanManualView | 있음 |
 | `POST /api/plans/links` | 인스타·유튜브·네이버(블로그·지도) 링크 → 장소 추출 | plan/PlanAiView (WishLinks) | 있음 |
 | `GET /api/plans/weather` | 여행 날짜 날씨(기온·습도·하늘·비 시작 시각) + 기온별 옷차림. 기상청 단기예보라 3일 뒤까지 | trip/PlanCheckView (TripWeather) | 있음 (11/06) |
+| `GET /api/plans/hangang-bus` | 예약까지 시간이 많이 뜰 때 한강버스로 가는 방법 하나 (없으면 204) | after/RouteGuideView (HangangBusOption, ⑤ 석진 OK) | 있음 (11/16) |
 | (주소 미정) | 숙소 핀 | plan/StayPinView | 확인 필요 |
 | `GET /api/dev/status` | [개발자 모드] 시연 계정인지 + 시연 시계 상태 | member/MyView (VersionTap), live/DevDot | 있음 (11/06) |
 | `POST /api/dev/clock` · `POST /api/dev/clock/forward` · `POST /api/dev/clock/speed` · `DELETE /api/dev/clock` | [개발자 모드] 시연 시계 맞추기 · 빨리 감기 · 진짜 시각으로 (시연 계정만) | live/DevDot | 있음 (11/06) |
@@ -202,7 +205,7 @@
 | 성공 응답 | HTTP 200 + 응답 본문 그대로. `{code, data}` 같은 봉투로 감싸지 않음 |
 | 실패 응답 | HTTP 상태 코드 + `{"message": "화면에 그대로 보여 줄 한국어 문장"}` |
 | 로그인 | `POST /api/auth/login`이 주는 세션 쿠키(JSESSIONID)로 유지. 화면은 `fetch(..., { credentials: 'include' })`로 쿠키를 같이 보냄 |
-| 로그인 없이 되는 주소 | `/api/auth/**`, `/api/config/public`. 나머지는 전부 로그인 필요 → 안 했으면 401 "로그인이 필요해요." |
+| 로그인 없이 되는 주소 | `/api/auth/**`, `/api/config/public`, `GET /api/share/{code}`(11/16). 나머지는 전부 로그인 필요 → 안 했으면 401 "로그인이 필요해요." |
 | 시간 | `"HH:mm"` 24시간제 (예: `"14:30"`), 한국 시간. 날씨 시각만 `"HH:00"` |
 | 날짜 | `"yyyy-MM-dd"`. 날짜+시각은 도착·출발 기록이 `"yyyy-MM-ddTHH:mm:ss"`, 대화 기록이 `"yyyy-MM-ddTHH:mm"` |
 | 단위 | 시간 길이는 모두 **분**, 거리는 모두 **m**. 초 단위 필드 없음 |
@@ -498,6 +501,43 @@
 키가 설정돼 있지 않으면 빈 객체 `{}`.
 
 **오류** 없음
+
+### `POST /api/share`
+내 여행의 공유 링크를 만들어요. 이미 만든 링크가 있으면 같은 코드를 돌려줘요 (한 여행에 코드 하나). · 로그인 필요 · 화면: live/LiveView [일정 공유] (11/16 추가)
+
+**요청**
+```json
+{ "tripId": 858 }
+```
+
+**응답**
+```json
+{ "code": "Xk2b9QeR4mT0aLz7Vc1sPw", "path": "/s/Xk2b9QeR4mT0aLz7Vc1sPw" }
+```
+화면은 `location.origin + path`로 링크를 만들어 카카오톡으로 보내요.
+
+**오류** 400 "공유할 여행을 골라 주세요." · 401 "로그인이 필요해요." · 404 "여행을 찾을 수 없어요." (남의 여행·휴지통 포함)
+
+### `GET /api/share/{code}`
+공유 링크로 일정을 봐요. 메모·도착 기록·출발지·인원·회원 정보는 보내지 않고, 건너뛴 칸은 빼요. · **로그인 불필요** · 화면: member/ShareView (`/s/{code}`) (11/16 추가)
+
+**요청** 없음
+
+**응답**
+```json
+{
+  "title": "익선동 하루",
+  "startDate": "2026-11-16",
+  "endDate": "2026-11-16",
+  "days": [
+    { "day": 1, "stops": [
+      { "time": "11:30", "name": "인사동 문화의거리", "category": "관광지", "stay": 70, "lat": 37.574, "lng": 126.985, "placeId": "tour-264353", "imageUrl": "https://…jpg" }
+    ] }
+  ]
+}
+```
+
+**오류** 404 "공유가 끝났거나 없는 일정이에요." (없는 코드) · 404 "여행을 찾을 수 없어요." (공유한 여행이 휴지통에 있음)
 
 ---
 
@@ -1141,6 +1181,28 @@
 - `minTemp`·`maxTemp`: 기상청 최저·최고(TMN·TMX). 오늘이라 그 칸이 지났으면 남은 시간 기온 중 낮은·높은 값.
 - `rainFrom`: 낮에 비·눈(PTY ≠ 0)이거나 강수확률 60% 이상인 첫 시각. 없으면 null.
 - 오류: 날짜 범위가 이상하면 400, 기상청 키가 없으면 503, 기상청 오류 502.
+
+### `GET /api/plans/hangang-bus` (11/16)
+
+길 안내에서 다음 칸이 예약(고정)일 때, 지하철·버스로 바로 가면 한참 기다려야 하면 "한강버스로도 가요" 한 줄. 선착장·시간표는 ① `db/24_hangang_bus.sql`(읽기만), 길찾기는 `RouteClient`(걸어서 15분 안이면 걷기, 넘으면 버스·지하철. 내린 선착장 → 목적지를 거리로 어림했으면 10분 더), 비는 ④ `LiveWeatherChecker`(시연 비 포함).
+
+- 요청: `?fromLat=37.5616&fromLng=126.9827&toLat=37.5126&toLng=127.1020&arriveBy=15:00` (+ `now=12:40` 없으면 지금 시각, 시연 계정은 시연 시계) · 로그인 필요
+- 보여 주는 조건 (모두): ① 탈 선착장에 배 5분 전까지 감 ② 예약 10분 전까지 도착 ③ 바로 가면 예약 전 30분 넘게 기다림 ④ 배에서 내리기 전에 비가 시작하지 않음. 하나라도 아니면 **204 (내용 없음)**
+- 후보가 여러 개면 목적지에 가장 빨리 도착하는 배. 탈 선착장은 6km 안 가까운 3곳, 내릴 선착장은 목적지 4km 안 가장 가까운 1곳 (중간에 내려 지하철로 갈아타는 안은 안 권함). 여의도 갈아타기는 안 봐요
+- 응답 200:
+
+```json
+{ "boardPier": "옥수", "alightPier": "잠실", "boardAt": "13:13", "alightAt": "14:03",
+  "toBoardMode": "transit", "toBoardMin": 23, "afterAlightMode": "transit", "afterAlightMin": 25,
+  "busNo": "3317", "afterAlightDetail": "버스 3317 잠일고등학교→잠실역.롯데월드 6정거장",
+  "doorArriveAt": "14:28", "arriveBy": "15:00", "slackMin": 32,
+  "directArriveAt": "13:25", "directWaitMin": 95,
+  "restMin": 15, "leaveAt": "14:18", "relaxedArriveAt": "14:43" }
+```
+
+- 수단: `walk` 걷기 / `transit` 버스·지하철. `busNo`는 내려서 탈 첫 버스 (없으면 null)
+- `restMin`: 내린 선착장 근처(한강공원)에서 쉬었다 가도 되는 분. 예약 15분 전 도착 목표로 남는 시간을 5분 단위로 내림, 0~30. `leaveAt`은 쉬고 떠나는 시각, `relaxedArriveAt`은 그때 목적지 도착. 화면은 10분 이상이면 "한강공원에서 15분 둘러보고 14:18 버스 3317 · 14:43 도착 (예약 17분 전)"
+- 오류: 로그인 안 하면 401, `arriveBy`·`now`가 HH:mm가 아니면 400
 
 ## ④ 여행 중 판별 (live)
 

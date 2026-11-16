@@ -11,4 +11,5 @@ public class AiStayCapture {
     private String checkInTime;   // HH:mm
     private String checkOutDate;  // YYYY-MM-DD
     private String checkOutTime;  // HH:mm
+    private Boolean hasYear;      // 화면에 연도가 보였는지 (없으면 서버가 연도를 정함, 11/16)
 }

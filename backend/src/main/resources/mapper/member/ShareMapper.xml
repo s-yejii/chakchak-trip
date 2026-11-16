@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- ① 일정 공유 링크 (11/16). trip은 ② 테이블이라 읽기(JOIN)만 해요 -->
+<mapper namespace="com.tripbiseo.member.mapper.ShareMapper">
+
+  <!-- 여행에 이미 만든 공유 코드 -->
+  <select id="selectCodeByTrip" resultType="string">
+    SELECT code FROM trip_share WHERE trip_id = #{tripId} LIMIT 1
+  </select>
+
+  <!-- 공유 코드 → 여행 번호와 주인 (휴지통에 있는 여행은 getTrip이 404를 줌) -->
+  <select id="selectShareTarget" resultType="com.tripbiseo.member.dto.ShareTarget">
+    SELECT s.trip_id, t.member_id
+    FROM trip_share s
+    JOIN trip t ON t.trip_id = s.trip_id
+    WHERE s.code = #{code}
+  </select>
+
+  <!-- 장소들의 대표 사진 (공통 테이블 retrip_place는 읽기만) -->
+  <select id="selectPlaceImageList" resultType="com.tripbiseo.member.dto.PlaceImage">
+    SELECT id AS place_id, image_url
+    FROM retrip_place
+    WHERE image_url IS NOT NULL AND image_url &lt;&gt; '' AND id IN
+    <foreach collection="placeIds" item="placeId" open="(" separator="," close=")">#{placeId}</foreach>
+  </select>
+
+  <!-- 공유 코드 저장 -->
+  <insert id="insertShare">
+    INSERT INTO trip_share (code, trip_id) VALUES (#{code}, #{tripId})
+  </insert>
+</mapper>

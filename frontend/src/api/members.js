@@ -9,3 +9,6 @@ export const changePassword = (currentPassword, newPassword) => put('/members/me
 export const sendEmailCode = (email, purpose, username = null) => post('/auth/email-code', { email, purpose, username })
 export const verifyEmailCode = (email, code, purpose) => post('/auth/email-code/verify', { email, code, purpose })
 export const resetPassword = (email, newPassword) => post('/auth/reset-password', { email, newPassword })
+
+// 일정 공유 링크 (11/16): 만들기는 로그인 필요, 보기(GET /share/{code})는 로그인 없이 → views/member/ShareView
+export const createShareLink = (tripId) => post('/share', { tripId })
