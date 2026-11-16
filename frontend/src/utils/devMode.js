@@ -203,8 +203,19 @@ async function trashOverlappingDemoTrips(tripId, range, trips) {
   }
 }
 
+// ④ 예지 여행 중 첫 안내(utils/liveTour.js)의 "본 기록" 키. 예지 파일은 안 고치고 기록만 지워요 (키 이름이 바뀌면 여기도 같이)
+const LIVE_TOUR_KEY = 'tripbiseo.liveTour.v1'
+function resetLiveTour() {
+  try {
+    localStorage.removeItem(LIVE_TOUR_KEY)
+  } catch {
+    // 저장이 막힌 브라우저면 안내가 원래 매번 떠서 지울 것도 없음
+  }
+}
+
 export async function prepareDemo() {
   clearLiveNotices()
+  resetLiveTour() // 11/16: [시연 준비] 뒤 여행 중 화면을 처음 열 때 ④ 첫 안내(튜토리얼)가 한 번 다시 뜨게
   const trips = await getTripList()
   for (const trip of trips) {
     if (trip.status === 'ongoing' && isPracticeTrip(trip)) await finishTrip(trip.id)
