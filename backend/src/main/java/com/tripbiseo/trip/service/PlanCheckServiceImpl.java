@@ -209,6 +209,9 @@ public class PlanCheckServiceImpl implements PlanCheckService {
 
     /** 시간 문제: 오늘 일정인데 이미 지난 시각 / 계획보다 10분 넘게 늦게 도착 */
     private String findTimeIssue(Stop stop, LocalDate date, int arrive) {
+        if ("done".equals(stop.getState())) {
+            return null; // 이미 다녀온 칸은 시각이 지났거나 늦은 게 당연해서 경고 안 해요 (11/16)
+        }
         int planned = Geo.toMinutes(stop.getTime());
         int stay = stop.getStay() == null ? 0 : stop.getStay();
         boolean isToday = date.equals(Geo.now().toLocalDate());
