@@ -12,4 +12,5 @@ public class PaymentRequest {
     private String source;    // manual / card / capture (없으면 manual)
     private String memo;      // 메모 (없어도 됨)
     private String payer;     // 낸 사람 (없으면 "나")
+    private String approvalNo; // 카드 승인번호 (카드 내역에서 가져올 때만, 없어도 됨)
 }

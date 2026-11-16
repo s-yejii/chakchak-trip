@@ -15,4 +15,5 @@ public class PaymentResponse {
     private String source;    // manual / card / capture
     private String memo;
     private String payer;     // 낸 사람: 나 / 동행 1 / 동행 2 …
+    private String approvalNo; // 카드 승인번호. 직접 입력·영수증이면 null
 }
