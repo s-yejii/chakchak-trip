@@ -35,7 +35,6 @@ public class RetroMap : MonoBehaviour
     private const float RIPPLE_FLOW = 0.015f;     // 잔물결이 1초에 흘러가는 양 (그림 한 장 = 1)
     private const float UPPER_LIT_CHANCE = 0.55f; // 밤에 2층 위 창이 켜져 있을 확률
     private const float SHOP_LIT_CHANCE = 0.85f;  // 밤에 1층 가게가 켜져 있을 확률
-    private const float GRAIN_M = 6f;             // 땅에 덧입히는 잔무늬 한 장의 크기
     private const float ASPHALT_TILE_M = 4f;      // 아스팔트 그림 한 장이 덮는 바닥 크기(m)
     private const float BLOCK_TILE_M = 1.2f;      // 보도블록·산책로 그림 한 장 (30cm 블록 4개)
     private const float ASPHALT_PHOTO_M = 3f;     // 아스팔트 사진 한 장이 덮는 바닥(m)
@@ -160,14 +159,15 @@ public class RetroMap : MonoBehaviour
         clock.SetMinute(0);
     }
 
-    // 땅: 위성 사진 바닥 + 가까이 가도 덜 뭉개지게 잔무늬 + 지도 바깥 넓은 바닥
+    // 땅: 위성 사진 바닥 + 가까이 가면 잔디·보도블록 무늬 + 지도 바깥 넓은 바닥
     private void ShowGround(MapData data)
     {
-        groundMaterial = new Material(Palette.Get("Ground")); // 복사본을 만들어 씀 (원본 파일은 그대로)
-        // 잔무늬: 유니티는 겹친 그림의 회색 128을 "그대로", 더 밝으면 밝게 곱함 → 평균이 128인 무늬여야 땅 밝기가 안 바뀜
-        //   (콘크리트 사진을 그대로 겹쳤더니 사진이 밝아서 땅이 눈 온 것처럼 하얘졌음)
-        groundMaterial.SetTexture("_DetailAlbedoMap", GrainTexture());
-        groundMaterial.SetTextureScale("_DetailAlbedoMap", Vector2.one * (data.sizeM / GRAIN_M));
+        // 땅 전용 셰이더(Shaders/Ground.shader): 바닥 색이 풀색이면 잔디 무늬, 아니면 보도블록 무늬를 가까운 곳에만 겹쳐 그림
+        //   무늬 그림은 평균이 회색 128이어야 땅 밝기가 안 바뀜 (밝은 그림을 겹쳤더니 땅이 눈 온 것처럼 하얘졌음)
+        groundMaterial = new Material(Shader.Find("Retro/Ground"));
+        groundMaterial.color = Palette.Get("Ground").color; // 사진이 오기 전에 보이는 땅 색
+        groundMaterial.SetTexture("_GrassTex", RoadPainter.GroundGrass());
+        groundMaterial.SetTexture("_PavingTex", RoadPainter.GroundPaving());
         Show("Ground", Ground.BuildMesh(), new Material[] { groundMaterial });
         ShowFarGround();
     }
@@ -533,28 +533,6 @@ public class RetroMap : MonoBehaviour
         ball.transform.position = foot + Vector3.up * PIN_HEIGHT_M;
         ball.transform.localScale = Vector3.one * 5;
         ball.GetComponent<MeshRenderer>().sharedMaterial = material;
-    }
-
-    // 땅에 겹칠 잔무늬: 점마다 밝기가 조금씩 다른 회색 그림 (모래알 같은 무늬)
-    private Texture2D GrainTexture()
-    {
-        const int size = 256;
-        Color32[] pixels = new Color32[size * size];
-        for (int y = 0; y < size; y++)
-        {
-            for (int x = 0; x < size; x++)
-            {
-                // 콘크리트 얼룩(큰 무늬) + 모래알(작은 점). 둘 다 128 둘레로 오르내려서 평균은 128
-                float stain = (Mathf.PerlinNoise(x * 0.03f, y * 0.03f) - 0.5f) * 30;
-                float sand = ((x * 7919 + y * 104729) % 23) - 11;
-                byte gray = (byte)Mathf.Clamp(128 + stain + sand, 0, 255);
-                pixels[y * size + x] = new Color32(gray, gray, gray, 255);
-            }
-        }
-        Texture2D texture = new Texture2D(size, size);
-        texture.SetPixels32(pixels);
-        texture.Apply();
-        return texture;
     }
 
     // 건물을 "종류 × 벽 색" 묶음으로 나눠 그림 (건물마다 따로 그리면 느려서, 같은 모습끼리 한 덩어리로)
