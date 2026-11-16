@@ -68,6 +68,8 @@ public class PlanServiceImpl implements PlanService {
     private static final int MAX_MESSAGE_LENGTH = 300;
     private static final int MAX_TITLE_LENGTH = 60;
     private static final int MAX_PROMPT_CANDIDATES = 90;
+    private static final java.util.regex.Pattern COUPLE_WORDS = java.util.regex.Pattern.compile("데이트|연인|커플");
+    private static final java.util.regex.Pattern SOLO_WORDS = java.util.regex.Pattern.compile("혼밥|혼자|1인");
     private static final int MAX_REASON_LENGTH = 40;      // Gemini 이유 한 줄
     private static final java.util.regex.Pattern GUESS_REASON = java.util.regex.Pattern.compile("걸어서|도보|가까|가깝|인접|근처|바로 옆|인근|위치|동선|니다$|평점|리뷰 ?[\\d,]+개|에 있어|에 있는|편리"); // 확인 안 된 거리 말·숫자·뻔한 말 (11/14)
     private static final int MAX_MEMO_LENGTH = 200;       // trip_stop.memo 저장 규칙
@@ -1258,10 +1260,11 @@ public class PlanServiceImpl implements PlanService {
 
     /** 누구랑에 안 맞는 이유인지: 연인이 아니면 "데이트", 혼자가 아니면 "혼밥" 이유는 안 붙임 */
     private boolean isFitReason(String text, String companion) {
-        if (text.contains("데이트") && !"연인".equals(companion)) {
+        // 11/16: '데이트'·'혼밥'만 거르던 것 → '연인·커플'·'혼자·1인'도 (2명인데 "연인과 함께…", "혼자 와서 먹기 편하다"가 붙었어요)
+        if (COUPLE_WORDS.matcher(text).find() && !"연인".equals(companion)) {
             return false;
         }
-        return !text.contains("혼밥") || "혼자".equals(companion);
+        return !SOLO_WORDS.matcher(text).find() || "혼자".equals(companion);
     }
 
     /**
