@@ -15,4 +15,5 @@ public class Payment {
     private String source;    // manual / card / capture
     private String memo;
     private String payer;     // 낸 사람: 나 / 동행 1 / 동행 2 … (정산용)
+    private String approvalNo; // 카드 승인번호 (카드 내역에서 가져온 결제만, 나머지는 null)
 }

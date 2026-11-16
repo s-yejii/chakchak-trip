@@ -41,14 +41,19 @@ export function useTripDetail() {
   }
 
   // 다른 날 보기 (여러 날 여행, 11/06): 그날 점검을 붙여 그날 칸으로 바꿈
+  // 일차를 빠르게 번갈아 누르면 응답이 늦게 온 앞 요청이 덮어쓸 수 있어서, 마지막으로 부른 날의 응답만 반영 (11/15)
+  let lastDayRequest = 0
   async function loadDay(day) {
     if (!saved.value) return
+    lastDayRequest++
+    const request = lastDayRequest
     let check = null
     try {
       check = await checkPlan(saved.value, day)
     } catch {
       check = null
     }
+    if (request !== lastDayRequest) return // 그사이 다른 날을 눌렀음 → 이 응답은 버림
     view.value = toViewTrip(saved.value, check, day)
   }
 

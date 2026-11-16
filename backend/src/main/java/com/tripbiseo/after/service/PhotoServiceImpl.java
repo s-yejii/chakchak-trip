@@ -74,9 +74,13 @@ public class PhotoServiceImpl implements PhotoService {
             MultipartFile file = files.get(i);
             String takenAt = readTakenAt(file, takenAts.get(i));
 
+            String takenDate = takenAt.substring(0, 10); // "2026-11-14T12:35" → "2026-11-14"
             Trip trip = chosenTrip;
-            if (trip == null) {
-                trip = findTripByDate(memberId, myTrips, takenAt.substring(0, 10));
+            if (trip != null && !isInTrip(trip, takenDate)) {
+                trip = null; // 고른 여행이어도 기간 밖에 찍은 사진은 안 넣음 ("이날 사진 불러오기"로 다른 날 사진을 골랐을 때)
+            }
+            if (chosenTrip == null) {
+                trip = findTripByDate(memberId, myTrips, takenDate);
             }
             if (trip == null) {
                 response.setUnmatchedCount(response.getUnmatchedCount() + 1); // 맞는 여행이 없음 → 저장 안 함
@@ -110,15 +114,19 @@ public class PhotoServiceImpl implements PhotoService {
      */
     private Trip findTripByDate(long memberId, List<Trip> myTrips, String takenDate) {
         for (Trip trip : myTrips) {
-            LocalDate photoday = LocalDate.parse(takenDate);
-            LocalDate startDate = LocalDate.parse(trip.getStartDate());
-            LocalDate endDate = LocalDate.parse(trip.getEndDate());
-            // 시작일 ≤ 찍은 날 ≤ 끝날 (같은 날도 포함)
-            if (!photoday.isBefore(startDate) && !photoday.isAfter(endDate)) {
+            if (isInTrip(trip, takenDate)) {
                 return tripService.getTrip(memberId, trip.getId()); // 목록의 여행은 일정 칸이 비어 있어서 다시 불러옴
             }
         }
         return null; // 다 봤는데 맞는 여행이 없음
+    }
+
+    // 찍은 날짜(yyyy-MM-dd)가 여행 기간 안인가: 시작일 ≤ 찍은 날 ≤ 끝날 (같은 날도 포함)
+    private boolean isInTrip(Trip trip, String takenDate) {
+        LocalDate photoDay = LocalDate.parse(takenDate);
+        LocalDate startDate = LocalDate.parse(trip.getStartDate());
+        LocalDate endDate = LocalDate.parse(trip.getEndDate());
+        return !photoDay.isBefore(startDate) && !photoDay.isAfter(endDate);
     }
 
     /** 찍은 시각(yyyy-MM-ddTHH:mm)에 머물고 있던 일정 칸 번호. 이동 중이면 null */

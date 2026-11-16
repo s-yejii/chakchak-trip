@@ -19,11 +19,14 @@ export const STAY_MIN_MINUTES = 8     // 군집이 이 시간보다 길어야 "�
 const NOISE = -1
 const UNSEEN = 0
 
-// 점 i의 이웃 번호들 (자기 포함): 거리 eps 안 + 시간 차 timeEps 안
+// 점 i의 이웃 번호들 (자기 포함): 거리 eps 안 + (시간 차 timeEps 안 또는 바로 앞뒤 점)
+//   바로 앞뒤 점은 시간 차가 커도 이웃: 휴대폰은 가만히 있으면 위치가 안 바뀌어서 GPS가 드문드문 저장됨
+//   예) 경복궁 10:00, 10:45, 11:30 세 점(같은 자리) → 서로 이어져서 1시간 30분 머문 곳으로 잡힘
 function neighborsOf(points, i) {
   const list = []
   for (let j = 0; j < points.length; j++) {
-    if (Math.abs(points[j].minute - points[i].minute) > DBSCAN_TIME_MIN) continue
+    const isNextTo = Math.abs(j - i) <= 1 // 기록 순서로 바로 앞·뒤 (points는 시간 순)
+    if (!isNextTo && Math.abs(points[j].minute - points[i].minute) > DBSCAN_TIME_MIN) continue
     if (distanceMeters(points[i].lat, points[i].lng, points[j].lat, points[j].lng) <= DBSCAN_EPS_M) list.push(j)
   }
   return list
