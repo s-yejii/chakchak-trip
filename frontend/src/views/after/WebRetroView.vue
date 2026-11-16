@@ -1121,6 +1121,7 @@ function toAnalysisNodes(track) {
     partsOf[stay.id] = splitByPlannedStops(stay)
     allParts.push(...partsOf[stay.id]) // ...: 목록을 풀어서 하나씩 넣음
   }
+  addMissedPlannedStops(allParts)
   clusters.value = { isOn: clusters.value.isOn, stays: allParts }
   if (map && map.getSource('stay-cluster')) map.getSource('stay-cluster').setData(toClusterCollection(allParts))
   const nodes = []
@@ -1135,6 +1136,25 @@ function toAnalysisNodes(track) {
     }
   }
   return nodes
+}
+
+// GPS 군집으로 못 찾은 다녀온 일정 칸을 머문 곳 목록에 더함 (앱이 기록한 실제 도착·머문 시간을 믿음)
+//   궁궐·공원처럼 넓은 곳은 안에서 걸어 다녀서 GPS 점이 반경(35m) 밖으로 퍼짐 → 군집이 안 생김
+//   예) 경복궁 10:00 도착 · 90분: GPS 점이 100m씩 떨어져 있어도 "계획한 곳"으로 보여 줌
+function addMissedPlannedStops(stays) {
+  for (const stop of retro.value.stops) {
+    if (stop.actualArrive === null || stop.actualStay === null || stop.lat === null) continue
+    if (stop.actualStay < STAY_MIN_MINUTES) continue
+    const from = tripMinutes(stop.day, stop.actualArrive)
+    const to = from + stop.actualStay
+    let isFound = false
+    for (const stay of stays) {
+      if (stay.from < to && from < stay.to) isFound = true // 시간이 겹치는 머문 곳이 이미 있음
+    }
+    if (isFound) continue
+    stays.push({ id: 'stop-' + stop.id, lng: stop.lng, lat: stop.lat, from: from, to: to, minutes: stop.actualStay, count: 0, radiusM: SPLIT_STAY_RADIUS_M, name: stop.name, category: stop.category, isPlanned: true })
+  }
+  stays.sort((a, b) => a.from - b.from) // 시간 순으로 다시 줄 세움
 }
 
 // 한 군집 안에 계획 장소 두 곳 이상의 도착이 있으면 도착 시각마다 나눔
@@ -1166,6 +1186,13 @@ function nameOfStay(stay) {
     const arrive = tripMinutes(stop.day, stop.actualArrive)
     const isNear = distanceMeters(stay.lat, stay.lng, stop.lat, stop.lng) <= 120
     if (isNear && arrive >= stay.from - 30 && arrive <= stay.to + 30) return { name: stop.name, category: stop.category, isPlanned: true }
+  }
+  // 계획 밖이면 서버가 찾아 둔 이름을 씀 (밤을 넘긴 곳 = 숙소, 아니면 근처 장소 이름)
+  for (const extra of retro.value.extraStops) {
+    const arrive = tripMinutes(extra.day, extra.arrive)
+    const isOverlap = arrive < stay.to && stay.from < arrive + extra.stay
+    if (isOverlap && extra.kind === 'lodging') return { name: '숙소', category: '숙소', isPlanned: false }
+    if (isOverlap && extra.name) return { name: extra.name, category: '', isPlanned: false }
   }
   return { name: null, category: '', isPlanned: false }
 }
