@@ -16,4 +16,18 @@
     LIMIT 1
   </select>
 
+  <!-- "조용한" 점수 (11/16): 후보 장소마다, 그 장소 점이 든 250m 칸의 여행 요일 낮(10~21시) 서울 순위 평균 -->
+  <select id="selectDayCrowds" resultType="com.tripbiseo.plan.dto.PlaceCrowd">
+    SELECT p.id AS place_id, ROUND(AVG(h.seoul_pct)) AS seoul_pct
+    FROM retrip_place p
+    JOIN crowd_cell c ON ST_Contains(c.geom, ST_SetSRID(ST_MakePoint(p.longitude, p.latitude), 4326))
+    JOIN crowd_hour h ON h.cell_id = c.cell_id
+    WHERE p.id IN
+      <foreach collection="placeIds" item="placeId" open="(" separator="," close=")">#{placeId}</foreach>
+      AND h.day_kind IN
+      <foreach collection="dayKinds" item="dayKind" open="(" separator="," close=")">#{dayKind}</foreach>
+      AND h.hour BETWEEN 10 AND 21
+    GROUP BY p.id
+  </select>
+
 </mapper>

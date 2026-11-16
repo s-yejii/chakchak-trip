@@ -109,6 +109,7 @@ public class PlanServiceImpl implements PlanService {
     private final PlanCandidateFinder planCandidateFinder; // 후보 장소 찾기 (RAG의 찾기)
     private final RouteOrderer routeOrderer;               // 하루 동선 정리 (직접 고르기 [동선 정리]와 같은 함수)
     private final PlanVerifier planVerifier;               // 예약·꼭 갈 곳 검증 줄 (11/13)
+    private final PlanCrowdScorer planCrowdScorer;         // "조용한"이면 한산한 동네에 점수 (11/16)
     private final PlanRuleMaker planRuleMaker;             // AI가 안 될 때 규칙으로 일정 + 숙소 칸 (11/03)
     private final ReviewNeedChecker reviewNeedChecker;     // 칩에 없는 요청을 후보 리뷰로 확인 (11/04)
     private final PlanLimitChecker planLimitChecker;       // 끝 장소·도착 마감, 걷는 시간 상한 (11/04)
@@ -224,6 +225,7 @@ public class PlanServiceImpl implements PlanService {
         Map<String, Double> scores = planCandidateFinder.scoreOf(found, tagCounts, conditions.getTags());
         Map<String, List<String>> reasons = planCandidateFinder.reasonsOf(found, tagCounts, conditions.getTags());
         addWishBonus(conditions, found, scores);
+        planCrowdScorer.addQuietBonus(conditions, found, scores, response.getStartDate(), days); // "조용한"이면 한산한 동네에 점수 (11/16)
         checkNeeds(conditions, found, scores, reasons, response, progress);
         Map<String, Place> candidates = planCandidateFinder.sortByScore(found, scores); // 고른 태그가 많은 곳부터
         // 끝 장소가 있으면 마지막 날 일정이 끝나야 하는 시각을 먼저 계산 (칸 고르기에 씀)
