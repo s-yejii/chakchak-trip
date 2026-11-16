@@ -11,6 +11,7 @@ import { dayStopsOf, editingTripOf, retime, setDayStops } from '@/utils/draftEdi
 import { imageFor } from '@/utils/mapView'
 import { toDuration } from '@/utils/time'
 import { showToast } from '@/utils/toast'
+import { withEulReul } from '@/utils/josa'
 
 const route = useRoute()
 const router = useRouter()
@@ -36,7 +37,7 @@ function remove() {
   retime(rest, startTime) // 고정 칸은 그대로, 나머지 시각은 일정 점검이 다시 채움
   setDayStops(trip, day, rest)
   goBackTo(backLink)
-  showToast(stop.name + '을(를) 뺐어요')
+  showToast(withEulReul(stop.name) + ' 뺐어요')
 }
 </script>
 
@@ -48,7 +49,7 @@ function remove() {
         <h1 class="topbar__title">일정 편집</h1>
       </header>
 
-      <ConfirmModal :img="stop.img" :title="stop.name + '을(를) 뺄까요?'" :text="desc" ok-text="빼기" ok-icon="i-trash" danger @cancel="goBackTo(backLink)" @ok="remove" />
+      <ConfirmModal :img="stop.img" :title="withEulReul(stop.name) + ' 뺄까요?'" :text="desc" ok-text="빼기" ok-icon="i-trash" danger @cancel="goBackTo(backLink)" @ok="remove" />
     </div>
   </div>
 </template>

@@ -381,6 +381,7 @@ AI에게 묻기의 분위기 조건("조용한", "작업하기 좋은")을 글�
 | source | VARCHAR(10) NOT NULL DEFAULT 'manual' | manual(직접 입력) / card(카드 내역 가져옴) / capture(결제 캡처, 나중에) |
 | memo | VARCHAR(200) | 메모 |
 | payer | VARCHAR(20) NOT NULL DEFAULT '나' | 낸 사람: 나 / 동행 1 / 동행 2 … (정산용, 11/07 ALTER로 추가) |
+| approval_no | VARCHAR(30) | 카드 승인번호 (CODEF `resApprovalNo`). 카드 내역에서 가져온 결제만, 나머지는 NULL. 같은 가게·시각·금액 결제를 구별하려고 (11/16 ALTER로 추가) |
 | created_at | TIMESTAMP NOT NULL DEFAULT NOW() | 저장 시각 |
 
 인덱스 `idx_payment_trip (trip_id, paid_at)`.

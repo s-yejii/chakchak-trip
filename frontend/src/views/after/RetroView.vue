@@ -591,7 +591,7 @@ async function importCards() {
   try {
     for (const i of checkedCards.value) {
       const card = cardList.value[i]
-      await post('/trips/' + route.query.id + '/payments', { paidAt: card.paidAt, storeName: card.storeName, amount: card.amount, source: 'card' })
+      await post('/trips/' + route.query.id + '/payments', { paidAt: card.paidAt, storeName: card.storeName, amount: card.amount, source: 'card', approvalNo: card.approvalNo }) // 승인번호: 같은 가게·시각·금액 결제를 구별
       count++
     }
     showToast(count + '건 가져왔어요')
@@ -707,6 +707,12 @@ const shareEdit = ref(null) // 고치는 중 { id, amount(글자) }. null이면 
 
 function startShareEdit(person) {
   shareEdit.value = { id: person.id, amount: String(person.should) }
+}
+
+// 칸에 쓴 글자 → 낼 돈. 숫자가 하나도 없으면(빈칸) null = 자동 (Number('')가 0이라 0원으로 저장되던 것)
+function toShareAmount(text) {
+  const digits = String(text).replace(/\D/g, '')
+  return digits === '' ? null : Number(digits)
 }
 
 // 저장 (PUT …/share). amount가 null이면 자동으로 되돌림
@@ -1216,7 +1222,7 @@ function toggleMapType() {
                 <span class="retro-settle__name">{{ person.name }}</span>
                 <span class="tn t-cap">낸 돈 {{ toWon(person.paid) }}</span>
                 <!-- 낼 돈: 누르면 고치기. 직접 정한 금액이면 "정함" 표시 + [자동] -->
-                <form v-if="shareEdit && shareEdit.id === person.id" class="retro-settle__edit" @submit.prevent="saveShare(person.id, Number(shareEdit.amount.replace(/\D/g, '')))">
+                <form v-if="shareEdit && shareEdit.id === person.id" class="retro-settle__edit" @submit.prevent="saveShare(person.id, toShareAmount(shareEdit.amount))">
                   <input v-model="shareEdit.amount" type="text" inputmode="numeric" aria-label="낼 돈" />
                   <button type="submit" class="btn btn--primary btn--sm">저장</button>
                   <button type="button" class="btn btn--secondary btn--sm" @click="shareEdit = null">취소</button>
