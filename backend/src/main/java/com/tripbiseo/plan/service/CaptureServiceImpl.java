@@ -116,7 +116,7 @@ public class CaptureServiceImpl implements CaptureService {
         String time = matchesOrNull(receipt.getPaidTime(), TIME_PATTERN);
         response.setPaidAt(date == null || time == null ? null : date + " " + time);
         fillReceiptPlace(response, receipt);
-        fillCheckNeeded(response, Boolean.TRUE.equals(receipt.getIsSumDifferent()));
+        fillCheckNeeded(response, isSumDifferent(receipt, response.getTotalAmount()));
         return response;
     }
 
