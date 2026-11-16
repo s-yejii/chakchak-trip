@@ -80,7 +80,7 @@ public class PlanVerifier {
         for (Stop stop : response.getStops()) {
             boolean isSameDay = previous != null && dayOf(previous) == dayOf(stop);
             boolean isEmpty = stop.getMemo() == null || stop.getMemo().isBlank();
-            if (isEmpty && !Boolean.TRUE.equals(stop.getFixed()) && !STAY_CATEGORY.equals(stop.getCategory())) {
+            if (isEmpty && !STAY_CATEGORY.equals(stop.getCategory())) { // 11/16: 꼭 갈 곳·예약도 (예전엔 고정 칸이라 빈칸으로 남았어요)
                 String memo = factMemoOf(stop, isSameDay ? previous : null);
                 stop.setMemo(memo.isEmpty() ? null : memo);
             }
