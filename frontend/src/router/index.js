@@ -13,6 +13,7 @@ const routes = [
   // ① 회원·홈 밖 화면·알림·마이·잠금화면
   { path: '/invite', component: () => import('@/views/member/InviteView.vue'), meta: { owner: 3, title: 'S00 친구 초대 링크' } },
   { path: '/onboarding', component: () => import('@/views/member/OnboardingView.vue'), meta: { owner: 1, title: 'S01 온보딩' } },
+  { path: '/s/:code', component: () => import('@/views/member/ShareView.vue'), meta: { web: true, owner: 1, title: 'S공유 공개 일정 (로그인 없이)' } }, // 11/16 카카오톡 공유 링크
   { path: '/login', component: () => import('@/views/member/LoginView.vue'), meta: { parent: '/onboarding', owner: 1, title: 'S02-a 로그인' } },
   { path: '/find-account', component: () => import('@/views/member/FindAccountView.vue'), meta: { parent: '/login', owner: 1, title: 'S02-c 아이디·비밀번호 찾기' } },
   { path: '/signup', component: () => import('@/views/member/SignupView.vue'), meta: { parent: '/login', owner: 1, title: 'S02-b 회원가입' } },
@@ -40,7 +41,7 @@ const routes = [
   { path: '/trips/archive', component: () => import('@/views/trip/TripArchiveView.vue'), meta: { parent: '/trips', owner: 2, title: '보관함' } },
   { path: '/trips/empty', component: () => import('@/views/trip/TripsEmptyView.vue'), meta: { parent: '/', owner: 2, title: 'S04-c 내 여행 · 빈 상태' } },
   { path: '/plan/manual/start', component: () => import('@/views/trip/PlanManualStartView.vue'), meta: { parent: '/new', owner: 2, title: 'S09-a0 직접 고르기 · 어디·언제' } },
-  { path: '/plan/manual', component: () => import('@/views/trip/PlanManualView.vue'), meta: { parent: '/plan/check', owner: 2, title: 'S09-a 지도에서 직접 고르기' } },
+  { path: '/plan/manual', component: () => import('@/views/trip/PlanManualView.vue'), meta: { parent: '/plan/manual/start', owner: 2, title: 'S09-a 지도에서 직접 고르기' } },
   { path: '/plan/check', component: () => import('@/views/trip/PlanCheckView.vue'), meta: { parent: '/trips', owner: 2, title: 'S10-a 일정 점검' } },
   { path: '/plan/edit', component: () => import('@/views/trip/PlanEditView.vue'), meta: { parent: '/trips/today', history: true, owner: 2, title: 'S10-a2 일정 편집 모드' } },
   { path: '/plan/edit/stop', component: () => import('@/views/trip/StopEditView.vue'), meta: { parent: '/plan/edit', owner: 2, title: 'S10-b 일정 한 칸 수정', overlay: true } },

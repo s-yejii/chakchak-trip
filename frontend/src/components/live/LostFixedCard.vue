@@ -1,13 +1,33 @@
 <script setup>
 // 예약 놓침 카드 (④ 11/12): 식당·카페 예약에 가장 빠른 방법으로도 못 닿을 때(서버 lost- 알림), 또는 "못 가게 됐어요"를 눌렀을 때.
 // 가운데 카드 모양(뒤 어둡게). 앱은 가게가 실제로 취소했는지 몰라서 사용자가 버튼으로 정해요
-defineProps({
+// 11/16 ③ 요청: "13:05 도착 (35분 늦음)" 한 줄 + [가게에 전화하기] (늦어도 받아 주는지 물어보기)
+import { onMounted, ref } from 'vue'
+import { getPlaceDetail } from '@/api/trips'
+import { devMode } from '@/utils/devMode'
+import { showToast } from '@/utils/toast'
+
+const props = defineProps({
   name: { type: String, required: true },           // 놓친 가게 이름
   text: { type: String, default: '' },              // "가장 빠른 방법으로 가도 …" / "예약한 곳에 못 가게 됐나요?"
+  arriveText: { type: String, default: '' },        // "13:05 도착 (35분 늦음)" (모르면 빈 값)
+  placeId: { type: String, default: null },         // 가게 전화번호 찾기용
   canFindSimilar: { type: Boolean, default: true }, // 장소 id가 없으면(직접 입력한 곳) 비슷한 가게를 못 찾음
   isSkipping: { type: Boolean, default: false },
 })
 const emit = defineEmits(['similar', 'skip', 'keep'])
+
+// 가게 전화번호 (없으면 버튼을 안 보여 줌)
+const tel = ref('')
+onMounted(async () => {
+  if (!props.placeId) return
+  const place = await getPlaceDetail(props.placeId).catch(() => null)
+  tel.value = place && place.tel ? place.tel : ''
+})
+// 시연 계정은 실제로 걸지 않고 번호만 보여 줌 (발표장에서 진짜 가게에 전화가 가지 않게, QuickAltCard와 같음)
+function callDemo() {
+  showToast(props.name + ' · ' + tel.value + ' 전화 연결')
+}
 </script>
 
 <template>
@@ -15,9 +35,15 @@ const emit = defineEmits(['similar', 'skip', 'keep'])
     <div class="crit__card">
       <span class="crit__icon lost__icon"><i class="ic ic--l i-warning" aria-hidden="true"></i></span>
       <b class="crit__title">{{ name }}</b>
+      <span v-if="arriveText" class="lost__arrive tn">{{ arriveText }}</span>
       <span v-if="text" class="crit__text">{{ text }}</span>
       <span v-if="canFindSimilar" class="crit__text">비슷한 근처 가게를 찾아 드릴까요?</span>
       <div class="lost__buttons">
+        <!-- 맨 위: 먼저 가게에 전화해 보고, 안 되면 아래 [비슷한 근처 가게 찾기] (11/16 ③) -->
+        <template v-if="tel">
+          <button v-if="devMode.isOn" type="button" class="btn btn--secondary btn--lg btn--block" @click="callDemo"><i class="ic ic--s i-phone" aria-hidden="true"></i>가게에 전화하기</button>
+          <a v-else :href="'tel:' + tel" class="btn btn--secondary btn--lg btn--block"><i class="ic ic--s i-phone" aria-hidden="true"></i>가게에 전화하기</a>
+        </template>
         <button v-if="canFindSimilar" type="button" class="btn btn--primary btn--lg btn--block" @click="emit('similar')">비슷한 근처 가게 찾기</button>
         <button type="button" class="btn btn--lg btn--block" :class="canFindSimilar ? 'btn--secondary' : 'btn--primary'" :disabled="isSkipping" @click="emit('skip')">빼고 다음 장소로</button>
       </div>
@@ -35,4 +61,5 @@ const emit = defineEmits(['similar', 'skip', 'keep'])
 .crit__text { font-size: 14px; line-height: 20px; color: var(--ink-muted); }
 .lost__icon { background: var(--danger-soft, #fdecec); color: var(--danger, #d33a3a); }
 .lost__buttons { display: grid; gap: 8px; width: 100%; margin-top: 6px; }
+.lost__arrive { font-size: 15px; font-weight: 700; color: var(--danger, #d33a3a); }
 </style>

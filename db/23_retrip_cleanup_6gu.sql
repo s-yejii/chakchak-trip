@@ -242,3 +242,21 @@ DELETE FROM retrip_place WHERE id IN (
   'tour-4153922'   -- 런닝맨 인사동점
 );
 COMMIT;
+
+-- 11/16 ① 이상재: 영업시간이 빈 관광지 채우기 (② 찬기 요청). 빈 곳만 바꿔요 (다시 실행해도 같은 결과)
+--  "상시 개방"이면 앱이 늘 열린 곳으로 계산해요 (OpeningHours). 북촌한옥마을 tour-126537의 10:00~17:00은 주민 보호 방문 시간이라 그대로
+BEGIN;
+UPDATE retrip_place SET use_time = '상시 개방'
+WHERE id IN ('tour-2946228',                          -- 익선동 한옥거리
+             'cf66f230-e665-57e2-a78a-6358da042de3',  -- 성수동 카페거리
+             '7cfdfd7b-ea87-5ef5-ae6a-aa07397d0929',  -- 북촌한옥마을 (sample)
+             'ce57766d-bb3b-5cc4-aa49-c8aee11034aa',  -- 인사동 문화의거리
+             '9b0d5521-9ff2-52ec-a1ea-36e9114f63ad',  -- 광화문광장
+             'tour-126480',                           -- 관악산
+             'tour-3452906')                          -- 홍제천인공폭포
+  AND (use_time IS NULL OR use_time = '');
+-- 진짜 시간: 경복궁은 촬영일(11월) 기준 (앱은 첫 시간만 읽음), 석파정·무계원은 같은 곳의 다른 줄 값
+UPDATE retrip_place SET use_time = '09:00~17:00 (11월~2월 기준, 입장마감 16:00)' WHERE id = 'e70caff5-27cf-5c76-a1f3-201b7032d672' AND (use_time IS NULL OR use_time = ''); -- 경복궁
+UPDATE retrip_place SET use_time = '10:00~18:00 (입장마감 17:00)' WHERE id = 'tour-3449598' AND (use_time IS NULL OR use_time = ''); -- 석파정
+UPDATE retrip_place SET use_time = '10:00~18:00' WHERE id = 'tour-3424542' AND (use_time IS NULL OR use_time = ''); -- 종로 무계원
+COMMIT;

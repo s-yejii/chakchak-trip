@@ -80,9 +80,12 @@ async function pickPin(pin) {
 // 이동 시간 비교: 처음 값과 지금 값 (순서·칸이 바뀔 때마다 점검으로 다시 재요)
 const firstMove = ref(null)
 const nowMove = ref(null)
-async function measureMove() {
+let lastMeasure = 0 // 순서를 빠르게 여러 번 바꾸면 마지막 점검 결과만 시각에 써요
+async function measureMove(isFill = false) {
+  const request = ++lastMeasure
   try {
     const check = await checkPlan(trip.value, day.value)
+    if (isFill && request === lastMeasure) fillTimes(check.stops)
     let minutes = 0
     for (const leg of check.legs || []) minutes += leg.minutes || 0
     nowMove.value = minutes
@@ -92,10 +95,19 @@ async function measureMove() {
     return null
   }
 }
+// 순서를 바꾸거나 칸을 빼면 비워 둔 시각(retime)을 점검 결과로 바로 채워요 ([완료] 전에도 새 시각이 보이게, 11/16)
+function fillTimes(checkedStops) {
+  const list = dayStopsOf(trip.value, day.value)
+  for (const checked of checkedStops || []) {
+    const stop = list.find((s) => s.name === checked.name)
+    if (stop && !stop.time) stop.time = checked.time
+  }
+}
 watch(() => day.value + '/' + mapStops.value.map((stop) => stop.name).join('|'), (key, oldKey) => {
   if (!mapStops.value.length) return
-  if (oldKey && key.split('/')[0] !== oldKey.split('/')[0]) firstMove.value = null // 다른 날로 바꾸면 처음부터
-  measureMove()
+  const isSameDay = !!oldKey && key.split('/')[0] === oldKey.split('/')[0]
+  if (oldKey && !isSameDay) firstMove.value = null // 다른 날로 바꾸면 처음부터
+  measureMove(isSameDay) // 같은 날에서 순서·칸이 바뀐 때만 시각을 채움 (처음 열 때·날 바꿀 때는 그대로)
 }, { immediate: true })
 // 지도의 [동선 최적화]: 누를 때마다 다음 후보로 (저장은 "완료"할 때)
 const optimize = useRouteOptimize({

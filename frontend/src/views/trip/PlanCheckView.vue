@@ -1,19 +1,20 @@
 <script setup>
 // S10-a 일정 점검 (②): 만든 일정을 지도와 목록으로 보고, 미리 확인할 것을 살핀 뒤 저장해요
 // 초안(store.draft)에 장소가 있으면 서버가 점검(POST /api/plans/check: 실제 이동 시간·영업시간·고정 일정 여유)하고
-// "저장"은 POST /api/trips. 초안이 비어 있으면 시연용 가짜 일정(concertTrip)을 보여 줘요.
+// "저장"은 POST /api/trips. 초안이 비어 있으면(새로고침·주소 직접 입력) "아직 담은 장소가 없어요"와 장소 고르러 가기만 보여 줘요. (11/13 ② 찬기)
 // 11/04: 여러 날이면 일차를 골라 그날만 점검(?day=N) · 목록 손잡이를 끌어 순서 바꾸기 → 시각을 비우고 다시 점검
 //        · 지도는 점검 결과의 구간 경로(길찾기 API)로 진짜 길
 //        · 오른쪽 위 버튼은 칸을 골랐을 때만 "○○ 편집"으로 떠서 그 칸 수정으로 가요 (순서는 목록에서 끌어서 바꿔요)
 //        · 오른쪽 위 재생 버튼: 점이 일정대로 움직이고 시각이 흘러가요 (이동 미리보기, 화면에서만)
 //        · 이동 줄을 눌러 도보·대중교통·택시를 고르면 그 칸 수단(mode)을 바꾸고 다시 점검 → 시간·경로가 진짜로 바뀜
 import ChipScroller from '@/components/common/ChipScroller.vue'
+import PageMessage from '@/components/common/PageMessage.vue'
+import TopBar from '@/components/common/TopBar.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import TripPage from '@/components/trip/TripPage.vue'
 import { SHOW_PRICE_ESTIMATE, stopWon, toWonText } from '@/utils/budget'
 import { useStopPhotos } from '@/utils/useStopPhotos'
-import { concertTrip } from '@/data/trips'
 import { modes } from '@/data/places'
 import { checkPlan, createTrip, deleteTrip, finishTrip, getTripList } from '@/api/trips'
 import { devMode } from '@/utils/devMode'
@@ -42,8 +43,8 @@ const savedTrip = ref(null) // 다시 짜기로 방금 저장한 여행 (창을 
 const isReplacing = ref(false)
 const day = ref(Number(route.query.day || 1))
 const hasDraft = computed(() => store.draft.stops.length > 0)
-// 점검 결과가 오기 전에는 초안 그대로 보여 줌 (가짜 일정으로 깜빡이지 않게)
-const baseTrip = computed(() => (hasDraft.value ? toViewTrip(store.draft, check.value, day.value, hoursCheckedIds.value) : concertTrip))
+// 점검 결과가 오기 전에는 초안 그대로 보여 줌. 초안이 비면 null (화면은 빈 안내만)
+const baseTrip = computed(() => (hasDraft.value ? toViewTrip(store.draft, check.value, day.value, hoursCheckedIds.value) : null))
 // 카드 사진: 장소마다 진짜 사진 (홈 카드와 같은 함수, 일정 안에서 안 겹침). 없으면 종류별 기본 사진
 const stopPhotos = useStopPhotos(() => (hasDraft.value ? store.draft.stops.filter((stop) => (stop.day || 1) === day.value) : []))
 // 칸 오른쪽 아래 금액 글자 (숙소처럼 넣지 않는 곳은 없음, 저장 전 초안에만)
@@ -51,10 +52,10 @@ function costTextOf(stop) {
   const won = stopWon(stop)
   return SHOW_PRICE_ESTIMATE && hasDraft.value && won !== null && won !== undefined ? toWonText(won) : null
 }
-const trip = computed(() => ({
+const trip = computed(() => (baseTrip.value ? {
   ...baseTrip.value,
   stops: baseTrip.value.stops.map((stop) => ({ ...stop, img: stopPhotos.value[stop.name] || stop.img, photo: stopPhotos.value[stop.name] || null, costText: costTextOf(stop) })),
-}))
+} : null))
 // 일차 목록 [{ day: 1, label: '12/4(금)' }] (초안 칸의 가장 큰 day까지)
 const dayList = computed(() => {
   let last = 1
@@ -172,7 +173,6 @@ function editLabel(selected) {
   return stop.name.replace('천호 ', '') + ' 편집'
 }
 function editLink(selected) {
-  if (!hasDraft.value) return '/plan/edit/stop?idx=' + selected
   return `/plan/edit/stop?day=${day.value}&idx=${selected}&back=${encodeURIComponent(route.fullPath)}` // 돌아올 곳 = 지금 주소 그대로
 }
 
@@ -233,11 +233,7 @@ async function fillEmptyTimes() {
 }
 
 async function save() {
-  if (!hasDraft.value) {
-    router.replace('/trips/today')
-    showToast('일정을 저장했어요')
-    return
-  }
+  if (!hasDraft.value) return // 담은 장소가 없으면 저장할 것도 없음 (예전엔 가짜 일정을 저장한 척했어요)
   saving.value = true
   try {
     await fillEmptyTimes()
@@ -260,7 +256,14 @@ async function save() {
 
 <template>
   <div class="scr scr-PlanCheck">
-    <TripPage :trip="trip" back="/trips" :show-budget="hasDraft && SHOW_PRICE_ESTIMATE" :sim-me="sim.me.value" :active-stop="sim.activeStop.value" :reorderable="hasDraft" :mode-editable="hasDraft" @reorder="reorder" @change-mode="changeMode" :show-hours-help="hasDraft" @hours-checked="markHoursChecked" :reset-key="day">
+    <!-- 담은 장소가 없을 때: 안내만 (지도·저장·장소 추가·편집 버튼은 안 보여요) -->
+    <div v-if="!hasDraft" class="app">
+      <TopBar title="일정 점검" back="/trips" />
+      <div class="scroll">
+        <PageMessage title="아직 담은 장소가 없어요" to="/plan/manual" button="장소 고르러 가기" />
+      </div>
+    </div>
+    <TripPage v-else :trip="trip" back="/trips" :show-budget="hasDraft && SHOW_PRICE_ESTIMATE" :sim-me="sim.me.value" :active-stop="sim.activeStop.value" :reorderable="hasDraft" :mode-editable="hasDraft" @reorder="reorder" @change-mode="changeMode" :show-hours-help="hasDraft" @hours-checked="markHoursChecked" :reset-key="day">
       <template #right="{ selected }">
         <button v-if="isFromAi && selected === null && !sim.isOn.value" type="button" class="btn btn--sm btn--float" @click="isConditionsAsk = true"><i class="ic ic--s i-settings" aria-hidden="true"></i>조건 바꾸기</button>
         <RouteSimButton v-if="hasDraft" :sim="sim" />

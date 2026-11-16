@@ -1,0 +1,10 @@
+# 이미지에 넣지 않을 것 (11/16 ④)
+# 키·비밀번호가 든 내 PC 설정 → 이게 들어가면 이미지 안에 키가 남아요
+src/main/resources/application-local.properties
+target/
+uploads/
+.mvn/
+.idea/
+.vscode/
+*.iml
+HELP.md

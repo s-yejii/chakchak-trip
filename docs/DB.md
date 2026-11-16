@@ -28,7 +28,7 @@
 | `db/20_review_rag.sql` | 리뷰 RAG: pgvector 확장 + 리뷰 임베딩 `review_embedding` (11/15). pgvector 있는 DB(도커)에서만. 리뷰 RAG 관리 계정 `ragadmin` 한 명도 넣어요 (임베딩·평가 API용, 비밀번호는 팀 카톡, 11/16) | ④ |
 | `db/21_retrip_crawl_6gu.sql`, `21b_…_review.sql` | 네이버 크롤링 6개 구(중구·종로·강남·송파·용산·영등포) 가게 갱신·추가 + 리뷰 (11/15, 크롤러 build 결과) | DB 총괄 |
 | `db/22_retrip_tour_6gu.sql` | 같은 6개 구 TourAPI 관광지(12)·문화시설(14) 391곳 (11/15) | DB 총괄 |
-| `db/23_retrip_cleanup_6gu.sql` | 21·22 정제: 폐업·애매 업종 삭제, 일정 칸이 쓰는 폐업 4곳은 표시만, 스시이세이 주소·업종, 08 규칙 다시 적용 (11/15) | DB 총괄 |
+| `db/23_retrip_cleanup_6gu.sql` | 21·22 정제: 폐업·애매 업종 삭제, 일정 칸이 쓰는 폐업 4곳은 표시만, 스시이세이 주소·업종, 08 규칙 다시 적용 (11/15). 빈 영업시간 10곳 채움 (11/16) | DB 총괄 |
 | `db/24_hangang_bus.sql` | 한강버스 선착장 8곳(`retrip_place`, `source='hangang'`) + 운항 시간표 `hangang_bus_time` (11/15) | DB 총괄 |
 | `db/15_after.sql` | ⑤ 테이블 | ⑤ |
 | `db/90_test_data.sql` | 테스트 계정(tripuser / tripuser1234)·샘플 여행 | DB 총괄 |
@@ -62,6 +62,7 @@
 | ① | `member_style` | 여행 스타일 | ③ 읽기 | 만들 예정 |
 | ① | `notification` | 알림함 | ④⑤는 `NotificationService.send`로 | 있음 (11/03) |
 | ① | `friend` | 친구 | | 만들 예정 (여유) |
+| ① | `trip_share` | 일정 공유 링크 (로그인 없이 보는 `/s/{code}`) | `trip` 읽기(JOIN) | 있음 (11/16) |
 | ② | `trip_chat` | 대화 기록 | ③④는 ② 메서드로 저장 | 있음 |
 | ② | `pack_item` | 챙길 것 | | 만들 예정 (여유) |
 | ③ | `theme`, `theme_stop` | 테마 코스 | ② 읽기 | 만들 예정 |
@@ -294,7 +295,19 @@
 ```
 
 ### ① 회원·알림 (이상재)
-(member_style, notification, friend)
+(member_style, notification, friend, trip_share)
+
+### trip_share · 일정 공유 링크 (①, `11_member.sql`, 11/16)
+
+카카오톡으로 보낸 링크(`/s/{code}`)를 로그인 없이 열어 일정만 보게 해요. 한 여행에 코드 하나 (이미 있으면 그 코드를 다시 써요).
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| code | TEXT PK | 공유 코드 (SecureRandom 16바이트 → URL용 22글자, 맞히기 어려움) |
+| trip_id | BIGINT NOT NULL → trip (ON DELETE CASCADE) | 공유한 여행. 여행을 영구 삭제하면 코드도 지워짐 |
+| created_at | TIMESTAMP NOT NULL DEFAULT NOW() | |
+
+인덱스 `idx_trip_share_trip (trip_id)`
 
 ### ② 여행·일정 (이찬기)
 (pack_item — 여유)
@@ -453,4 +466,4 @@ AI에게 묻기의 분위기 조건("조용한", "작업하기 좋은")을 글�
 | seoul_pct | SMALLINT | 같은 요일·시각 서울 칸 중 순위 0~100 |
 | self_pct | SMALLINT | 이 칸 가장 붐빌 때 대비 % |
 
-PK (cell_id, day_kind, hour). 지금은 중구·강남구·종로구 1,076칸, 146,135줄. 출처: 서울 열린데이터광장 생활인구(250m), 최근 8주(2026-09-05~10-31) 평균, 공휴일만 1년치.
+PK (cell_id, day_kind, hour). 종로·중구·용산·영등포·강남·송파 6개 구 2,232칸, 302,985줄 (11/16 3개 구에서 넓힘). 출처: 서울 열린데이터광장 생활인구(250m), 최근 8주(2026-09-05~10-31) 평균, 공휴일만 1년치.

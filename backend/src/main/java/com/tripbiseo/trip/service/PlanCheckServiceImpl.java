@@ -173,6 +173,9 @@ public class PlanCheckServiceImpl implements PlanCheckService {
             return "이날 휴무예요 (" + open.getClosedReason().replace("오늘 휴무 (", "").replace(")", "") + ")";
         }
         checked.setHoursUnknown(open.getOpen() == null && needsHours(stop, place)); // 영업시간을 모름 (휴무는 위에서 이미 걸러짐)
+        if (Boolean.TRUE.equals(stop.getFixed())) {
+            return issue; // 예약(고정) 칸은 본인이 예약 시각을 알아요 → 휴무만 보고 영업시간 경고는 안 해요 (11/16)
+        }
         if (Boolean.FALSE.equals(open.getOpen())) {
             checks.setHours(false);
             return Geo.toHhmm(arrive) + "에는 영업 시간이 아니에요";
@@ -206,6 +209,9 @@ public class PlanCheckServiceImpl implements PlanCheckService {
 
     /** 시간 문제: 오늘 일정인데 이미 지난 시각 / 계획보다 10분 넘게 늦게 도착 */
     private String findTimeIssue(Stop stop, LocalDate date, int arrive) {
+        if ("done".equals(stop.getState())) {
+            return null; // 이미 다녀온 칸은 시각이 지났거나 늦은 게 당연해서 경고 안 해요 (11/16)
+        }
         int planned = Geo.toMinutes(stop.getTime());
         int stay = stop.getStay() == null ? 0 : stop.getStay();
         boolean isToday = date.equals(Geo.now().toLocalDate());

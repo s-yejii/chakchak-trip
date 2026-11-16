@@ -7,9 +7,17 @@ import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { searchPlaces } from '@/api/trips'
 import { photoFor } from '@/utils/placePhoto'
+import { scrollSideways, startChipDrag, isJustDragged } from '@/utils/chipScroll'
 import '@/assets/css/live-panel.css' // 지도 위 패널 생김새 (AI 채팅·근처 찾기·비슷한 가게 같이, 11/13)
 
 const RADIUS_LIST = [300, 500, 1000] // m
+// 빠른 검색어 (11/16): 시연 동선 500m 안에서 실제로 결과가 나오는 말만 (고기 55·중식 34·디저트 24·한식 21·일식 17·분식 16·베이커리 16곳).
+// 화장실·쓰레기통·편의점·약국은 DB에 없어서 뺐어요 (화장실·쓰레기통은 ⑤ amenity 표, 아직 없음)
+const QUICK_WORDS = [
+  { word: '카페', icon: 'i-cup' }, { word: '음식점', icon: 'i-food' }, { word: '술집', icon: 'i-glass' },
+  { word: '디저트', icon: 'i-cup' }, { word: '한식', icon: 'i-food' }, { word: '고기', icon: 'i-food' },
+  { word: '분식', icon: 'i-food' }, { word: '중식', icon: 'i-food' }, { word: '일식', icon: 'i-food' }, { word: '베이커리', icon: 'i-cup' },
+]
 
 const props = defineProps({
   tripId: { type: Number, required: true },
@@ -55,6 +63,12 @@ async function search(text) {
   } finally {
     isLoading.value = false
   }
+}
+
+// 빠른 검색어 칩 누르기. 방금 마우스로 끌어 넘긴 거면 누른 걸로 안 봄
+function searchChip(text) {
+  if (isJustDragged()) return
+  search(text)
 }
 
 function setRadius(value) {
@@ -121,9 +135,9 @@ function addPicked() {
 
       <!-- 처음: 안내 + 빠른 검색어 -->
       <template v-else>
-        <p class="lp-hint">찾고 싶은 곳을 적어 주세요. 지금 위치 주변에서 찾아 지도에 핀으로 보여 드려요.</p>
-        <div class="lp-chips">
-          <button v-for="w in ['카페', '음식점', '술집']" :key="w" type="button" class="chip chip--sm" @click="search(w)">{{ w }}</button>
+        <p class="lp-hint">주변에서 찾을 곳을 골라 보세요. 지도에 핀으로 보여 드릴게요.</p>
+        <div class="lp-chips lp-chips--more lp-chips--drag lp-chips--place" @wheel="scrollSideways" @pointerdown="startChipDrag">
+          <button v-for="q in QUICK_WORDS" :key="q.word" type="button" class="chip chip--sm" @click="searchChip(q.word)"><i class="ic" :class="q.icon" aria-hidden="true"></i>{{ q.word }}</button>
         </div>
       </template>
 

@@ -900,7 +900,7 @@ public class AlternativeServiceImpl implements AlternativeService {
         stop.setLng(chosen.getLng());
         stop.setTime(chosen.getEta() == null ? Geo.toHhmm(Geo.nowMinutes() + NEW_STOP_START_MIN) : chosen.getEta());
         stop.setStay(chosen.getStay() == null ? DEFAULT_STAY_MIN : chosen.getStay());
-        stop.setFixed(false);
+        stop.setFixed(Boolean.TRUE.equals(chosen.getFixed())); // 보통은 고정 아님. 예약 시각을 받아 넣은 칸만 고정 (11/16 ③)
         return stop;
     }
 
