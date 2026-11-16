@@ -372,7 +372,8 @@ async function loadSeoulPopular() {
                 <button type="button" role="menuitem" class="c-danger" @click="askDelete"><i class="ic ic--s i-trash" aria-hidden="true"></i>여행 삭제</button>
               </div>
             </div>
-            <h1 class="h-display">{{ trip.title }}</h1>
+            <!-- 11/16 ①: 여행 중이면 제목을 눌러 여행 중 화면(/live)으로 -->
+            <h1 class="h-display"><RouterLink v-if="isOngoing" to="/live" style="color: inherit; text-decoration: none">{{ trip.title }} <i class="ic ic--s i-next" aria-hidden="true"></i></RouterLink><template v-else>{{ trip.title }}</template></h1>
             <span v-if="isOngoing && pill.isAlert" class="badge badge--warning tn" style="align-self: flex-start">{{ pill.text }}</span>
 
             <!-- 여행 중: 남은 곳을 옆으로 넘겨 봐요 -->

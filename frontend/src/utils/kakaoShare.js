@@ -30,18 +30,16 @@ async function readyKakao() {
   return loading
 }
 
-// 피드 메시지 보내기: { title, description, imageUrl, link }. 카카오를 못 쓰면 링크를 복사하고 'copied'
+// 피드 메시지 보내기: { title, description, imageUrl, imageWidth, imageHeight, link, buttonTitle }. 카카오를 못 쓰면 링크를 복사하고 'copied'
+//   buttonTitle은 11/16 ① 상재가 추가 (없으면 예전처럼 '바뀐 일정 보기')
 export async function shareToKakao(message) {
   if (await readyKakao()) {
+    const link = { mobileWebUrl: message.link, webUrl: message.link }
     window.Kakao.Share.sendDefault({
       objectType: 'feed',
-      content: {
-        title: message.title,
-        description: message.description,
-        imageUrl: message.imageUrl,
-        link: { mobileWebUrl: message.link, webUrl: message.link },
-      },
-      buttons: [{ title: '바뀐 일정 보기', link: { mobileWebUrl: message.link, webUrl: message.link } }],
+      content: { title: message.title, description: message.description, imageUrl: message.imageUrl,
+        imageWidth: message.imageWidth, imageHeight: message.imageHeight, link }, // 사진 크기를 주면 카드에 그 비율로 나와요 (없으면 카카오 기본)
+      buttons: [{ title: message.buttonTitle || '바뀐 일정 보기', link }],
     })
     return 'kakao'
   }
