@@ -33,10 +33,14 @@ public class GlobalExceptionHandler {
         return body(400, e.getParameterName() + " 값이 필요해요.");
     }
 
-    /** 올린 파일이 spring.servlet.multipart.max-file-size(5MB)보다 큼 → 500이 아니라 400 (③ 예약 캡처) */
+    /**
+     * 올린 파일이 spring.servlet.multipart.max-file-size(100MB, ⑤ 사진·영상 앨범에 맞춤)보다 큼 → 500이 아니라 400
+     * ③ 예약 캡처의 5MB 제한은 CaptureServiceImpl이 따로 검사해서 "사진은 5MB까지예요."로 답함 (100MB 안쪽이라 여기까지 안 옴)
+     * 11/16 ⑤: 문구가 5MB로 남아 있어 100MB 넘는 영상에도 "5MB까지"로 나오던 것을 실제 한도로 고침
+     */
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<Map<String, Object>> tooLarge(MaxUploadSizeExceededException e) {
-        return body(400, "사진은 5MB까지예요.");
+        return body(400, "파일은 100MB까지예요.");
     }
 
     @ExceptionHandler(Exception.class)
