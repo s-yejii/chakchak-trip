@@ -108,7 +108,12 @@ public class PlacePhotoServiceImpl implements PlacePhotoService {
                 return imageCache.get(cacheKey);
             }
         }
-        List<PlacePhoto> images = searchImages(stop);
+        List<PlacePhoto> images = new ArrayList<>();
+        try {
+            searchImages(stop, images);
+        } catch (ApiException e) {
+            return images; // 카카오·인터넷이 잠깐 안 되면 기억하지 않고 다음에 다시 찾아요 (11/16)
+        }
         synchronized (imageCache) {
             imageCache.put(cacheKey, images);
         }
@@ -116,27 +121,21 @@ public class PlacePhotoServiceImpl implements PlacePhotoService {
     }
 
     /** 틀린 사진보다 없는 게 나아요: 1 DB 사진 → 2 관광지는 TourAPI(이름·300m 일치) → 3 음식점·카페는 이름·동네가 맞는 블로그 글 */
-    private List<PlacePhoto> searchImages(TripPhotoRequest stop) {
-        List<PlacePhoto> images = new ArrayList<>();
+    private void searchImages(TripPhotoRequest stop, List<PlacePhoto> images) {
         if (stop.getName() == null || stop.getName().isBlank()) {
-            return images;
+            return;
         }
-        try {
-            Place place = stop.getPlaceId() == null ? null : placeService.getPlace(stop.getPlaceId());
-            if (place != null && place.getImageUrl() != null && !place.getImageUrl().isBlank()) {
-                images.add(makeTripPhoto(place.getImageUrl().replace("http://", "https://"), 1, null, null, null));
-            }
-            if (isSightKind(place, stop.getCategory())) {
-                addTourImage(stop, images);
-                addSightBlogImages(stop, images);
-            } else {
-                addFoodTourImage(stop, images);
-                addBlogImages(stop, images);
-            }
-        } catch (ApiException e) {
-            return images; // 사진이 없으면 화면이 아이콘을 보여 줌
+        Place place = stop.getPlaceId() == null ? null : placeService.getPlace(stop.getPlaceId());
+        if (place != null && place.getImageUrl() != null && !place.getImageUrl().isBlank()) {
+            images.add(makeTripPhoto(place.getImageUrl().replace("http://", "https://"), 1, null, null, null));
         }
-        return images;
+        if (isSightKind(place, stop.getCategory())) {
+            addTourImage(stop, images);
+            addSightBlogImages(stop, images);
+        } else {
+            addFoodTourImage(stop, images);
+            addBlogImages(stop, images);
+        }
     }
 
     /** 볼거리인지 (관광지·전시·쇼핑). 음식점·카페·술집이 아니면 */
@@ -250,7 +249,12 @@ public class PlacePhotoServiceImpl implements PlacePhotoService {
                 return cache.get(placeId).orElse(null);
             }
         }
-        PlacePhoto photo = searchPhoto(placeId);
+        PlacePhoto photo;
+        try {
+            photo = searchPhoto(placeId);
+        } catch (ApiException e) {
+            return null; // 카카오·인터넷이 잠깐 안 되면 기억하지 않고 다음에 다시 찾아요 (11/16). 화면은 기본 사진
+        }
         synchronized (cache) {
             cache.put(placeId, Optional.ofNullable(photo));
         }
@@ -258,15 +262,11 @@ public class PlacePhotoServiceImpl implements PlacePhotoService {
     }
 
     private PlacePhoto searchPhoto(String placeId) {
-        try {
-            Place place = placeService.getPlace(placeId);
-            if (place.getImageUrl() != null && !place.getImageUrl().isBlank()) {
-                return makePhoto(placeId, place.getImageUrl().replace("http://", "https://"), null, null);
-            }
-            return searchBlog(place);
-        } catch (ApiException e) {
-            return null; // 사진은 없어도 화면은 기본 사진으로 보여 줌
+        Place place = placeService.getPlace(placeId);
+        if (place.getImageUrl() != null && !place.getImageUrl().isBlank()) {
+            return makePhoto(placeId, place.getImageUrl().replace("http://", "https://"), null, null);
         }
+        return searchBlog(place);
     }
 
     /** "{가게 이름} {구}"로 블로그 검색 → 제목에 가게 이름이 있고 사진이 있는 첫 글 */
