@@ -949,7 +949,6 @@ public class PlanRuleMaker {
         } else {
             return candidates;
         }
-        String name = areas.get(slotIndex * areas.size() / slotTotal).getName();
         Map<String, Place> inArea = new LinkedHashMap<>();
         for (Place place : candidates.values()) {
             if (place.getAddress() != null && place.getAddress().contains(name)) {
@@ -1007,7 +1006,7 @@ public class PlanRuleMaker {
         }
         boolean isUserWish = planCandidateFinder.isMustVisit(place, conditions.getMustVisit()) || planCandidateFinder.isMustVisit(place, conditions.getWishVisit());
         if (!isUserWish && isTooFar(point, place, AI_PICK_LIMIT_M)) {
-            return null; // 사용자가 말한 곳이 아니면 앞 장소에서 2km 안에서
+            return "앞 장소에서 2km 넘음"; // 사용자가 말한 곳이 아니면 앞 장소에서 2km 안에서
         }
         // 꼭 갈 곳·가능하면 갈 곳은 칸 종류와 달라도 됨 (사용자가 직접 말한 곳)
         if (!slotKinds.contains(place.getKind()) && !isUserWish && !isSameSightKind(place.getKind(), slotKinds)) {
