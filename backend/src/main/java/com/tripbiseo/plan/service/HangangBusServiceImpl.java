@@ -29,7 +29,7 @@ public class HangangBusServiceImpl implements HangangBusService {
     private static final int BOARD_NEAR_M = 6000;  // 탈 선착장: 지금 위치에서 이 안
     private static final int BOARD_PIER_COUNT = 3;
     private static final int ALIGHT_NEAR_M = 4000; // 내릴 선착장: 목적지에서 이 안
-    private static final int ALIGHT_PIER_COUNT = 2;
+    private static final int ALIGHT_PIER_COUNT = 1; // 목적지에서 가장 가까운 선착장까지 배로 (중간에 내려 지하철로 갈아타는 안은 안 권함)
     private static final int WALK_MAX_MIN = 15;    // 걸어서 이 안이면 걷고, 넘으면 버스·지하철
     private static final List<String> TRANSPORTS = List.of("subway", "bus", "walk");
 
