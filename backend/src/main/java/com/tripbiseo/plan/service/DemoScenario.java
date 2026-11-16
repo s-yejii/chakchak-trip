@@ -55,6 +55,7 @@ public class DemoScenario {
     private static final int OVERSTAY_DAY = 2;          // 돌발: 2일차에
     private static final String OVERSTAY_NAME = STAY_NAME; // 11/12 돌발: 늦잠 → 숙소에서 나갈 시각이 지나도 그대로 → 스시도 지각 (앱은 이유를 모름)
     private static final int OVERSTAY_MIN = 0;          // 0 = 다음 예약(스시도) 도착 목표보다 늦어지는 순간까지 머묾 (그때 시계 멈춤)
+    private static final int OVERSTAY_LATE_MIN = 35;    // 11/16 대본: 늦잠 → 12:00 출발 → 스시도 13:05 도착 = 35분 늦음 (돌발은 이것 하나뿐)
     private static final String START_TIME = "11:30"; // 시연 계정은 1일차 이 시각부터 (종로3가역 모임, 11/12)
 
     // 일차, 시각, 이름, 장소 번호(retrip_place.id, 없으면 null), 종류, 위도, 경도, 머무는 분, 고정, 메모
@@ -157,6 +158,7 @@ public class DemoScenario {
         setup.setOverstayDay(OVERSTAY_DAY);
         setup.setOverstayName(OVERSTAY_NAME);
         setup.setOverstayMin(OVERSTAY_MIN);
+        setup.setOverstayLateMin(OVERSTAY_LATE_MIN);
         setup.setRainDay(IS_RAIN_NOTICE_ON ? RAIN_DAY : null);
         setup.setRainFrom(RAIN_FROM);
         for (Object[] row : RAIN_DAY_STOPS) {

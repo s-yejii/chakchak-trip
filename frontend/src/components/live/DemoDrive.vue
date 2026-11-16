@@ -319,9 +319,10 @@ watch(() => props.live.status.value, async (status) => {
 // 2일차 KTX 돌발 시각 (11/09 ① 상재: 대본 숫자). 택시 23분이면 18:45 도착·여유 15분, 지하철 40분이면 19:02 도착·KTX 놓침
 //   이동 분은 서버 DemoRoutes(타임스퀘어 → 서울역)와 같은 값이에요
 const TRAIN_INCIDENT_CLOCK = '18:22'
-async function makeLate(status, current) {
+async function makeLate(status, current, lateMin = null) {
   const base = Math.max(minutesOf(appNow()), stayEndOf(current))
-  const clock = isBoardingPlace(status.fixed.name) ? toMinutes(TRAIN_INCIDENT_CLOCK) : incidentClockMin(base, status.fixed.slackMin, lateMinutesFor(status.fixed.name))
+  const late = lateMin == null ? lateMinutesFor(status.fixed.name) : lateMin
+  const clock = isBoardingPlace(status.fixed.name) && lateMin == null ? toMinutes(TRAIN_INCIDENT_CLOCK) : incidentClockMin(base, status.fixed.slackMin, late)
   await setClock(dateText(appNow()), clock)
   await props.live.refresh()
 }
@@ -352,11 +353,17 @@ function markIncidentDone(stopId) {
   if (!list.includes(stopId)) list.push(stopId)
   try { sessionStorage.setItem(INCIDENT_STORE_KEY, JSON.stringify(list)) } catch (e) { /* 저장 못 해도 진행 */ }
 }
+// 11/16 대본: 돌발은 시나리오가 정한 곳 하나뿐 (2일차 숙소 늦잠 → 스시도 35분 늦음). 1일차 회식·2일차 동서울 버스 앞에서는 일부러 늦게 안 함
+function isScenarioIncident(current) {
+  const setup = scenario.value
+  return !!setup && !!setup.overstayName && current.day === setup.overstayDay && current.name === setup.overstayName
+}
+
 async function startIncident(current, next, status) {
-  if (!current || !next.fixed || next.day !== current.day || isIncidentDone(next.id)) return false
+  if (!current || !next.fixed || next.day !== current.day || isIncidentDone(next.id) || !isScenarioIncident(current)) return false
   markIncidentDone(next.id)
   if (!status || !status.fixed || status.fixed.id !== next.id || status.fixed.slackMin <= 0) return false // 이미 늦었으면 카드가 이미 떠 있음
-  await makeLate(status, current)
+  await makeLate(status, current, scenario.value.overstayLateMin)
   return true
 }
 
