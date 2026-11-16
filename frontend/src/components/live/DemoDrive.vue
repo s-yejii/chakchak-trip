@@ -5,7 +5,7 @@
 //   개발자 모드(시연 계정)이고 가짜 GPS가 켜져 있을 때만 보여요. 다른 계정은 이 컴포넌트가 아무것도 안 해요.
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { showLiveNotice } from '@/utils/liveBanner'
+import { clearLiveNotices, showLiveNotice } from '@/utils/liveBanner'
 import { getDevScenario, setDevClock, setDevSpeed } from '@/api/dev'
 import { getTrip } from '@/api/trips'
 import { useReplanStore } from '@/stores/replan'
@@ -231,6 +231,7 @@ async function showNotice(next, travelMin) {
 // 도착: 시계를 정확히 도착 시각으로, 다시 실제 시간으로
 async function arrive(next, date, minutes) {
   demoRoute.value = null // 도착하면 고정한 길을 풀어요
+  clearLiveNotices() // 11/16 리허설: 도착한 뒤에도 "지금 출발해야 해요" 같은 지난 알림이 화면 위를 덮지 않게
   await setSpeed(STAY_SPEED)
   await setClock(date, minutes)
   await props.live.placeAt(next.lat, next.lng, true)
