@@ -52,6 +52,7 @@ public class RoadData
     public int kind;       // 0 찻길 · 1 걷는 길
     public bool isOneWay;  // 큰길이 가는 쪽·오는 쪽 두 선으로 나뉜 것 중 한쪽 (폭이 좁아도 골목이 아님)
     public bool isBridge;  // 다리 (물 위를 지나면 BridgeMaker가 물 위로 띄워 그림)
+    public int bridgeStyle; // 다리 모양 번호: 0 보통 · 1 동호대교 · 2 성수대교 · 3 영동대교 · 4 청담대교 · 5 잠실대교 (웹이 붙여 줌)
 }
 
 [Serializable]

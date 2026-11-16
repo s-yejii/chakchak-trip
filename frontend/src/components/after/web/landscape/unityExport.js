@@ -18,6 +18,17 @@ const MAX_BUILDINGS = 40000 // 유니티는 건물을 한 덩어리로 그려서
 const CELL_DEG = 0.01       // 국가 건물 파일 한 칸 크기(도). make_buildings_seoul.py와 같아야 함
 const CELL_UNIT = 1000000   // 칸 파일의 좌표 단위: 백만분의 1도
 const FLOOR_M = 3            // 수치지도 층수 → 높이: 한 층 3m (국가 건물 자료와 같은 어림)
+const BRIDGE_NEAR_M = 70     // 다리 길의 가운데가 다리 선에서 이 안이면 그 다리로 봄
+// 모양을 따로 그리는 한강 다리 (배로 지나거나 보이는 다리). 양 끝점은 서울시 교량 위치정보(SHP)에서 뽑음
+//   style: 1 동호대교(상판 위 주황 트러스) · 2 성수대교(상판 아래 붉은 트러스) · 3 영동대교(파란 거더, 촘촘한 교각)
+//          4 청담대교(2층: 아래 지하철, V자 받침) · 5 잠실대교(교각 사이 아치 받침)   유니티 BridgeMaker.cs가 번호별로 그림
+const BRIDGE_STYLES = [
+  { name: '동호대교', style: 1, from: [127.023862, 37.53234], to: [127.016885, 37.543329] },
+  { name: '성수대교', style: 2, from: [127.034197, 37.532805], to: [127.03579, 37.542543] },
+  { name: '영동대교', style: 3, from: [127.05904, 37.533111], to: [127.054818, 37.526201] },
+  { name: '청담대교', style: 4, from: [127.062759, 37.522908], to: [127.066954, 37.531735] },
+  { name: '잠실대교', style: 5, from: [127.09567, 37.518855], to: [127.088351, 37.528814] },
+]
 const UNKNOWN_HEIGHT_M = 3.5 // 국가 건물 자료에서 높이가 이 이하면 "높이를 모르는 건물"로 봄 (높이도 층수도 없으면 3m로 와서)
 const ADD_MIN_FLOORS = 5     // 국가 자료에 아예 없는 건물은 이 층수 이상만 새로 넣음
 const MATCH_CELL_DEG = 0.0005 // 건물을 빨리 찾으려고 나눠 담는 칸 크기 (약 50m)
@@ -101,6 +112,7 @@ export async function buildMapData({ center, halfM, tileUrl, dateText, forest, g
   markTransitRuns(route, await loadTransitStops(tileUrl, box, toMeters)) // 탈것 구간을 지하철·버스·택시로 나눔
   const allRoads = await loadRoads(tileUrl, box, isInBox, toMeters) // 지도 안의 길 전부 (아래에서 경로 둘레만 남김)
   snapRidesToRoads(route, allRoads) // 버스·택시 구간을 찻길 따라가게 (GPS가 20초 간격이라 직선으로 이으면 건물·숲을 뚫고 감)
+  markBridgeStyles(allRoads, toMeters) // 한강 다리마다 모양 번호를 붙임
   const keep = isCorridor ? makeKeepChecker(route, stops, toMeters) : null
   let found = await loadNationalBuildings(box) // 서울: 국가 건물 자료 (빈 곳 없음, 층수 정확)
   if (found.length === 0) found = await loadMapBuildings(tileUrl, box, isInBox) // 그 밖 지역: 지도(OpenStreetMap) 건물로 대신
@@ -480,6 +492,23 @@ function makeKeepChecker(route, stops, toMeters) {
       }
       return result
     },
+  }
+}
+
+// 다리 길(isBridge)마다, 가운데 점이 BRIDGE_STYLES의 어느 다리 선 가까이에 있으면 그 다리의 모양 번호를 붙임
+//   예) 성수대교 선에서 20m 떨어진 다리 길 → road.bridgeStyle = 2
+function markBridgeStyles(roads, toMeters) {
+  for (const road of roads) {
+    if (!road.isBridge) continue
+    const middle = Math.floor(road.points.length / 4) * 2 // 가운데 점의 x 자리 (점 하나가 숫자 두 개)
+    const x = road.points[middle], z = road.points[middle + 1]
+    for (const bridge of BRIDGE_STYLES) {
+      const a = toMeters(bridge.from), b = toMeters(bridge.to)
+      const lengthSquared = (b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2
+      const rate = Math.max(0, Math.min(1, ((x - a[0]) * (b[0] - a[0]) + (z - a[1]) * (b[1] - a[1])) / lengthSquared)) // 다리 선 위에서 가장 가까운 곳 (0 = from, 1 = to)
+      const meters = Math.hypot(x - (a[0] + (b[0] - a[0]) * rate), z - (a[1] + (b[1] - a[1]) * rate))
+      if (meters <= BRIDGE_NEAR_M) road.bridgeStyle = bridge.style
+    }
   }
 }
 
