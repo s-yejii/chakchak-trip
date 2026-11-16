@@ -39,11 +39,12 @@ function callDemo() {
       <span v-if="text" class="crit__text">{{ text }}</span>
       <span v-if="canFindSimilar" class="crit__text">비슷한 근처 가게를 찾아 드릴까요?</span>
       <div class="lost__buttons">
-        <button v-if="canFindSimilar" type="button" class="btn btn--primary btn--lg btn--block" @click="emit('similar')">비슷한 근처 가게 찾기</button>
+        <!-- 맨 위: 먼저 가게에 전화해 보고, 안 되면 아래 [비슷한 근처 가게 찾기] (11/16 ③) -->
         <template v-if="tel">
           <button v-if="devMode.isOn" type="button" class="btn btn--secondary btn--lg btn--block" @click="callDemo"><i class="ic ic--s i-phone" aria-hidden="true"></i>가게에 전화하기</button>
           <a v-else :href="'tel:' + tel" class="btn btn--secondary btn--lg btn--block"><i class="ic ic--s i-phone" aria-hidden="true"></i>가게에 전화하기</a>
         </template>
+        <button v-if="canFindSimilar" type="button" class="btn btn--primary btn--lg btn--block" @click="emit('similar')">비슷한 근처 가게 찾기</button>
         <button type="button" class="btn btn--lg btn--block" :class="canFindSimilar ? 'btn--secondary' : 'btn--primary'" :disabled="isSkipping" @click="emit('skip')">빼고 다음 장소로</button>
       </div>
       <button type="button" class="textlink" @click="emit('keep')">그래도 갈게요</button>
