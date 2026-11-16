@@ -591,7 +591,7 @@ async function importCards() {
   try {
     for (const i of checkedCards.value) {
       const card = cardList.value[i]
-      await post('/trips/' + route.query.id + '/payments', { paidAt: card.paidAt, storeName: card.storeName, amount: card.amount, source: 'card' })
+      await post('/trips/' + route.query.id + '/payments', { paidAt: card.paidAt, storeName: card.storeName, amount: card.amount, source: 'card', approvalNo: card.approvalNo }) // 승인번호: 같은 가게·시각·금액 결제를 구별
       count++
     }
     showToast(count + '건 가져왔어요')

@@ -11,6 +11,7 @@ import lombok.Data;
 public class CardTransaction {
     private String approvalDate; // 사용 날짜 "20261104" (CODEF resUsedDate 모양)
     private String approvalTime; // 사용 시각 "113500" (CODEF resUsedTime 모양)
+    private String approvalNo;   // 승인번호 (CODEF resApprovalNo). 같은 가게·시각·금액 결제도 이걸로 구별
     private String paidAt;       // 우리 모양 "2026-11-04T11:35" → 가져올 때 그대로 POST에 씀
     private int day;             // 몇째 날
     private String storeName;    // 가맹점 이름 (CODEF resMemberStoreName)
