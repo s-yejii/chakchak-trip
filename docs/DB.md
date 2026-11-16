@@ -28,7 +28,7 @@
 | `db/20_review_rag.sql` | 리뷰 RAG: pgvector 확장 + 리뷰 임베딩 `review_embedding` (11/15). pgvector 있는 DB(도커)에서만. 리뷰 RAG 관리 계정 `ragadmin` 한 명도 넣어요 (임베딩·평가 API용, 비밀번호는 팀 카톡, 11/16) | ④ |
 | `db/21_retrip_crawl_6gu.sql`, `21b_…_review.sql` | 네이버 크롤링 6개 구(중구·종로·강남·송파·용산·영등포) 가게 갱신·추가 + 리뷰 (11/15, 크롤러 build 결과) | DB 총괄 |
 | `db/22_retrip_tour_6gu.sql` | 같은 6개 구 TourAPI 관광지(12)·문화시설(14) 391곳 (11/15) | DB 총괄 |
-| `db/23_retrip_cleanup_6gu.sql` | 21·22 정제: 폐업·애매 업종 삭제, 일정 칸이 쓰는 폐업 4곳은 표시만, 스시이세이 주소·업종, 08 규칙 다시 적용 (11/15) | DB 총괄 |
+| `db/23_retrip_cleanup_6gu.sql` | 21·22 정제: 폐업·애매 업종 삭제, 일정 칸이 쓰는 폐업 4곳은 표시만, 스시이세이 주소·업종, 08 규칙 다시 적용 (11/15). 빈 영업시간 10곳 채움 (11/16) | DB 총괄 |
 | `db/24_hangang_bus.sql` | 한강버스 선착장 8곳(`retrip_place`, `source='hangang'`) + 운항 시간표 `hangang_bus_time` (11/15) | DB 총괄 |
 | `db/15_after.sql` | ⑤ 테이블 | ⑤ |
 | `db/90_test_data.sql` | 테스트 계정(tripuser / tripuser1234)·샘플 여행 | DB 총괄 |
