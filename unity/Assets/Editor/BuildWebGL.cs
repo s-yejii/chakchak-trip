@@ -31,7 +31,7 @@ public static class BuildWebGL
         new string[] { "_NORMALMAP", "_DETAIL_MULX2", "_EMISSION", "_PARALLAXMAP" },  // 보통 벽 (표면 굴곡 + 밤 불빛 + 창 깊이)
     };
     // 코드에서 Shader.Find로 찾는 셰이더 (재질 파일이 없어도 빌드에 들어가게)
-    private static readonly string[] EXTRA_SHADERS = { "Sprites/Default", "Legacy Shaders/Transparent/Cutout/Diffuse", "Retro/VertexColor", "Retro/Ground", "Skybox/Procedural" };
+    private static readonly string[] EXTRA_SHADERS = { "Sprites/Default", "Legacy Shaders/Transparent/Cutout/Diffuse", "Retro/VertexColor", "Retro/Ground", "Retro/RouteLine", "Skybox/Procedural" };
 
     [MenuItem("Tools/Retro/웹으로 내보내기 (WebGL)")]
     public static void FromMenu()

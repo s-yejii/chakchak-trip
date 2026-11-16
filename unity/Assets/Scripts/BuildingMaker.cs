@@ -374,7 +374,8 @@ public class BuildingMaker
     }
 
     // 잘라도 되는 모서리 찾기: 바깥으로 볼록하고, 그 삼각형 안에 다른 점이 없어야 함
-    private int FindEar(List<Vector2> ring, List<int> left)
+    //   static: 건물 하나(this)와 상관없는 계산이라 AreaMaker(도로 면)도 같이 씀
+    public static int FindEar(List<Vector2> ring, List<int> left)
     {
         for (int i = 0; i < left.Count; i++)
         {
@@ -396,7 +397,7 @@ public class BuildingMaker
     }
 
     // a→b→c가 왼쪽으로 꺾이면 +, 오른쪽이면 −
-    private float Cross(Vector2 a, Vector2 b, Vector2 c)
+    private static float Cross(Vector2 a, Vector2 b, Vector2 c)
     {
         return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
     }

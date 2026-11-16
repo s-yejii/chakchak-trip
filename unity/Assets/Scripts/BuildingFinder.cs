@@ -47,6 +47,25 @@ public class BuildingFinder
         return highest;
     }
 
+    // 건물 자료에 없는 높은 것(롯데월드타워 같은 랜드마크)을 더함: 가운데 (x, z), 반지름, 높이
+    //   왜: 건물 목록에 없으면 카메라가 그 뒤로 들어가도 가린 줄 모르고, 나무도 그 안에 심김
+    public void AddTower(float x, float z, float radius, float height)
+    {
+        List<Vector2> ring = new List<Vector2>();
+        ring.Add(new Vector2(x - radius, z - radius)); // 둘레를 감싸는 네모로 넣음 (정확한 모양까지는 필요 없어서)
+        ring.Add(new Vector2(x + radius, z - radius));
+        ring.Add(new Vector2(x + radius, z + radius));
+        ring.Add(new Vector2(x - radius, z + radius));
+        AddBuilding(ring, height);
+    }
+
+    // 이 자리 칸(30m 네모) 하나에서 가장 높은 건물 높이(m). 건물이 없으면 0
+    //   TallestNear는 둘레 90m를 봐서 넓게 잡힘 → 카메라와 사람 사이가 가렸는지 볼 때는 이쪽을 씀
+    public float TallestAt(float x, float z)
+    {
+        return tallest.TryGetValue(KeyOf(CellOf(x), CellOf(z)), out float height) ? height : 0;
+    }
+
     // 건물 하나를, 윤곽을 감싸는 네모(+MAX_CLEAR_M)가 걸치는 칸마다 넣음
     private void AddBuilding(List<Vector2> ring, float height)
     {

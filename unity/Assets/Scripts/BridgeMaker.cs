@@ -30,6 +30,23 @@ public class BridgeMaker
     private static readonly Color PILLAR = new Color(0.66f, 0.65f, 0.62f);
     private static readonly Color RAIL = new Color(0.80f, 0.80f, 0.78f);
 
+    // ---------- 다리마다 다른 모양 (사진을 보고 정함). 번호는 MapData.cs의 bridgeStyle
+    private const int DONGHO = 1;    // 동호대교: 상판 위로 물결 모양 주황 트러스, 파란 상판 옆면
+    private const int SEONGSU = 2;   // 성수대교: 상판 아래 붉은 트러스 (교각 쪽이 깊고 가운데가 얕음), 교각 간격이 넓음
+    private const int YEONGDONG = 3; // 영동대교: 파란 상판 옆면, 촘촘한 교각
+    private const int CHEONGDAM = 4; // 청담대교: 2층 (아래층 지하철), 교각 위 V자 받침
+    private const int JAMSIL = 5;    // 잠실대교: 교각 사이 아치 받침
+    private static readonly float[] PILLAR_GAPS = { PILLAR_GAP_M, 80f, 120f, 40f, 75f, 45f }; // 번호별 교각 사이 거리
+    private static readonly Color[] DECK_COLORS =
+    {
+        DECK, new Color(0.20f, 0.42f, 0.78f), new Color(0.72f, 0.26f, 0.16f), new Color(0.22f, 0.44f, 0.78f), new Color(0.72f, 0.69f, 0.62f), new Color(0.74f, 0.74f, 0.70f),
+    };
+    private static readonly Color TRUSS_ORANGE = new Color(1.00f, 0.72f, 0.24f); // 동호대교 트러스 (화면 색 보정을 거치면 붉어져서 노란 쪽으로 잡음)
+    private static readonly Color TRUSS_RED = new Color(0.78f, 0.28f, 0.16f);    // 성수대교 트러스
+    private static readonly Color CONCRETE = new Color(0.74f, 0.72f, 0.66f);     // 청담·잠실대교 콘크리트
+    private const float TRUSS_BEAM_M = 0.6f;       // 트러스 막대 굵기
+    private const float LOWER_DECK_DOWN_M = 7f;    // 청담대교 아래층이 위층보다 낮은 정도
+
     private readonly MapData data;
     private readonly Ground ground;
     private readonly PropMaker props;
@@ -70,7 +87,9 @@ public class BridgeMaker
     {
         List<Vector2> line = Densify(road.points);
         float[] heights = DeckHeights(line);
-        float sinceLastPillar = PILLAR_GAP_M / 2;
+        int style = Mathf.Clamp(road.bridgeStyle, 0, PILLAR_GAPS.Length - 1);
+        float pillarGap = PILLAR_GAPS[style];
+        float sinceLastPillar = pillarGap / 2;
         float sinceLastLamp = LAMP_GAP_M / 2;
         for (int i = 0; i + 1 < line.Count; i++)
         {
@@ -78,7 +97,7 @@ public class BridgeMaker
             Vector3 to = new Vector3(line[i + 1].x, heights[i + 1], line[i + 1].y);
             bool isSpanOverWater = WaterMaker.IsWaterAt(data, line[i].x, line[i].y) || WaterMaker.IsWaterAt(data, line[i + 1].x, line[i + 1].y);
             if (isSpanOverWater) RememberDeck(line[i], line[i + 1], heights[i], heights[i + 1], road.width / 2); // 물 위 부분만 (땅 위 진입로 밑을 걸어간 길이 다리 위로 올라가지 않게)
-            props.AddBeam(from - Vector3.up * DECK_THICK_M / 2, to - Vector3.up * DECK_THICK_M / 2, road.width + 1, DECK_THICK_M, DECK); // 상판
+            props.AddBeam(from - Vector3.up * DECK_THICK_M / 2, to - Vector3.up * DECK_THICK_M / 2, road.width + 1, DECK_THICK_M, DECK_COLORS[style]); // 상판 (옆면 색이 다리마다 다름)
             props.AddBeam(from + Vector3.up * 0.02f, to + Vector3.up * 0.02f, road.width, 0.05f, ASPHALT);                            // 찻길 면
             AddRails(from, to, road.width);
             sinceLastLamp += Vector2.Distance(line[i], line[i + 1]);
@@ -88,13 +107,71 @@ public class BridgeMaker
                 sinceLastLamp = 0;
             }
 
-            sinceLastPillar += Vector2.Distance(line[i], line[i + 1]);
+            float stepLength = Vector2.Distance(line[i], line[i + 1]);
+            // 다리마다 다른 부분: 교각에서 얼마나 왔는지(0 = 교각, 1 = 다음 교각)로 트러스 높이를 정함
+            if (isSpanOverWater) AddStyleParts(style, from, to, road.width, sinceLastPillar / pillarGap, (sinceLastPillar + stepLength) / pillarGap);
+            sinceLastPillar += stepLength;
             bool isOverWater = WaterMaker.IsWaterAt(data, line[i].x, line[i].y);
-            if (isOverWater && sinceLastPillar >= PILLAR_GAP_M)
+            if (isOverWater && sinceLastPillar >= pillarGap)
             {
                 AddPillar(from, to - from, road.width);
+                if (style == CHEONGDAM) AddVStruts(from, to - from, road.width);
                 sinceLastPillar = 0;
             }
+        }
+    }
+
+    // 다리 한 조각(from → to)에 그 다리만의 부분을 더함. rateFrom · rateTo: 이 조각의 양 끝이 교각 사이 어디쯤인지 (0 = 교각, 1 = 다음 교각)
+    private void AddStyleParts(int style, Vector3 from, Vector3 to, float width, float rateFrom, float rateTo)
+    {
+        if (style == DONGHO) AddTruss(from, to, width, 4 + 11 * Hump(rateFrom), 4 + 11 * Hump(rateTo), TRUSS_ORANGE, true);      // 위로: 교각 사이 가운데가 가장 높은 물결. 가운데 쪽 한 줄만
+        if (style == SEONGSU) AddTruss(from, to, width, -(2 + 7 * (1 - Hump(rateFrom))), -(2 + 7 * (1 - Hump(rateTo))), TRUSS_RED); // 아래로: 교각 쪽이 깊음
+        if (style == JAMSIL) AddTruss(from, to, width, -(1 + 4 * (1 - Hump(rateFrom))), -(1 + 4 * (1 - Hump(rateTo))), CONCRETE);  // 아래로 얕은 아치
+        if (style == CHEONGDAM) // 아래층 (지하철): 위층보다 좁고 낮게
+        {
+            Vector3 down = Vector3.up * (LOWER_DECK_DOWN_M + DECK_THICK_M / 2);
+            props.AddBeam(from - down, to - down, width * 0.5f, DECK_THICK_M, CONCRETE);
+        }
+    }
+
+    // 교각 사이에서의 자리(0~1) → 0(교각) ~ 1(가운데) ~ 0(다음 교각)으로 부드럽게 오르내리는 값
+    //   예) 0.5(딱 가운데) → 1, 0.25 → 0.71
+    private static float Hump(float rate)
+    {
+        return Mathf.Abs(Mathf.Sin(Mathf.PI * rate));
+    }
+
+    // 트러스 한 칸 (다리 양옆에 하나씩): 상판에서 heightFrom · heightTo만큼 떨어진 곳을 잇는 긴 막대 + 세로 막대 + 비스듬한 막대
+    //   높이가 +면 상판 위(동호대교), −면 상판 아래(성수대교)
+    //   isLeftOnly: 가는 방향의 왼쪽(가운데 분리대 쪽)에만 세움. 동호대교는 트러스가 다리 가운데(지하철 선로 둘레)에만 있어서
+    private void AddTruss(Vector3 from, Vector3 to, float width, float heightFrom, float heightTo, Color color, bool isLeftOnly = false)
+    {
+        Vector3 across = Vector3.Cross(Vector3.up, (to - from).normalized) * (width / 2); // 다리 옆쪽 (왼쪽·오른쪽 가장자리까지)
+        float start = heightFrom < 0 ? -DECK_THICK_M : RAIL_M; // 아래 트러스는 상판 밑에서, 위 트러스는 난간 위에서 시작
+        for (int side = -1; side <= 1; side += 2) // −1 = 왼쪽, +1 = 오른쪽
+        {
+            if (isLeftOnly && side > 0) continue;
+            Vector3 deckFrom = from + across * side + Vector3.up * start;
+            Vector3 deckTo = to + across * side + Vector3.up * start;
+            Vector3 chordFrom = from + across * side + Vector3.up * heightFrom;
+            Vector3 chordTo = to + across * side + Vector3.up * heightTo;
+            props.AddBeam(chordFrom, chordTo, TRUSS_BEAM_M, TRUSS_BEAM_M, color); // 긴 막대 (트러스의 바깥 줄)
+            props.AddBeam(deckFrom, chordFrom, TRUSS_BEAM_M, TRUSS_BEAM_M, color); // 세로 막대
+            props.AddBeam(deckFrom, chordTo, TRUSS_BEAM_M, TRUSS_BEAM_M, color);   // 비스듬한 막대
+        }
+    }
+
+    // 청담대교 V자 받침: 교각 꼭대기(아래층 높이)에서 앞뒤로 벌어져 위층을 받침
+    private void AddVStruts(Vector3 top, Vector3 along, float width)
+    {
+        Vector3 forward = new Vector3(along.x, 0, along.z).normalized * 18;       // 앞뒤로 18m 벌어짐
+        Vector3 across = new Vector3(-along.z, 0, along.x).normalized * (width / 4);
+        Vector3 low = top - Vector3.up * (LOWER_DECK_DOWN_M + DECK_THICK_M);
+        Vector3 high = top - Vector3.up * DECK_THICK_M;
+        for (int side = -1; side <= 1; side += 2)
+        {
+            props.AddBeam(low + across * side, high + across * side + forward, 1.4f, 1.4f, CONCRETE);
+            props.AddBeam(low + across * side, high + across * side - forward, 1.4f, 1.4f, CONCRETE);
         }
     }
 

@@ -86,6 +86,8 @@ public class RoadMaker
     private bool[] holes; // 방금 AddStrip이 비운 칸들 (바로 뒤 AddSkirt가 같은 칸의 벽도 비우려고 씀)
 
     // props·area는 안 줘도 됨 (= null). 걸은 경로 선을 그릴 때처럼 소품이 필요 없을 때
+    public bool hasRealCrosswalks; // 실제 횡단보도 면(수치지형도)이 있는 지도면 true: 어림한 흰 줄은 안 그림 (AreaMaker가 실제 자리에 그림)
+
     public RoadMaker(Ground ground, float lift, PropMaker props = null, RouteArea area = null)
     {
         this.ground = ground;
@@ -414,7 +416,8 @@ public class RoadMaker
         Vector2 side = SideAt(line, at);
         Vector2 along = new Vector2(side.y, -side.x) * (CROSSWALK_LONG_M / 2); // 길이 향하는 방향으로 줄 길이의 절반
         float y = SurfaceGround(line[at]) + top + PAINT_LIFT_M * 2;
-        for (float offset = -width / 2 + STRIPE_M; offset < width / 2 - STRIPE_M; offset += STRIPE_M * 2)
+        float stripeEnd = hasRealCrosswalks ? float.MinValue : width / 2 - STRIPE_M; // 실제 횡단보도가 있으면 줄을 하나도 안 그림 (아래 신호등·볼라드는 그대로)
+        for (float offset = -width / 2 + STRIPE_M; offset < stripeEnd; offset += STRIPE_M * 2)
         {
             Vector2 a = line[at] + side * offset;              // 줄의 오른쪽 가장자리 가운데
             Vector2 b = line[at] + side * (offset + STRIPE_M); // 줄의 왼쪽 가장자리 가운데
