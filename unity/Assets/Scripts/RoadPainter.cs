@@ -47,7 +47,7 @@ public static class RoadPainter
     }
 
     // 땅에 겹치는 잔디 무늬 (회색 그림: 128보다 밝으면 땅을 밝게, 어두우면 어둡게 → 평균 128이라 땅 색은 그대로)
-    //   풀 뭉치(8픽셀 칸마다 밝기가 다름) + 풀잎(세로로 4픽셀씩 같은 값이라 짧은 세로 줄로 보임)
+    //   풀 뭉치(8픽셀 칸마다 밝기가 다르고, 칸 사이는 부드럽게 이어짐) + 풀잎(세로로 4픽셀씩 같은 값이라 짧은 세로 줄로 보임)
     public static Texture2D GroundGrass()
     {
         Color32[] pixels = new Color32[SIZE * SIZE];
@@ -55,7 +55,7 @@ public static class RoadPainter
         {
             for (int x = 0; x < SIZE; x++)
             {
-                float clump = Noise(x / 8, y / 8) * 44 - 22; // 풀 뭉치 ±22
+                float clump = SmoothNoise(x / 8f, y / 8f, SIZE / 8) * 44 - 22; // 풀 뭉치 ±22 (부드럽게: 걷는 눈높이에서 네모난 점으로 보였음)
                 float blade = Noise(x, y / 4) * 56 - 28;     // 풀잎 ±28
                 byte gray = Clamp(128 + clump + blade);
                 pixels[y * SIZE + x] = new Color32(gray, gray, gray, 255);
@@ -97,6 +97,21 @@ public static class RoadPainter
     {
         float value = Mathf.Sin(x * 127.1f + y * 311.7f) * 43758.5453f;
         return value - Mathf.Floor(value);
+    }
+
+    // 부드러운 잡음: 칸 네 귀퉁이의 Noise 값을 칸 안에서의 자리 비율로 섞음
+    //   왜: Noise는 칸마다 값이 뚝뚝 바뀌어서, 크게 보면 네모난 점이 그대로 보임
+    //   wrap: 칸 번호가 이 수가 되면 0번으로 돌아감 → 그림을 옆으로 이어 붙여도 이음매가 안 보임
+    //   예) x = 2.25 → 2번 칸 값과 3번 칸 값을 0.75 : 0.25로 섞음
+    private static float SmoothNoise(float x, float y, int wrap)
+    {
+        int left = Mathf.FloorToInt(x);
+        int bottom = Mathf.FloorToInt(y);
+        int right = (left + 1) % wrap;
+        int top = (bottom + 1) % wrap;
+        float low = Mathf.Lerp(Noise(left % wrap, bottom % wrap), Noise(right, bottom % wrap), x - left);
+        float high = Mathf.Lerp(Noise(left % wrap, top), Noise(right, top), x - left);
+        return Mathf.Lerp(low, high, y - bottom);
     }
 
     private static byte Clamp(float value)
