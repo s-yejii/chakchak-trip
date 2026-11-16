@@ -30,6 +30,10 @@ public class SqlPromptMaker {
                 + "ORDER BY p.rating_adj DESC LIMIT 5",
             "500m 안 와이파이 되는 카페 중 리뷰에서 조용하다고 한 곳이에요",
             "조용한", "조용"},
+        new String[] {"혼자 가도 편한 식당 추천",
+            "SELECT id FROM ask_place WHERE kind = 'food' AND ST_DWithin(geom, :me, 500) ORDER BY rating_adj DESC LIMIT 5",
+            "500m 안 식당 중 리뷰에서 혼자 가기 편하다고 한 곳이에요",
+            "혼자 가도 편한", "혼밥"},
         new String[] {"다음 장소 근처 리뷰 많은 고깃집",
             "SELECT id FROM ask_place WHERE kind = 'food' AND biz_type ILIKE '%고기%' AND ST_DWithin(geom, :next, 500) "
                 + "ORDER BY review_count DESC LIMIT 5",
@@ -121,13 +125,15 @@ public class SqlPromptMaker {
              + "- SELECT 하나만. 첫 번째 칸은 id. ask_place·ask_review만. LIMIT 10 이하\n"
              + "- 돌아가는 시간은 15분 이하, 거리는 1000m 이하\n"
              + "- 와이파이·반려동물·주차·포장·예약·단체 같은 사실은 amenities로만 찾고, 리뷰로 찾지 마\n"
-             + "- 조용한·작업하기 좋은·뷰·데이트·아이랑 같은 분위기는 SQL에 넣지 마. mood에 사용자 말 그대로 짧게, "
+             + "- 분위기 조건은 찾을 수 있어 (supported true). 서버가 리뷰로 찾으니까 SQL에만 넣지 말고 mood에 적어. "
+             + "조용한·작업하기 좋은·혼자 가기 편한·혼밥·아이랑·데이트·회식·뷰가 분위기야. mood에 사용자 말 그대로 짧게, "
              + "moodWord에 리뷰에서 찾을 낱말 하나(예: 조용)를 적어. 서버가 리뷰 뜻으로 다시 골라 (11/15 리뷰 RAG)\n"
              + "- 머무는 시간을 말하지 않으면 30분으로 생각해\n"
              + "- 정렬을 말하지 않으면 rating_adj DESC\n"
              + "- '안 돌아가는·덜 돌아가는·가는 길에서 가까운'은 detour_minutes(geom, :route) 작은 순, '가까운'만 말하면 ST_Distance(geom, :me) 작은 순\n"
              + "- '제일·가장' 하나를 물으면 LIMIT 1\n"
-             + "- 가격·메뉴·혼잡도·웨이팅 시간은 표에 없어. 그런 조건이 핵심이면 supported false\n";
+             + "- 가격·메뉴·지금 몇 명 있는지(실시간 혼잡도)·웨이팅 시간은 표에 없어. 그런 조건이 핵심이면 supported false. "
+             + "'혼자 가도 편한'·'붐비지 않는'처럼 리뷰에 나올 만한 분위기는 혼잡도가 아니라 mood야\n";
     }
 
     private String answerText() {

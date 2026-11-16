@@ -19,7 +19,7 @@ import { shareToKakao } from '@/utils/kakaoShare'
 import { createShareLink } from '@/api/members'
 import { goBack } from '@/utils/back'
 import { rememberAlert, shouldOpenAlert } from '@/utils/alertMemory'
-import { finishTrip, getTripPhotos, skipStop } from '@/api/trips'
+import { finishTrip, getTripPhotos, skipStop, updateStop } from '@/api/trips'
 import { chatKey, clearChat } from '@/utils/askChat'
 import { loadPhoto } from '@/utils/placePhoto'
 import BottomSheet from '@/components/common/BottomSheet.vue'
@@ -41,6 +41,8 @@ import AskPanel from '@/components/live/AskPanel.vue'
 import InsertSlotSheet from '@/components/live/InsertSlotSheet.vue'
 import NearSearch from '@/components/after/NearSearch.vue'
 import SimilarSearch from '@/components/live/SimilarSearch.vue'
+import LiveTour from '@/components/live/LiveTour.vue'
+import { isTourDone, markTourDone } from '@/utils/liveTour'
 import LinkAddSheet from '@/components/live/LinkAddSheet.vue'
 import { useReplanStore } from '@/stores/replan'
 import { demoRoute } from '@/utils/demoRoute'
@@ -524,7 +526,8 @@ function photoOf(stop) {
 
 // ------------------------------------------------------------ 카드
 const cards = computed(() => stops.value.map((stop) => {
-  const card = { no: stop.id, stopId: stop.id, img: photoOf(stop), title: stop.fixed ? stop.name : stop.no + ' ' + stop.name, fixed: stop.fixed, leg: null, legState: '', state: '', sub: '', subCls: '' }
+  // 11/16: 번호(seq)·이름(name)을 따로 줘서 카드에서 번호는 사진 위 배지로 (title은 예전처럼 '번호 이름', 화면 읽기용)
+  const card = { no: stop.id, stopId: stop.id, img: photoOf(stop), title: stop.fixed ? stop.name : stop.no + ' ' + stop.name, seq: stop.fixed ? null : stop.no, name: stop.name, fixed: stop.fixed, leg: null, legState: '', state: '', sub: '', subCls: '' }
   if (stop.moveMin != null) {
     card.leg = { mode: LEG_MODE[stop.moveMode] || 'walk', min: stop.moveMin, dist: distText(stop.moveMeters) }
     card.legState = stop.id === (nextStop.value && nextStop.value.id) ? 'now' : ''
@@ -539,18 +542,46 @@ const cards = computed(() => stops.value.map((stop) => {
   } else if (stop.reach === 'closed') {
     card.sub = stop.closedReason || '도착할 때 문을 닫아요'
     card.subCls = 'c-danger'
-  } else if (stop.reach === 'missed') {
-    card.sub = stop.time + ' 계획 시간이 지났어요'
-    card.subCls = 'c-warning'
-  } else if (stop.fixed && !isLate.value) {
-    card.sub = stop.time + ' 고정 · ' + stop.eta + ' 도착 예상'
+  } else if (stop.fixed) {
+    fillFixedSub(card, stop)
   } else {
-    card.sub = stop.eta + ' 도착 예상'
-    if (isLate.value) card.subCls = stop.fixed ? 'c-danger' : 'c-warning'
-    else if (isWarnReach(stop.reach)) card.subCls = 'c-warning'
+    fillPlainSub(card, stop)
   }
   return card
 }))
+
+// 11/16 카드 상태 줄: 사용자에게 필요한 건 "언제 도착하냐". 예전엔 늦은 뒤로 모든 카드에 "~계획 시간이 지났어요"가 주황으로 붙어
+// 진짜 중요한 경고(예약)가 묻혔어요. 일반 장소는 늦어도 뒤로 밀릴 뿐이라(서버도 출발 알림을 안 냄, 11/08) 도착 시각 + 줄 그은 원래 시각만,
+// 예약(고정)만 늦을 때 색으로 경고해요
+const LATE_NOTE_MIN = 5 // 계획보다 이만큼 이상 늦을 때만 줄 그은 원래 시각을 붙임
+
+// 계획 시각보다 예상 도착이 몇 분 늦은지 (모르면 0)
+function lateMinutes(stop) {
+  if (!stop.eta || !stop.time) return 0
+  return toMinutes(stop.eta) - toMinutes(stop.time)
+}
+
+// 예약(고정) 칸: "예약 12:30 · 12:41 도착", 늦으면 "예약 12:30 · 11분 늦어요"(주황), 이미 지났으면 빨강
+function fillFixedSub(card, stop) {
+  const late = lateMinutes(stop)
+  if (stop.reach === 'missed') {
+    card.sub = '예약 ' + stop.time + ' · 시간이 지났어요'
+    card.subCls = 'c-danger'
+  } else if (late > 0) {
+    card.sub = '예약 ' + stop.time + ' · ' + toDuration(late) + ' 늦어요'
+    card.subCls = 'c-warning'
+  } else {
+    card.sub = '예약 ' + stop.time + (stop.eta ? ' · ' + stop.eta + ' 도착' : '')
+  }
+}
+
+// 일반 칸: "11:48 도착", 늦으면 원래 시각에 줄을 그어 앞에 "~~10:00~~ 11:48 도착" (was). 다음 예약에 못 닿는 칸(tight·no)만 주황
+function fillPlainSub(card, stop) {
+  card.sub = stop.eta ? stop.eta + ' 도착' : stop.time + ' 계획'
+  const late = lateMinutes(stop)
+  if (late >= LATE_NOTE_MIN) card.was = stop.time // 원래 계획 시각에 줄을 그어 앞에 (기차·비행기 앱의 시각 변경 표시처럼)
+  if (isWarnReach(stop.reach)) card.subCls = 'c-warning'
+}
 
 // 카드·핀을 눌렀을 때: 다녀온 곳 → 정보창 / 지금 있는 곳 → 내 위치로 / 남은 곳 → 고르기, 한 번 더 누르면 미리 바꾸기
 function pickStop(stop, point) {
@@ -611,6 +642,32 @@ const segFrom = computed(() => {
   if (isFromMe && live.position.value) return { name: '지금 위치', img: '/img/mapB.svg', lat: live.position.value.lat, lng: live.position.value.lng }
   return { name: before.name, img: photoOf(before), lat: before.lat, lng: before.lng }
 })
+// 이동 칩 시트에서 수단 바꾸기 (11/16): 그 칸의 저장된 수단(null = 자동). 칸 원본은 여행 전체(live.trip)에서 찾아요
+const isSavingMode = ref(false)
+const segTripStop = computed(() => {
+  if (!segCard.value || !live.trip.value) return null
+  return (live.trip.value.stops || []).find((stop) => stop.id === segCard.value.stopId) || null
+})
+const segMode = computed(() => (segTripStop.value ? segTripStop.value.mode || null : null))
+const MODE_DONE_TEXT = { walk: '도보로', transit: '대중교통으로', taxi: '택시로' }
+
+// 고른 수단을 저장(② PUT /trips/{id}/stops/{stopId})하고 도착 예상을 다시 계산.
+// 이 API는 memo를 안 보내면 지워서 원래 메모를 같이 보내요 (API.md). 다른 칸(day·time 등)은 안 보내면 그대로
+async function changeSegMode(mode) {
+  const stop = segTripStop.value
+  if (!stop || isSavingMode.value) return
+  isSavingMode.value = true
+  try {
+    await updateStop(live.tripId.value, stop.id, { mode: mode, memo: stop.memo ?? null })
+    await live.refresh()
+    showToast(mode ? MODE_DONE_TEXT[mode] + ' 바꿨어요 · 도착 시간을 다시 계산했어요' : '거리에 맞춰 자동으로 골라요')
+  } catch (e) {
+    showToast(e.message)
+  } finally {
+    isSavingMode.value = false
+  }
+}
+
 const segTo = computed(() => {
   if (!segCard.value) return null
   const stop = stops.value.find((item) => item.id === segCard.value.stopId)
@@ -789,6 +846,25 @@ function restartMoving() {
   isDemo.value = isFakeGps() && !devMode.isFlow
   live.start(isDemo.value, isNoRealGps())
 }
+
+// ------------------------------------------------------------ 처음 여행 안내 (11/16)
+// 이 브라우저에서 처음 여행 중 화면에 들어오면 한 번만. 지도·카드가 다 그려지게 잠깐 뒤에. 주소에 ?tour=1이면 다시 (시연·촬영용)
+const TOUR_DELAY_MS = 800
+const isTourOn = ref(false)
+
+watch(isReady, (ready) => {
+  const isForced = pageRoute.query.tour === '1'
+  if (!ready || isTourOn.value || (!isForced && isTourDone())) return
+  setTimeout(() => {
+    fabOpen.value = false
+    isTourOn.value = true
+  }, TOUR_DELAY_MS)
+}, { immediate: true })
+
+function finishTour() {
+  isTourOn.value = false
+  markTourDone()
+}
 </script>
 
 <template>
@@ -796,6 +872,8 @@ function restartMoving() {
     <div class="app">
       <DevDot @clock="live.refresh()" @gps="restartMoving" />
       <DemoDrive :live="live" /><!-- 시연 계정만: 작은 "다음 장소로" 버튼 (GPS 이동 + 시계 배속만 자동, 11/08) -->
+      <!-- 처음 여행을 시작했을 때 한 번만: 트리피가 버튼을 하나씩 짚어 주는 안내 (11/16). 패널·알림 카드가 떠 있으면 미룸 -->
+      <LiveTour v-if="isTourOn && isReady && !adding && !asking && !isLostOpen && !isAskingEnd && !endStop" @finish="finishTour" />
       <TripEndSheet v-if="endStop && live.trip.value" :trip="live.trip.value" :place-name="endStop.name" :arrived-at="endStop.eta" :planned-at="endStop.time" :is-busy="isFinishing" @finish="finish" @close="endStop = null" />
       <!-- 여행 끝내기 확인 (11/12): 여행을 마친 트리피가 맞아 주는 창. 위 그림 → 글 → 버튼 -->
       <template v-if="isAskingEnd">
@@ -912,7 +990,7 @@ function restartMoving() {
           </div>
           <!-- 내 위치: + 위에 떠 있다가 메뉴를 열면 아래로 내려가며 사라짐 (메뉴가 + 바로 위에 뜨게) -->
           <button type="button" class="live-fab__me" :class="{ 'is-hidden': fabOpen }" aria-label="내 위치로" :aria-hidden="fabOpen" :tabindex="fabOpen ? -1 : 0" @click="locate"><i class="ic i-locate" aria-hidden="true"></i></button>
-          <button type="button" class="live-fab__main" :class="{ 'is-open': fabOpen }" :aria-label="fabOpen ? '메뉴 닫기' : '메뉴 열기'" :aria-expanded="fabOpen" @click="fabOpen = !fabOpen"><i class="ic i-plus" aria-hidden="true"></i></button>
+          <button type="button" class="live-fab__main" data-tour="fab" :class="{ 'is-open': fabOpen }" :aria-label="fabOpen ? '메뉴 닫기' : '메뉴 열기'" :aria-expanded="fabOpen" @click="fabOpen = !fabOpen"><i class="ic i-plus" aria-hidden="true"></i></button>
         </div>
 
         <!-- 링크로 장소 추가 -->
@@ -963,21 +1041,21 @@ function restartMoving() {
           <div v-if="asking" v-show="!slotPlace">
             <AskPanel :me="mePoint || { x: 195, y: 300 }" :late="isLate" :trip-id="live.tripId.value" :position="live.position.value" @close="asking = false" @add="onAskAdd" :selected="askPickedId" :chat-key="chatKey(live.trip.value)" :planned="plannedPlaceIds" @choose="openSlotSheet" @found="onAskFound" @pick="askPickedId = $event" />
           </div>
-          <div v-else class="quick live-quick" data-sheet-follow role="group" aria-label="AI 채팅과 근처 찾기">
-            <button type="button" class="chip chip--sm chip--add live-chip" @click="openAsk"><span class="live-chip__ic live-chip__ic--ai" aria-hidden="true"><i class="ic ic--s i-sparkle"></i></span>AI에게 묻기</button>
-            <button type="button" class="chip chip--sm chip--add live-chip" @click="openNear"><span class="live-chip__ic live-chip__ic--near" aria-hidden="true"><i class="ic ic--s i-search"></i></span>근처 찾기</button>
+          <div v-else class="quick live-quick" data-sheet-follow role="group" aria-label="트리피에게 묻기와 근처 찾기">
+            <button type="button" class="chip chip--sm chip--add live-chip" data-tour="ask" aria-label="어디 갈까? 트리피에게 갈 곳 물어보기" @click="openAsk"><span class="live-chip__ic live-chip__ic--ai" aria-hidden="true"><img src="/img/trippie-favicon.png" alt="" class="live-chip__img" draggable="false" /></span>어디 갈까?</button>
+            <button type="button" class="chip chip--sm chip--add live-chip" data-tour="near" @click="openNear"><span class="live-chip__ic live-chip__ic--near" aria-hidden="true"><i class="ic ic--s i-search"></i></span>근처 찾기</button>
             <!-- 결제 메모 입구 (11/12): 화면은 ⑤ PayMemoView (/live/pay) -->
-            <RouterLink to="/live/pay" class="chip chip--sm chip--add live-chip"><span class="live-chip__ic live-chip__ic--pay" aria-hidden="true"><i class="ic ic--s i-receipt"></i></span>결제 메모</RouterLink>
+            <RouterLink to="/live/pay" class="chip chip--sm chip--add live-chip" data-tour="pay"><span class="live-chip__ic live-chip__ic--pay" aria-hidden="true"><i class="ic ic--s i-receipt"></i></span>결제 메모</RouterLink>
           </div>
 
           <!-- 아래 시트: 오늘 일정 카드 -->
-          <BottomSheet v-if="!asking" class="sheet--peek live-sheet" :aria-label="doneCount ? '다음 일정' : '오늘 일정'">
+          <BottomSheet v-if="!asking" class="sheet--peek live-sheet" data-tour="sheet" :aria-label="doneCount ? '다음 일정' : '오늘 일정'">
             <div class="live-head" data-drag>
               <div style="flex: 1; min-width: 0">
                 <p class="t-cap">{{ head.cap }}</p>
                 <p class="t-big tn" :class="head.cls" style="margin: 0">
                   {{ head.big }}
-                  <span v-if="head.strong" class="t-strong c-navy">{{ head.strong }}</span>
+                  <span v-if="head.strong" class="live-head__strong">{{ head.strong }}</span>
                   <span v-if="head.small" class="t-cap tn">{{ head.small }}</span>
                 </p>
               </div>
@@ -1006,7 +1084,7 @@ function restartMoving() {
             </div>
           </div>
 
-          <SegSheet v-if="segCard && segFrom && segTo" :from="segFrom" :to="segTo" :leg="segCard.leg" @close="segCard = null" />
+          <SegSheet v-if="segCard && segFrom && segTo" :from="segFrom" :to="segTo" :leg="segCard.leg" :current="segMode" :is-saving="isSavingMode" @mode="changeSegMode" @close="segCard = null" />
         </template>
       </template>
     </div>
@@ -1033,16 +1111,21 @@ function restartMoving() {
 .scr-Live .live-fab { position: absolute; right: 16px; top: 380px; z-index: 6; } /* + 가운데는 예전(52px, 376px)과 같은 높이 */
 .scr-Live .live-fab__me { position: absolute; left: 0; bottom: calc(100% + 10px); width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #2F7BEA; background: #fff; box-shadow: 0 2px 8px rgba(24, 33, 58, .25); cursor: pointer; transition: opacity .18s, transform .18s; }
 .scr-Live .live-fab__me.is-hidden { opacity: 0; transform: translateY(16px) scale(.8); pointer-events: none; }
-.scr-Live .live-fab-dim { position: absolute; inset: 0; z-index: 5; background: rgba(24, 33, 58, .28); }
+.scr-Live .live-fab-dim { position: absolute; inset: 0; z-index: 5; background: rgba(24, 33, 58, .22); }
 .scr-Live .live-fab__main { width: 44px; height: 44px; border: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; background: var(--navy); box-shadow: 0 6px 16px rgba(24, 33, 58, .3); cursor: pointer; transition: transform .18s, background .18s; }
-.scr-Live .live-fab__main.is-open { transform: rotate(45deg); background: var(--ink); }
+.scr-Live .live-fab__main.is-open { transform: rotate(45deg); } /* 11/16: 열려도 같은 남색 (검정으로 바뀌면 색이 하나 더 늘어서) */
 .scr-Live .live-fab__list { position: absolute; right: 0; bottom: calc(100% + 10px); display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
 .scr-Live .live-fab__item { display: flex; align-items: center; gap: 8px; padding: 0; border: 0; background: none; font: inherit; cursor: pointer; white-space: nowrap; }
-.scr-Live .live-fab__text { padding: 7px 12px; border-radius: 999px; font-size: 13px; font-weight: 700; color: var(--ink); background: #fff; box-shadow: 0 2px 8px rgba(24, 33, 58, .18); }
-.scr-Live .live-fab__ic { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; box-shadow: 0 2px 8px rgba(24, 33, 58, .25); }
-.scr-Live .live-fab__ic--link { background: linear-gradient(135deg, #F58529, #DD2A7B 55%, #8134AF); }
-.scr-Live .live-fab__ic--plan { background: var(--navy); }
-.scr-Live .live-fab__ic--share { background: var(--success); }
+/* 11/16 + 메뉴 디자인: 작은 버튼은 같은 파랑 가족(하늘·파랑·남청) 색 동그라미 + 흰 아이콘, 메인(+)은 남색.
+   예전 인스타 그라데이션·초록·검정을 빼서 색이 한 계열로. 위쪽이 살짝 밝은 그라데이션으로 입체감.
+   작은 버튼은 40px로 메인(44px)보다 조금 작게 → 무엇이 메인인지 보이게. 가운데 줄이 맞게 오른쪽 2px */
+.scr-Live .live-fab__text { padding: 7px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; color: var(--ink); background: #fff; box-shadow: 0 2px 8px rgba(24, 33, 58, .14); }
+.scr-Live .live-fab__ic { width: 40px; height: 40px; margin-right: 2px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; box-shadow: 0 3px 10px rgba(24, 33, 58, .22); transition: transform .15s; }
+.scr-Live .live-fab__ic--link { background: linear-gradient(160deg, #3FA6DC, var(--sky)); }
+.scr-Live .live-fab__ic--plan { background: linear-gradient(160deg, #4A86E8, #2F6BD0); }
+.scr-Live .live-fab__ic--share { background: linear-gradient(160deg, #4F74C2, var(--focus-ring)); }
+.scr-Live .live-fab__item:hover .live-fab__ic, .scr-Live .live-fab__item:focus-visible .live-fab__ic { transform: scale(1.06); }
+@media (prefers-reduced-motion: reduce) { .scr-Live .live-fab__ic { transition: none; } }
 .scr-Live .live-chip { font-weight: 600; height: 34px; padding-left: 10px; padding-right: 10px; gap: 3px; font-size: 13px; letter-spacing: -.02em; }
 /* 11/12: 지도 앱 칩처럼 흰 바탕 + 겹 그림자, 글씨는 진하게 (아이콘 색만 칩마다 다르게) */
 .scr-Live .live-quick .live-chip { border: 0; padding-left: 5px; padding-right: 10px; gap: 4px; background: #fff; color: var(--ink); box-shadow: 0 0 0 1px rgba(24, 33, 58, .05), 0 1px 2px rgba(24, 33, 58, .08), 0 4px 12px rgba(24, 33, 58, .12); }
@@ -1050,11 +1133,17 @@ function restartMoving() {
 /* 아이콘은 연한 색 동그라미 안에 (AI 보라 · 근처 산호 · 결제 남색) */
 .scr-Live .live-chip__ic { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; }
 .scr-Live .live-chip__ic .ic { width: 13px; height: 13px; }
-.scr-Live .live-chip__ic--ai { background: #F1EAFE; color: #7C3AED; }
+/* AI에게 묻기 = 트리피 얼굴 (11/16, 예전 보라 ✨ 대신. AI 채팅창 프로필과 같은 그림) */
+.scr-Live .live-chip__ic--ai { overflow: hidden; background: var(--sky-soft); box-shadow: inset 0 0 0 1px var(--sky-line); }
+.scr-Live .live-chip__img { width: 100%; height: 100%; object-fit: cover; -webkit-user-drag: none; }
 .scr-Live .live-chip__ic--near { background: var(--coral-soft); color: var(--coral-ink); }
 .scr-Live .live-chip__ic--pay { background: var(--navy-soft); color: var(--navy); } /* 11/12: 결제 메모까지 칩 3개가 + 버튼 왼쪽에 다 들어가게 */
 .scr-Live .live-quick { position: absolute; top: 392px; left: 0; right: 58px; z-index: 2; gap: 5px; padding-left: 12px; padding-right: 4px; }
 .scr-Live .live-sheet { top: 440px; padding: 8px 0 0; gap: 12px; }
 .scr-Live .live-head { display: flex; align-items: flex-end; gap: 12px; padding: 0 16px; }
+/* 11/16 시트 머리: 위 한 줄(어디까지) 회색 작게 → 도착 시각 크게 → '도착 예정'은 회색 보조 글씨 */
+.scr-Live .live-head .t-cap { font-size: 13px; line-height: 18px; color: var(--ink-muted); }
+.scr-Live .live-head .t-big { font-size: 28px; line-height: 36px; letter-spacing: -.03em; }
+.scr-Live .live-head__strong { margin-left: 4px; font-size: 14px; font-weight: 600; letter-spacing: 0; color: var(--ink-muted); }
 .scr-Live .live-pill { position: absolute; top: 112px; left: 16px; z-index: 3; }
 </style>
