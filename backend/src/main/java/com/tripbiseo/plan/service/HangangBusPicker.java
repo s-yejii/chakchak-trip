@@ -19,6 +19,9 @@ public final class HangangBusPicker {
     static final int BOARD_EARLY_MIN = 5;   // 배 떠나기 이만큼 전에 선착장 도착
     static final int ARRIVE_EARLY_MIN = 10; // 예약 이만큼 전에 목적지 도착
     static final int DIRECT_WAIT_MIN = 30;  // 바로 가면 이만큼 넘게 기다릴 때만 권함
+    static final int RELAXED_EARLY_MIN = 15; // 여유롭게 가면 예약 이만큼 전에 도착
+    static final int REST_STEP_MIN = 5;     // 쉬는 시간은 5분 단위
+    static final int REST_MAX_MIN = 30;     // 쉬는 시간은 최대 30분
 
     private HangangBusPicker() {}
 
@@ -76,6 +79,18 @@ public final class HangangBusPicker {
             }
         }
         return best;
+    }
+
+    /**
+     * 내린 선착장 근처(한강공원)에서 쉬었다 가도 되는 분: 예약 15분 전 도착을 목표로 남는 시간.
+     * 5분 단위로 내림, 0~30분. 예) 15:00 예약 · 바로 가면 14:28 도착 → 17분 → 15분
+     */
+    public static int restMinutes(int arriveBy, int doorArrive) {
+        int spare = arriveBy - RELAXED_EARLY_MIN - doorArrive;
+        if (spare < 0) {
+            return 0;
+        }
+        return Math.min(REST_MAX_MIN, spare / REST_STEP_MIN * REST_STEP_MIN);
     }
 
     private static boolean isSameBoat(HangangBusTime a, HangangBusTime b) {

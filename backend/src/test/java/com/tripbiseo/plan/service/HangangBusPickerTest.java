@@ -15,6 +15,7 @@ import java.util.Map;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import com.tripbiseo.common.external.Route;
 import com.tripbiseo.common.util.Geo;
 import com.tripbiseo.plan.dto.HangangBusTime;
 
@@ -87,6 +88,31 @@ class HangangBusPickerTest {
     @Test
     void 바로_가도_30분_안_기다리면_안_보임() {
         assertNull(HangangBusPicker.pick(times, READY_AT, AFTER_ALIGHT, Geo.toMinutes("15:00"), Geo.toMinutes("14:40"), null));
+    }
+
+    @Test
+    void 길찾기가_어림값이면_10분_더해서_빠듯한_예약은_안_보임() {
+        Route guessed = new Route(); // TMAP·ODsay가 안 돼 거리로 어림한 잠실 선착장 → 식당 (11/16 실제로 16분이 나옴, 네이버는 23~25분)
+        guessed.setMinutes(16);
+        guessed.setMode("transit");
+        guessed.setSource("estimate");
+        assertEquals(26, HangangBusServiceImpl.minutesOf(guessed));
+        Map<String, Integer> afterGuess = Map.of("hangang-jamsil", HangangBusServiceImpl.minutesOf(guessed)); // 14:03 + 26 = 14:29 도착
+        assertNull(HangangBusPicker.pick(times, READY_AT, afterGuess, Geo.toMinutes("14:30"), DIRECT_ARRIVE, null));
+        assertNotNull(HangangBusPicker.pick(times, READY_AT, afterGuess, Geo.toMinutes("15:00"), DIRECT_ARRIVE, null));
+        guessed.setSource("odsay"); // 진짜 길찾기 값은 그대로
+        assertEquals(16, HangangBusServiceImpl.minutesOf(guessed));
+    }
+
+    @Test
+    void 여유가_많으면_선착장_근처에서_쉬었다_가기() {
+        HangangBusPicker.Choice choice = HangangBusPicker.pick(times, READY_AT, AFTER_ALIGHT, Geo.toMinutes("15:00"), DIRECT_ARRIVE, null);
+        int rest = HangangBusPicker.restMinutes(Geo.toMinutes("15:00"), choice.doorArrive); // 14:45 − 14:28 = 17분 → 15분
+        assertEquals(15, rest);
+        assertEquals("14:18", Geo.toHhmm(choice.alight.getTimeMin() + rest)); // 14:03 배 내려서 15분 쉬고 버스
+        assertEquals("14:43", Geo.toHhmm(choice.doorArrive + rest));          // 예약 17분 전 도착
+        assertEquals(0, HangangBusPicker.restMinutes(Geo.toMinutes("14:40"), choice.doorArrive)); // 빠듯하면 안 쉼
+        assertEquals(30, HangangBusPicker.restMinutes(Geo.toMinutes("17:00"), choice.doorArrive)); // 최대 30분
     }
 
     @Test

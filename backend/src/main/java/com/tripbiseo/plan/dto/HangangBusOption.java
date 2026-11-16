@@ -23,4 +23,7 @@ public class HangangBusOption {
     private int slackMin;            // 예약 전 여유 분
     private String directArriveAt;   // 대중교통으로 바로 가면 도착 시각
     private int directWaitMin;       // 바로 가면 예약 전 기다리는 분
+    private int restMin;             // 내린 선착장 근처에서 쉬었다 가도 되는 분 (예약 15분 전 도착 목표, 5분 단위, 0~30)
+    private String leaveAt;          // 쉬고 나서 선착장을 떠나는 시각 (restMin이 0이면 배 도착 시각)
+    private String relaxedArriveAt;  // 쉬고 가면 목적지 도착 시각
 }

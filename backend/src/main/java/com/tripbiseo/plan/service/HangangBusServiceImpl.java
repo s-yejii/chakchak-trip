@@ -31,6 +31,7 @@ public class HangangBusServiceImpl implements HangangBusService {
     private static final int ALIGHT_NEAR_M = 4000; // 내릴 선착장: 목적지에서 이 안
     private static final int ALIGHT_PIER_COUNT = 1; // 목적지에서 가장 가까운 선착장까지 배로 (중간에 내려 지하철로 갈아타는 안은 안 권함)
     private static final int WALK_MAX_MIN = 15;    // 걸어서 이 안이면 걷고, 넘으면 버스·지하철
+    private static final int GUESS_EXTRA_MIN = 10; // 내린 선착장 → 목적지를 거리로 어림했으면 이만큼 더 (선착장이 물가라 어림이 실제보다 짧게 나와서, 11/16)
     private static final List<String> TRANSPORTS = List.of("subway", "bus", "walk");
 
     private final HangangBusMapper hangangBusMapper;
@@ -59,7 +60,7 @@ public class HangangBusServiceImpl implements HangangBusService {
         for (HangangBusPier pier : alightPiers) {
             Route route = findRoute(pier.getLat(), pier.getLng(), toLat, toLng);
             afterAlight.put(pier.getId(), route);
-            afterAlightMin.put(pier.getId(), route.getMinutes());
+            afterAlightMin.put(pier.getId(), minutesOf(route));
         }
         Integer rainStart = liveWeatherChecker.findRainStart(fromLat, fromLng);
         int directArrive = nowMin + direct.getMinutes();
@@ -78,6 +79,7 @@ public class HangangBusServiceImpl implements HangangBusService {
         option.setSlackMin(arriveByMin - choice.doorArrive);
         option.setDirectArriveAt(Geo.toHhmm(directArrive));
         option.setDirectWaitMin(arriveByMin - directArrive);
+        fillRest(option, choice, arriveByMin);
         return option;
     }
 
@@ -88,13 +90,27 @@ public class HangangBusServiceImpl implements HangangBusService {
         return routeClient.getRoute(lat1, lng1, lat2, lng2, mode, TRANSPORTS, true);
     }
 
+    // 여유가 많으면 내린 선착장 근처(한강공원)에서 쉬었다 가기: 예약 15분 전 도착 목표
+    private void fillRest(HangangBusOption option, HangangBusPicker.Choice choice, int arriveByMin) {
+        int restMin = HangangBusPicker.restMinutes(arriveByMin, choice.doorArrive);
+        option.setRestMin(restMin);
+        option.setLeaveAt(Geo.toHhmm(choice.alight.getTimeMin() + restMin));
+        option.setRelaxedArriveAt(Geo.toHhmm(choice.doorArrive + restMin));
+    }
+
     private void fillMoves(HangangBusOption option, Route toBoard, Route afterAlight) {
         option.setToBoardMode(toBoard.getMode());
         option.setToBoardMin(toBoard.getMinutes());
         option.setAfterAlightMode(afterAlight.getMode());
-        option.setAfterAlightMin(afterAlight.getMinutes());
+        option.setAfterAlightMin(minutesOf(afterAlight));
         option.setAfterAlightDetail(afterAlight.getDetail());
         option.setBusNo(findBusNo(afterAlight.getDetail()));
+    }
+
+    /** 내린 선착장 → 목적지 이동 분: 거리로 어림한 버스·지하철이면 10분 더 (Route는 길찾기 기억 칸과 같은 것이라 고치지 않고 숫자만 새로 냄) */
+    static int minutesOf(Route route) {
+        boolean isGuessedTransit = "estimate".equals(route.getSource()) && "transit".equals(route.getMode());
+        return isGuessedTransit ? route.getMinutes() + GUESS_EXTRA_MIN : route.getMinutes();
     }
 
     /** 노선 설명 "버스 3317 잠일고등학교→잠실역 6정거장 · …"에서 첫 버스 번호. 버스가 없으면 null */

@@ -1145,7 +1145,7 @@
 
 ### `GET /api/plans/hangang-bus` (11/16)
 
-길 안내에서 다음 칸이 예약(고정)일 때, 지하철·버스로 바로 가면 한참 기다려야 하면 "한강버스로도 가요" 한 줄. 선착장·시간표는 ① `db/24_hangang_bus.sql`(읽기만), 길찾기는 `RouteClient`(걸어서 15분 안이면 걷기, 넘으면 버스·지하철), 비는 ④ `LiveWeatherChecker`(시연 비 포함).
+길 안내에서 다음 칸이 예약(고정)일 때, 지하철·버스로 바로 가면 한참 기다려야 하면 "한강버스로도 가요" 한 줄. 선착장·시간표는 ① `db/24_hangang_bus.sql`(읽기만), 길찾기는 `RouteClient`(걸어서 15분 안이면 걷기, 넘으면 버스·지하철. 내린 선착장 → 목적지를 거리로 어림했으면 10분 더), 비는 ④ `LiveWeatherChecker`(시연 비 포함).
 
 - 요청: `?fromLat=37.5616&fromLng=126.9827&toLat=37.5126&toLng=127.1020&arriveBy=15:00` (+ `now=12:40` 없으면 지금 시각, 시연 계정은 시연 시계) · 로그인 필요
 - 보여 주는 조건 (모두): ① 탈 선착장에 배 5분 전까지 감 ② 예약 10분 전까지 도착 ③ 바로 가면 예약 전 30분 넘게 기다림 ④ 배에서 내리기 전에 비가 시작하지 않음. 하나라도 아니면 **204 (내용 없음)**
@@ -1157,10 +1157,12 @@
   "toBoardMode": "transit", "toBoardMin": 23, "afterAlightMode": "transit", "afterAlightMin": 25,
   "busNo": "3317", "afterAlightDetail": "버스 3317 잠일고등학교→잠실역.롯데월드 6정거장",
   "doorArriveAt": "14:28", "arriveBy": "15:00", "slackMin": 32,
-  "directArriveAt": "13:25", "directWaitMin": 95 }
+  "directArriveAt": "13:25", "directWaitMin": 95,
+  "restMin": 15, "leaveAt": "14:18", "relaxedArriveAt": "14:43" }
 ```
 
 - 수단: `walk` 걷기 / `transit` 버스·지하철. `busNo`는 내려서 탈 첫 버스 (없으면 null)
+- `restMin`: 내린 선착장 근처(한강공원)에서 쉬었다 가도 되는 분. 예약 15분 전 도착 목표로 남는 시간을 5분 단위로 내림, 0~30. `leaveAt`은 쉬고 떠나는 시각, `relaxedArriveAt`은 그때 목적지 도착. 화면은 10분 이상이면 "한강공원에서 15분 둘러보고 14:18 버스 3317 · 14:43 도착 (예약 17분 전)"
 - 오류: 로그인 안 하면 401, `arriveBy`·`now`가 HH:mm가 아니면 400
 
 ## ④ 여행 중 판별 (live)
