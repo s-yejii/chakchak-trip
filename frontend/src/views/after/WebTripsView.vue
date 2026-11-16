@@ -8,6 +8,7 @@ import { loadJournal } from '@/utils/webJournal'
 import WebHeader from '@/components/after/web/WebHeader.vue'
 
 const trips = ref([])
+const firstPhotoUrl = ref({}) // 여행 번호 → 첫 사진 주소 (대표 사진을 안 골랐을 때 씀)
 const isLoading = ref(true)
 const errorMessage = ref('')
 
@@ -16,11 +17,28 @@ onMounted(async () => {
   try {
     const list = await get('/trips')
     trips.value = withoutPractice(list)
+    loadFirstPhotos()
   } catch (e) {
     if (e.status !== 401) errorMessage.value = '여행 목록을 불러오지 못했어요 (' + e.message + ')' // 401이면 머리줄이 로그인으로 보냄
   }
   isLoading.value = false
 })
+
+// 여행마다 첫 사진 (앨범 API: 여행별 사진 앞 8장, 찍은 순). 못 불러와도 카드는 그대로
+async function loadFirstPhotos() {
+  try {
+    const albums = await get('/albums')
+    const urls = {}
+    for (const album of albums) {
+      for (const photo of album.photos) {
+        if (photo.mediaType === 'photo' && !urls[album.tripId]) urls[album.tripId] = photo.url // 영상은 배경 그림으로 못 써서 사진만
+      }
+    }
+    firstPhotoUrl.value = urls
+  } catch (e) {
+    // 사진이 없어도 카드는 보여 줌
+  }
+}
 
 // 끝난 여행, 최근 것부터 (지운 여행은 빼고)
 const doneTrips = computed(() => {
@@ -32,7 +50,7 @@ const doneTrips = computed(() => {
   return list
 })
 
-// 카드에 보여 줄 값: 여행 정보 + 이 브라우저에 저장한 메모(여행 메모 첫 줄·대표 사진)
+// 카드에 보여 줄 값: 여행 정보 + 이 브라우저에 저장한 메모(여행 메모 첫 줄·대표 사진). 대표 사진을 안 골랐으면 그 여행 첫 사진
 function toCard(trip) {
   const journal = loadJournal(trip.id)
   const firstLine = journal.diary.split('\n')[0]
@@ -44,7 +62,7 @@ function toCard(trip) {
     people: trip.people,
     stopCount: trip.stopCount,
     diaryLine: firstLine,
-    coverUrl: journal.tripCover ? '/api/photos/' + journal.tripCover + '/file' : null,
+    coverUrl: journal.tripCover ? '/api/photos/' + journal.tripCover + '/file' : firstPhotoUrl.value[trip.id] || null, // 고른 대표 사진 → 없으면 첫 사진
   }
 }
 
