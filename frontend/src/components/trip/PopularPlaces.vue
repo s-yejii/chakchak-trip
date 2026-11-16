@@ -3,7 +3,7 @@
 // places: [{ place: 장소 카드, visitors, reason }] (visitors·reason은 서버가 보내지만 화면은 안 씀)
 import { ref, watch } from 'vue'
 import { getPlacePhotos } from '@/api/trips'
-import { imageFor } from '@/utils/mapView'
+import StopThumb from '@/components/trip/StopThumb.vue'
 
 const props = defineProps({
   title: { type: String, required: true },
@@ -13,7 +13,7 @@ const props = defineProps({
 
 const photos = ref({}) // 장소 id → { imageUrl, siteName, linkUrl }
 
-// 진짜 사진을 찾아 봐요. 못 찾은 곳은 기본 사진 그대로
+// 진짜 사진을 찾아 봐요. 못 찾은 곳은 이름 첫 글자 칸
 watch(() => props.places, async (list) => {
   try {
     const found = await getPlacePhotos(list.map((item) => item.place.id))
@@ -25,9 +25,10 @@ watch(() => props.places, async (list) => {
   }
 }, { immediate: true })
 
+// 믿을 만한 사진이 없으면 null → StopThumb가 이름 첫 글자 칸을 보여 줘요 (11/16 ①: 모든 음식점이 같은 기본 사진이던 문제)
 function imageOf(item) {
   const photo = photos.value[item.place.id]
-  return photo ? photo.imageUrl : imageFor(item.place.category)
+  return photo ? photo.imageUrl : null
 }
 
 function distanceText(meters) {
@@ -44,7 +45,7 @@ function distanceText(meters) {
     </div>
     <div class="group">
       <RouterLink v-for="item in places" :key="item.place.id" :to="'/place?id=' + encodeURIComponent(item.place.id)" class="row">
-        <img class="thumb" :src="imageOf(item)" alt="" />
+        <StopThumb :src="imageOf(item)" :name="item.place.name" :category="item.place.category" />
         <span class="row__body">
           <span class="row__title">{{ item.place.name }}</span>
           <span class="row__meta">{{ item.place.category }}<template v-if="item.place.distance != null"> · {{ distanceText(item.place.distance) }}</template></span>
