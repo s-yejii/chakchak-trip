@@ -55,6 +55,8 @@ public class RetroMap : MonoBehaviour
     private const string POST_RESOURCES_PATH = "Packages/com.unity.postprocessing/PostProcessing/PostProcessResources.asset";
 
     public Ground Ground { get; private set; } // 다른 스크립트가 땅 높이를 물어볼 때 씀
+    public float WaterLevel { get; private set; } = NO_WATER_LEVEL; // 강물 높이 (카메라가 물속으로 들어가지 않게 CameraMove가 씀)
+    private const float NO_WATER_LEVEL = -10000f; // 강이 없는 지도: 어떤 땅보다도 낮게
     private Material groundMaterial;           // 땅 재질 (위성 사진을 여기에 입힘)
     private readonly List<Material> nightMaterials = new List<Material>(); // 밤에 창문·간판 불을 켤 벽 재질들 (SkyClock이 켬)
     private Material lampMaterial; // 가로등·다리 조명 (지도마다 새로)
@@ -148,6 +150,7 @@ public class RetroMap : MonoBehaviour
         if (clouds == null) clouds = gameObject.AddComponent<CloudLayer>();
         clouds.Show();
         bool hasWater = data.water != null && data.water.cells != null && data.water.cells.Length > 0;
+        WaterLevel = hasWater ? data.water.level : NO_WATER_LEVEL;
         WaterReflection reflection = GetComponent<WaterReflection>();
         if (reflection == null) reflection = gameObject.AddComponent<WaterReflection>();
         reflection.Show(hasWater ? data.water.level : Ground.LowestHeight(), data.sizeM);
