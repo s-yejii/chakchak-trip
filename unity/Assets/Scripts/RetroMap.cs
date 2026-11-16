@@ -25,8 +25,10 @@ public class RetroMap : MonoBehaviour
     private const float DECK_CHECK_STEP_M = 8f;   // 경로가 다리 위인지 이 간격마다 확인
     private const float VEHICLE_LINE_UP_M = 0.05f; // 버스·택시 띠는 걷기 띠보다 이만큼 위 (같은 높이면 겹친 곳이 번갈아 보여 들쭉날쭉)
     private const float VEHICLE_LINE_WIDTH_M = 2.4f; // 버스·택시 구간 띠 폭
-    private const float ROUTE_WIDTH_M = 1.6f;     // 걸은 경로 선 폭
+    private const float ROUTE_WIDTH_M = 1f;       // 걸은 경로 선 폭 (걷는 길 폭이 2m라, 넓으면 길을 다 덮음)
     private const float PIN_HEIGHT_M = 16f;       // 다녀온 곳 핀 높이
+    private const float PIN_FOOT_GAP_M = 4f;      // 핀 기둥을 땅에서 이만큼 띄워서 시작 (걷는 눈높이에서 기둥이 화면 가운데를 막지 않게, 사람 키보다 위)
+    private const float PIN_POLE_WIDTH_M = 0.25f; // 핀 기둥 굵기
     private const float BOAT_LINE_LIFT_M = 0.3f;  // 배가 지나간 물길 선을 물에서 띄우는 높이
     private const float BOAT_LINE_WIDTH_M = 1.2f; // 물길 선 폭
     private const float RIDE_LINE_WIDTH_M = 3f;   // 지하철·택시 구간 선 폭
@@ -525,7 +527,7 @@ public class RetroMap : MonoBehaviour
         item.GetComponent<LineRenderer>().alignment = LineAlignment.TransformZ;
     }
 
-    // 다녀온 곳 핀 = 가는 기둥 + 그 위의 공 (유니티 기본 도형)
+    // 다녀온 곳 핀 = 가는 기둥 + 그 위의 공 (유니티 기본 도형). 기둥은 땅에서 PIN_FOOT_GAP_M 위부터
     private void AddPin(Transform parent, StopData stop)
     {
         Vector3 foot = new Vector3(stop.x, Ground.HeightAt(stop.x, stop.z), stop.z);
@@ -533,8 +535,9 @@ public class RetroMap : MonoBehaviour
 
         GameObject pole = GameObject.CreatePrimitive(PrimitiveType.Cylinder); // 기본 기둥은 키 2m, 굵기 1m
         pole.transform.SetParent(parent, false);
-        pole.transform.position = foot + Vector3.up * PIN_HEIGHT_M / 2;
-        pole.transform.localScale = new Vector3(0.5f, PIN_HEIGHT_M / 2, 0.5f);
+        float poleLength = PIN_HEIGHT_M - PIN_FOOT_GAP_M;
+        pole.transform.position = foot + Vector3.up * (PIN_FOOT_GAP_M + poleLength / 2); // 기둥 가운데 높이
+        pole.transform.localScale = new Vector3(PIN_POLE_WIDTH_M, poleLength / 2, PIN_POLE_WIDTH_M);
         pole.GetComponent<MeshRenderer>().sharedMaterial = material;
 
         GameObject ball = GameObject.CreatePrimitive(PrimitiveType.Sphere);

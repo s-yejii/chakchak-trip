@@ -9,7 +9,8 @@ public class RoutePlayer : MonoBehaviour
 {
     private const float MINUTES_PER_SECOND = 4f; // 재생 빠르기: 1초에 여행 시간 4분 (8시간 여행 = 2분)
     private const float WALKER_HEIGHT_M = 1.2f;  // 걷는 사람 표시의 가운데 높이
-    private const float EYE_M = 1.6f;            // 내비게이션에서 사람 눈높이
+    private const float EYE_M = 2.4f;            // 내비게이션에서 눈높이 (땅에서). 경로 선이 땅에서 0.75m 위라 그 위로 사람 눈높이 1.6m
+                                                 //   (1.6이었을 때는 눈이 경로 선 바로 위에 있어서 선이 화면 아래를 다 덮었음)
     private const float FOLLOW_SMOOTH = 3f;      // 카메라가 따라붙는 빠르기 (클수록 바로 붙음)
     private const float TURN_SMOOTH = 2f;        // 내비게이션에서 고개를 돌리는 빠르기
     private const float STAY_MOVE_M = 30f;       // 두 점 사이를 이보다 적게 움직였으면 "머문 것"
