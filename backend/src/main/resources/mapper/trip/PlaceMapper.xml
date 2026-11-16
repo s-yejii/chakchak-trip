@@ -129,6 +129,8 @@
     LEFT JOIN score sc ON sc.place_id = retrip_place.id
     WHERE (rating IS NULL OR rating &gt;= 3.0)
       AND content_type_id IS DISTINCT FROM '32'
+      <!-- 홈 인기 장소는 DB에 사진 있는 곳만 (11/16 상재, 엉뚱한 사진·기본 그림 방지) -->
+      AND image_url IS NOT NULL AND image_url &lt;&gt; ''
       AND id NOT IN (SELECT place_id FROM mine)
       <if test="radius != null and lat != null and lng != null">AND ST_DWithin(geom, <include refid="basePoint"/>, #{radius})</if>
     ORDER BY COALESCE(sc.score, 0) DESC, <include refid="adjustedRating"/> DESC
