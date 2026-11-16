@@ -10,6 +10,7 @@ import { seasonOf } from './season'
 import { isInRings, bboxOf } from './trees'
 import { BUILDING_LOOKS } from './buildingLooks'
 import { sunPosition, koreanDate } from '@/utils/sun'
+import { snapRidesToRoads } from './rideSnap' // 버스·택시 구간을 찻길에 맞춤
 
 const METERS_PER_DEGREE_LAT = 110540
 const METERS_PER_DEGREE_LNG = 111320
@@ -36,9 +37,11 @@ const EULJIRO_MAX_M = 25 // 이 높이(7~8층) 이하 상가만
 const EULJIRO_KINDS = [2, 4] // 상가 · 그 밖
 const GRID_STEP_M = 15 // 지형 격자 한 칸 (DEM 한 픽셀이 약 7.6m라 이보다 촘촘해도 더 자세해지지 않음)
 const WATER_DEPTH_M = 2.5 // 강바닥을 물 높이보다 이만큼 낮춤 (땅이 물 위로 비쳐 나오지 않게)
+const BRIDGE_CHECK_M = 30 // 다리가 물 위를 지나는지 이 간격마다 확인 (물 칸 한 칸 크기쯤)
 const WATER_EDGE_DEPTH_M = 0.3 // 강가 칸(옆에 땅이 있는 물 칸)은 조금만 낮춤 → 강가가 계단이 아니라 완만한 비탈이 됨
 // 경로 둘레만 담는 지도(isCorridor): 하루에 여러 동네를 지나면 사각형 하나로는 건물이 너무 많아서
 const WALK_KEEP_M = 300     // 걸은 곳에서 이 안의 건물·길·나무만 담음
+const RIDE_KEEP_M = 60      // 버스·택시로 지나간 길에서 이 안의 건물·길·나무를 담음 (길 양쪽 한 줄쯤)
 const BOAT_KEEP_M = 900     // 배 탄 곳에서 이 안의 강변을 담음 (한강 폭이 1km쯤이라 건너편 강변까지)
 const BOAT_VIEW_MIN_M = 9   // 배에서 보는 강변 건물은 이 높이(3층쯤) 이상만 (낮은 건물은 앞 건물에 가려서)
 const BOAT_ROAD_MIN_M = 8   // 배에서 보는 강변 길은 이 폭 이상만 (강변북로·올림픽대로 같은 큰길)
@@ -92,6 +95,8 @@ export async function buildMapData({ center, halfM, tileUrl, dateText, forest, g
   const toMeters = (position) => [Math.round((position[0] - center[0]) * lngScale * 100) / 100, Math.round((position[1] - center[1]) * METERS_PER_DEGREE_LAT * 100) / 100]
   const route = makeRoute(track, isInBox, toMeters, (x, z) => isWaterAt(water, halfM, gridStepM, x, z))
   markTransitRuns(route, await loadTransitStops(tileUrl, box, toMeters)) // 탈것 구간을 지하철·버스·택시로 나눔
+  const allRoads = await loadRoads(tileUrl, box, isInBox, toMeters) // 지도 안의 길 전부 (아래에서 경로 둘레만 남김)
+  snapRidesToRoads(route, allRoads) // 버스·택시 구간을 찻길 따라가게 (GPS가 20초 간격이라 직선으로 이으면 건물·숲을 뚫고 감)
   const keep = isCorridor ? makeKeepChecker(route, stops, toMeters) : null
   let found = await loadNationalBuildings(box) // 서울: 국가 건물 자료 (빈 곳 없음, 층수 정확)
   if (found.length === 0) found = await loadMapBuildings(tileUrl, box, isInBox) // 그 밖 지역: 지도(OpenStreetMap) 건물로 대신
@@ -113,8 +118,8 @@ export async function buildMapData({ center, halfM, tileUrl, dateText, forest, g
     if (look) item.look = look
     buildings.push(item)
   }
-  let roads = await loadRoads(tileUrl, box, isInBox, toMeters)
-  if (keep) roads = keep.cutRoads(roads)
+  let roads = allRoads
+  if (keep) roads = keep.cutRoads(roads, (x, z) => isWaterAt(water, halfM, gridStepM, x, z))
   const area = { center: center, box: box, lngScale: lngScale, latScale: METERS_PER_DEGREE_LAT }
   let trees = await plantTrees(area, roads, dateText, forest, guNames)
   if (keep) trees = trees.filter((tree) => keep.isNear(tree.x, tree.z)) // filter: 조건에 맞는 것만 남긴 새 목록
@@ -415,8 +420,9 @@ function makeKeepChecker(route, stops, toMeters) {
     }
   }
   for (let i = 0; i + 1 < route.modes.length; i++) {
-    if (isRideMode(route.modes[i])) continue // 지하철·버스·택시로 지나간 곳은 안 담음
-    const radius = route.modes[i] === MODE.boat ? BOAT_KEEP_M : WALK_KEEP_M
+    if (route.modes[i] === MODE.subway) continue // 지하철로 지나간 곳은 안 담음 (땅속이라 안 보임)
+    // 버스·택시로 지나간 길가는 좁게 담음 (전에는 안 담아서, 차가 길도 건물도 없는 빈 땅을 달렸음)
+    const radius = route.modes[i] === MODE.boat ? BOAT_KEEP_M : isRideMode(route.modes[i]) ? RIDE_KEEP_M : WALK_KEEP_M
     const value = route.modes[i] === MODE.boat ? 2 : 1
     const x0 = route.points[i * 2], z0 = route.points[i * 2 + 1]
     const x1 = route.points[i * 2 + 2], z1 = route.points[i * 2 + 3]
@@ -437,9 +443,14 @@ function makeKeepChecker(route, stops, toMeters) {
       return value === 1 || (value === 2 && height >= BOAT_VIEW_MIN_M)
     },
     // 길: 담을 곳 밖으로 나가면 거기서 끊음 (배에서 보이는 곳은 큰길만)
-    cutRoads: (roads) => {
+    //   물 위 다리는 끊지 않고 통째로 담음 (끊으면 한강 다리가 강 한가운데서 뚝 끊겨 보임). isWater(x, z): 그 자리가 물인지
+    cutRoads: (roads, isWater) => {
       const result = []
       for (const road of roads) {
+        if (road.isBridge && isOverWater(road, isWater)) {
+          result.push(road)
+          continue
+        }
         let points = []
         for (let i = 0; i + 1 < road.points.length; i += 2) {
           const value = valueAt(road.points[i], road.points[i + 1])
@@ -455,6 +466,19 @@ function makeKeepChecker(route, stops, toMeters) {
       return result
     },
   }
+}
+
+// 이 길이 물 위를 지나는지: 선을 BRIDGE_CHECK_M마다 짚어 봄 (다리는 양 끝이 땅이라 꼭짓점만 보면 놓침)
+function isOverWater(road, isWater) {
+  for (let i = 0; i + 3 < road.points.length; i += 2) {
+    const x0 = road.points[i], z0 = road.points[i + 1]
+    const x1 = road.points[i + 2], z1 = road.points[i + 3]
+    const steps = Math.max(1, Math.ceil(Math.hypot(x1 - x0, z1 - z0) / BRIDGE_CHECK_M))
+    for (let s = 0; s <= steps; s++) {
+      if (isWater(x0 + ((x1 - x0) * s) / steps, z0 + ((z1 - z0) * s) / steps)) return true
+    }
+  }
+  return false
 }
 
 // 땅 높이 고르게 하기: 점마다 주변 5×5칸(약 75m)의 평균으로 바꿈

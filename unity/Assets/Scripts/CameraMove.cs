@@ -44,9 +44,8 @@ public class CameraMove : MonoBehaviour
 
         if (map != null && map.Ground != null)
         {
-            // 강바닥은 물 면보다 2.5m 낮아서, 땅만 보면 강 위에서 물속으로 들어갔음 → 땅과 물 면 중 높은 쪽 기준
-            float floor = Mathf.Max(map.Ground.HeightAt(position.x, position.z), map.WaterLevel);
-            position.y = Mathf.Max(position.y, floor + MIN_HEIGHT_M);
+            // 강바닥은 물 면보다 2.5m 낮아서, 땅만 보면 강 위에서 물속으로 들어갔음 → 물 위면 물 면 기준 (FloorAt)
+            position.y = Mathf.Max(position.y, map.FloorAt(position.x, position.z) + MIN_HEIGHT_M);
         }
         transform.position = position;
     }

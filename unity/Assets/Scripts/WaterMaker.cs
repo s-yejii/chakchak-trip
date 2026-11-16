@@ -1,5 +1,6 @@
 // 강물 만들기: 지형 격자에서 물인 칸들을 물 높이에 평평한 네모로 깔고, 잔물결 그림(노멀 맵)을 입힘
 // 웹이 물 칸의 땅을 물 높이보다 낮춰서 보내므로(강바닥), 물 면이 땅에 묻히지 않음
+// 물 높이는 물마다 다름 (한강 · 호수): WaterPrep이 칸마다 정해 둔 값(data.water.levels)을 씀
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -9,16 +10,14 @@ public static class WaterMaker
     private const int RIPPLE_PX = 128;  // 잔물결 그림 한 변(픽셀)
     public const float RIPPLE_M = 40f;  // 잔물결 그림 한 장이 덮는 물 면(m)
     private const float RIPPLE_STRENGTH = 9f;    // 물결 기울기 세기 (옆 점과의 높이 차이에 곱함. 크면 물이 거칠어 보임)
-    private const int SPREAD_CELLS = 2; // 물 칸에서 이만큼 떨어진 칸까지 물 면을 깖 (강가 비탈이 물에 잠기는 곳에 구멍이 안 나게)
 
-    // 물 칸이 하나라도 닿은 격자 칸마다 네모 하나. 물이 없으면 null
+    // 네 귀퉁이 중 하나라도 물에 잠긴 격자 칸마다 네모 하나. 물이 없으면 null
     public static Mesh BuildMesh(MapData data)
     {
-        if (data.water == null || data.water.cells == null || data.water.cells.Length != data.heights.Length) return null;
+        if (!HasWater(data)) return null;
         int count = data.gridCount;
         float step = data.sizeM / (count - 1);
         float half = data.sizeM / 2;
-        float level = data.water.level;
         List<Vector3> vertices = new List<Vector3>();
         List<Vector2> uv = new List<Vector2>();
         List<int> triangles = new List<int>();
@@ -26,7 +25,7 @@ public static class WaterMaker
         {
             for (int column = 0; column < count - 1; column++)
             {
-                if (!IsNearWater(data, row, column)) continue;
+                if (!TryWetQuad(data, row, column, out float level)) continue; // out: 그 물의 물 높이를 level에 담아 줌
                 float x = -half + column * step;
                 float z = -half + row * step;
                 int first = vertices.Count;
@@ -57,33 +56,91 @@ public static class WaterMaker
         uv.Add(new Vector2(x, z) / RIPPLE_M);
     }
 
-    private static bool IsWater(MapData data, int row, int column)
+    // 이 지도에 물 자료가 있는지
+    public static bool HasWater(MapData data)
+    {
+        return data.water != null && data.water.cells != null && data.water.cells.Length == data.heights.Length;
+    }
+
+    // 격자 (row, column) 칸이 물인지 (지도 밖은 물이 아님)
+    public static bool IsWaterCell(MapData data, int row, int column)
     {
         if (row < 0 || column < 0 || row >= data.gridCount || column >= data.gridCount) return false;
         return data.water.cells[row * data.gridCount + column] == 1;
     }
 
-    // 이 칸 둘레 SPREAD_CELLS 안에 물 칸이 있는지
-    private static bool IsNearWater(MapData data, int row, int column)
+    // 이 네모 칸(남서 귀퉁이가 row, column)의 네 귀퉁이 중 물에 잠긴 점이 있는지 + 그 물의 물 높이
+    //   전에는 물 칸에서 2칸 떨어진 곳까지 물 면을 깔았는데, 호수보다 낮은 옆 땅 위로 네모난 물이 번져 보였음
+    private static bool TryWetQuad(MapData data, int row, int column, out float level)
     {
-        for (int r = row - SPREAD_CELLS; r <= row + 1 + SPREAD_CELLS; r++)
+        bool isWet = false;
+        level = data.water.level;
+        for (int r = row; r <= row + 1; r++)
         {
-            for (int c = column - SPREAD_CELLS; c <= column + 1 + SPREAD_CELLS; c++)
+            for (int c = column; c <= column + 1; c++)
             {
-                if (IsWater(data, r, c)) return true;
+                if (!TryWetPoint(data, r, c, out float pointLevel)) continue;
+                isWet = true;
+                level = Mathf.Max(level, pointLevel);
             }
         }
-        return false;
+        return isWet;
+    }
+
+    // 격자 점 하나가 물에 잠겼는지: 물 칸이거나, 물 칸 바로 옆인데 땅이 그 물 높이보다 낮은 점 (강가를 다듬어 물 밑으로 내려간 땅)
+    private static bool TryWetPoint(MapData data, int row, int column, out float level)
+    {
+        level = data.water.level;
+        if (row < 0 || column < 0 || row >= data.gridCount || column >= data.gridCount) return false;
+        int cell = row * data.gridCount + column;
+        if (data.water.cells[cell] == 1)
+        {
+            level = LevelOfCell(data, cell);
+            return true;
+        }
+        bool hasWaterNear = false;
+        for (int r = row - 1; r <= row + 1; r++)
+        {
+            for (int c = column - 1; c <= column + 1; c++)
+            {
+                if (!IsWaterCell(data, r, c)) continue;
+                hasWaterNear = true;
+                level = Mathf.Max(level, LevelOfCell(data, r * data.gridCount + c));
+            }
+        }
+        return hasWaterNear && data.heights[cell] < level;
+    }
+
+    // 미터 좌표(x, z)에서 가장 가까운 격자 칸 번호 (지도 밖이면 가장자리 칸)
+    public static int CellAt(MapData data, float x, float z)
+    {
+        float step = data.sizeM / (data.gridCount - 1);
+        int column = Mathf.Clamp(Mathf.RoundToInt((x + data.sizeM / 2) / step), 0, data.gridCount - 1);
+        int row = Mathf.Clamp(Mathf.RoundToInt((z + data.sizeM / 2) / step), 0, data.gridCount - 1);
+        return row * data.gridCount + column;
     }
 
     // 미터 좌표(x, z)가 물 칸인지 (가장 가까운 격자 점으로 봄)
     public static bool IsWaterAt(MapData data, float x, float z)
     {
-        if (data.water == null || data.water.cells == null || data.water.cells.Length != data.heights.Length) return false;
+        if (!HasWater(data)) return false;
         float step = data.sizeM / (data.gridCount - 1);
         int column = Mathf.RoundToInt((x + data.sizeM / 2) / step);
         int row = Mathf.RoundToInt((z + data.sizeM / 2) / step);
-        return IsWater(data, row, column);
+        return IsWaterCell(data, row, column);
+    }
+
+    // 미터 좌표(x, z) 자리의 물 높이 (호수는 한강보다 높음). 물이 없는 지도면 0
+    public static float LevelAt(MapData data, float x, float z)
+    {
+        if (!HasWater(data)) return 0;
+        return LevelOfCell(data, CellAt(data, x, z));
+    }
+
+    // 이 칸의 물 높이: WaterPrep이 물마다 정해 둔 값, 아직 없으면 자료의 물 높이
+    private static float LevelOfCell(MapData data, int cell)
+    {
+        return data.water.levels != null ? data.water.levels[cell] : data.water.level;
     }
 
     // 잔물결 그림: 점마다 "물 면이 어느 쪽으로 기울었나"를 색으로 적은 그림(노멀 맵). 빛이 이걸 보고 반짝임을 만듦

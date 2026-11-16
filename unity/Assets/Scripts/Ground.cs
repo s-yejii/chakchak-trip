@@ -24,17 +24,27 @@ public class Ground
         return data.heights[row * data.gridCount + column];
     }
 
-    // (x, z) 자리의 땅 높이. 둘러싼 격자 점 네 개의 높이를 거리만큼 섞음
-    // 예: 높이 10m 점과 20m 점의 딱 가운데면 15m
+    // (x, z) 자리의 땅 높이. 화면에 그려진 땅과 똑같은 높이를 돌려줌
+    //   땅은 네모 칸을 남서–북동 대각선으로 잘라 삼각형 두 개로 그림(BuildMesh) → 여기서도 그 삼각형 위의 높이를 계산
+    //   (전에는 네 점을 그냥 섞어서, 높이가 급하게 바뀌는 칸에서 그려진 땅과 1m쯤 어긋나 길이 땅에 묻혔음)
+    // 예: 높이 10m 점과 20m 점을 잇는 변의 딱 가운데면 15m
     public float HeightAt(float x, float z)
     {
         float gridX = (x + half) / step;
         float gridZ = (z + half) / step;
         int column = Mathf.FloorToInt(gridX);
         int row = Mathf.FloorToInt(gridZ);
-        float south = Mathf.Lerp(GridHeight(column, row), GridHeight(column + 1, row), gridX - column);
-        float north = Mathf.Lerp(GridHeight(column, row + 1), GridHeight(column + 1, row + 1), gridX - column);
-        return Mathf.Lerp(south, north, gridZ - row);
+        float east = gridX - column; // 칸 안에서 동쪽으로 간 비율 (0~1)
+        float north = gridZ - row;   // 칸 안에서 북쪽으로 간 비율 (0~1)
+        float southWest = GridHeight(column, row);
+        float northEast = GridHeight(column + 1, row + 1);
+        if (north >= east) // 대각선 위쪽 삼각형 (남서 · 북서 · 북동)
+        {
+            float northWest = GridHeight(column, row + 1);
+            return southWest + (northWest - southWest) * north + (northEast - northWest) * east;
+        }
+        float southEast = GridHeight(column + 1, row); // 대각선 아래쪽 삼각형 (남서 · 북동 · 남동)
+        return southWest + (southEast - southWest) * east + (northEast - southEast) * north;
     }
 
     // 지도에서 가장 낮은 땅 높이
