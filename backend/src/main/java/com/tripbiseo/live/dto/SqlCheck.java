@@ -16,5 +16,5 @@ public class SqlCheck {
     private Set<String> placeholders = new LinkedHashSet<>(); // 쓴 빈칸 (route, me, next, slack, prev)
     private List<String> reviewWords = new ArrayList<>();  // 리뷰에서 찾은 말 (예: 조용). 카드에 근거로 보여 줌
     private String orderBy;                                // 첫 정렬 기준: "detour"(덜 돌아가는 순) / "near"(내 위치에서 가까운 순) / null(그 밖)
-    private Integer wantLimit;                             // orderBy가 있을 때 사용자가 원한 개수 (실제 걷는 길로 다시 줄 세운 뒤 이만큼만)
+    private Integer wantLimit;                             // orderBy나 분위기가 있을 때 사용자가 원한 개수 (다시 줄 세우거나 고른 뒤 이만큼만)
 }

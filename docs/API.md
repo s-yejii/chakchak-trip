@@ -158,6 +158,9 @@
 | `POST /api/trips/{id}/live/apply` | 고른 대안을 일정에 반영 | live/AltTrimView, live/AltDropView, live/AltSwapView → live/AppliedView | 있음 |
 | `POST /api/trips/{id}/live/preview` | 직접 고친 남은 일정 계산 (저장 안 함) | live/AlternativesView, live/AltTrimView, live/AltDropView, live/AltSwapView | 있음 |
 | `GET /api/trips/{id}/live/swap-candidates` | 바꿀 장소 후보 (바꿨을 때 여유 포함) | live/AltSwapView | 있음 |
+| `POST /api/live/rag/embed` | 리뷰 RAG 준비: 시연 동선 500m 안 리뷰 임베딩 채우기 (개발용) | 화면 없음 | 있음 (11/15) |
+| `POST /api/live/rag/rank` | 후보 가게를 분위기로 줄 세워 보기 (개발·평가용) | 화면 없음 | 있음 (11/15) |
+| `POST /api/live/rag/compare` | 같은 후보에서 A(글자)·B(벡터)·C(RAG) 결과 비교 (평가용, `docs/rag-eval/run_eval.py`) | 화면 없음 | 있음 (11/16) |
 | (주소 미정) | 줄서기 대기 시간 반영 | live/LiveView (TablingModal) | 확인 필요 |
 | (주소 미정) | "그냥 갈게요" (늦어도 그대로 가기) | member/LockDelayView, member/LockPushView | 확인 필요 |
 
@@ -177,6 +180,7 @@
 | `GET /api/trips/{id}/photos` | 한 여행의 사진·영상 전체 (찍은 순) | after/RetroView, after/AlbumView(더보기) | 있음 (11/06) |
 | `POST /api/photos` | 사진·영상 여러 개 올리기 → 찍은 시각으로 여행·장소 자동 분류 | after/AlbumView | 있음 (11/06) |
 | `GET /api/photos/{photoId}/file` | 사진·영상 파일 (`<img>`·`<video>` 주소) | after/AlbumView, after/RetroView | 있음 (11/06) |
+| `GET /api/trips/{id}/shorts` | 추억 쇼츠: 사진마다 AI 감성 자막 + 여행 분위기 | after/ShortsView | 있음 (11/14) |
 | `GET /api/route` | 길 안내: 경로선 + 단계별 안내 (도보·버스·지하철·택시) | after/RouteGuideView | 있음 |
 | `GET /api/amenities/nearby?kind=` | 근처 화장실·쓰레기통 | after/RouteGuideView, live/LiveView (AmenityChips) | 확인 필요 |
 | `POST /api/trips/{id}/visits` | 일정에 없던 곳 "들렀어요" 기록 | live/LiveView (VisitedPin), member/LockStayView | 확인 필요 |
@@ -679,6 +683,8 @@
 | stops[].arrive | string | 예상 도착 `HH:mm` |
 | stops[].issue | string (null 가능) | 문제 한 줄: "계획보다 N분 늦게 도착해요", "이날 휴무예요 (...)", "HH:mm에는 영업 시간이 아니에요", "22:00에 문을 닫아 N분밖에 못 머물러요", "이미 지난 시각이에요 (지금 HH:mm)" |
 | stops[].leg | object (null 가능) | 앞 장소에서 오는 구간 (Leg에서 `coords` 뺀 모양). 첫 칸은 `null` |
+| stops[].hoursUnknown | boolean | 영업시간 정보가 없으면 `true` ("영업시간 확인 전" 안내용, 문제 줄·`ok`는 안 바뀜). DB에 없는 장소(`placeId` 없음, 카카오 검색 등)도 `true`. 휴무인 날·늘 열린 곳(이름에 공원·거리·골목·마을·광장·한강·산책·둘레길·숲·나들길, 천·강으로 끝남, 관광지(`kind` tour)면 산으로 끝남)·숙소·고정 일정은 `false` (11/15) |
+| stops[].naverUrl | string | 네이버 지도 주소: 장소 `map_url`, 없으면(DB에 없는 장소 포함) 이름·주소 검색 링크 (11/15) |
 | legs | Leg[] | 구간 목록 (칸 수 − 1개, `coords` 포함) |
 
 ```json
@@ -1250,7 +1256,7 @@ key 끝의 숫자가 바뀔 때만 화면이 같은 알림을 다시 띄워요.
 | sql | string | AI가 쓴 SQL. 빈칸(`:route`·`:me`·`:next`·`:slack`·`:prev`) 그대로라 좌표 없음. 화면에는 안 보여 줌 (11/13) |
 | slack | number | 다음 일정까지 지금 여유(분), 남은 일정이 없으면 null |
 | band | string | 지도에 그릴 가는 길 띠 (경로 양옆 190m, GeoJSON). 가는 길로 찾지 않았으면 null |
-| places | array | 찾은 곳 (최대 10, AI SQL이 정한 순서). `id`, `name`, `kind`, `category`, `lat`, `lng`, `rating`(보정 평점), `reviewCount`, `detourMinutes`(가는 길에서 몇 분 더, 없으면 null. 덜 돌아가는 순으로 찾았으면 실제 걷는 길로 다시 잰 값), `walkMinutes`(지금 위치 → 이곳 실제 걷는 시간, 다시 재지 않았으면 null), `isEstimate`(다시 잴 때 길찾기가 실패해 거리로 어림했으면 true), `joinLat`·`joinLng`(가는 길 위 가장 가까운 점), `closeAt`, `closingSoon`, `slackAfter`(30분 머물고 남는 여유, 계산 못 하면 null). 지금 닫힌 곳은 빠짐 |
+| places | array | 찾은 곳 (최대 10, AI SQL이 정한 순서). `id`, `name`, `kind`, `category`, `lat`, `lng`, `rating`(보정 평점), `reviewCount`, `detourMinutes`(가는 길에서 몇 분 더, 없으면 null. 덜 돌아가는 순으로 찾았으면 실제 걷는 길로 다시 잰 값), `walkMinutes`(지금 위치 → 이곳 실제 걷는 시간, 다시 재지 않았으면 null), `isEstimate`(다시 잴 때 길찾기가 실패해 거리로 어림했으면 true), `joinLat`·`joinLng`(가는 길 위 가장 가까운 점), `closeAt`, `closingSoon`, `slackAfter`(30분 머물고 남는 여유, 계산 못 하면 null), `moodReason`·`moodEvidence`(분위기 질문일 때 리뷰 RAG가 고른 이유 한 줄·근거 리뷰 문장. 근거는 실제 리뷰에 있는 글인지 서버가 확인함. 분위기 질문이 아니거나 예전 방식으로 찾았으면 null, 11/15). 지금 닫힌 곳은 빠짐. 분위기 질문("조용한 카페")은 SQL로 후보 30곳을 뽑고 리뷰 RAG(임베딩 → Gemini 판단 → 인용 검사)로 다시 골라요 |
 
 > Text-to-SQL: Gemini가 SQL을 쓰고(좌표 없이 빈칸만) → `SqlChecker`(JSqlParser)가 SELECT 하나·허용한 뷰(`ask_place`·`ask_review`)·함수·상한·LIMIT 10을 검사(떨어지면 이유를 붙여 한 번 더) → 읽기 전용 트랜잭션에서 `ask_reader` 계정 + 3초 제한으로 실행해요 (`db/18_ask_place.sql`). 가는 길(`:route`)은 다음 칸까지 걸어갈 때만 써요. Gemini 실패·검사 두 번 탈락·DB 3초 초과면 `"ask-radius"`로 돌아가요.
 
@@ -1418,6 +1424,27 @@ key 끝의 숫자가 바뀔 때만 화면이 같은 알림을 다시 띄워요.
 | finalArrive, slackMin | string, number | 이 장소로 바꾸면 고정 일정(없으면 마지막 칸) 예상 도착과 여유 |
 
 **오류** 공통 오류 · 404 "남은 일정에서 찾을 수 없어요." · 400 "고정 일정은 바꿀 수 없어요."
+
+### `POST /api/live/rag/embed`
+리뷰 RAG 준비: 아직 임베딩이 없는 시연 동선 장소 500m 안 리뷰 중 20자 이상·가게마다 긴 순 6개(약 1,830개, Gemini 무료 한도 하루 약 1,000개 때문에 범위를 줄임)를 Gemini 임베딩(768차원)으로 바꿔 `review_embedding`에 저장해요. 개발용이라 화면에서 안 불러요. `remaining`이 0이 될 때까지 여러 번 부르면 되고, 이미 한 리뷰는 건너뛰어요. · **리뷰 RAG 관리 계정(ragadmin, `RAG_ADMIN_ACCOUNTS`)만**, 아니면 403 "리뷰 RAG 관리 계정만 쓸 수 있어요." · 11/15 추가
+
+**요청** 쿼리 `limit`(선택, 1~5000, 기본 1000) = 이번에 바꿀 최대 개수
+
+**응답** `{ "embedded": 1000, "remaining": 11731 }` (이번에 바꾼 개수, 아직 남은 개수). Gemini 무료 한도에 걸리면 그때까지 한 만큼만 돌려줘요 (1분쯤 뒤 다시)
+
+**오류** 400 "limit은 1~5000이에요." · 503 "Gemini 키가 없어요…" · 502 "Gemini 임베딩을 받지 못했어요…"
+
+### `POST /api/live/rag/rank`
+후보 가게를 분위기에 맞는 순으로 줄 세워 봐요 (벡터만, Gemini 판단 없음). 개발·평가용 · 관리 계정(ragadmin)만 · 11/15 추가
+
+**요청** `{ "mood": "조용한", "placeIds": ["naver-1", …] }` · **응답** `[{ placeId, score, reviews }]` score(근거 리뷰 2개 거리 평균, 작을수록 맞음) 순. 근거 리뷰가 2개 안 되거나 거리 0.40을 넘으면 빠짐
+
+### `POST /api/live/rag/compare`
+평가용: 이 점 500m 안 그 종류 가게(고정 후보, 보정 평점 순)를 세 방식으로 골라 상위 5와 걸린 시간을 나란히 줘요. Gemini SQL을 거치지 않아 같은 질문이면 늘 같은 후보예요. · 관리 계정(ragadmin)만 · 11/16 추가
+
+**요청** `{ "lat", "lng", "kind": "cafe", "mood": "오래 앉아 있어도 눈치 안 보이는", "moodWord": "오래" }`
+
+**응답** `{ candidateCount, embeddedCount, keyword: [...], vector: [...], rag: [...], keywordMs, vectorMs, ragMs }` 각 목록은 `{ id, name, reason, quote }` 최대 5개 (reason·quote는 rag만). keyword = A 리뷰 2개 이상에 moodWord 글자, vector = B 임베딩 거리 순, rag = C 벡터 → Gemini 판단 → 인용 검사. B가 임베딩 한도로 실패하면 빈 목록
 
 ---
 
@@ -1606,6 +1633,24 @@ key 끝의 숫자가 바뀔 때만 화면이 같은 알림을 다시 띄워요.
 사진·영상 파일 자체. 내 여행의 사진만 줘요. · 로그인 필요 · 11/06 추가
 
 **응답** 파일 (Content-Type `image/jpeg`, `video/mp4` 등) · **오류** 404 "사진을 찾을 수 없어요."
+
+### `GET /api/trips/{id}/shorts`
+추억 쇼츠에 띄울 사진마다 감성 자막과 여행 전체 분위기. · 로그인 필요 · 화면: after/ShortsView · 11/14 추가
+
+**만드는 방법**
+1. 사진(찍은 순) 앞 12장을 한 장씩 Gemini에 보내 `{caption, mood}`를 받아요. 보내기 전에 가로 768px JPEG로 다시 그려서 EXIF(GPS 좌표 등)를 빼요. 함께 보내는 글은 장소 이름과 시간대(오전·오후·저녁)뿐이에요.
+2. 여행 분위기 `mood` = 사진 분위기 중 가장 많이 나온 것. `잔잔함`·`신남`·`설렘`·`뭉클` 중 하나 (나중에 BGM 고르기에 씀).
+3. Gemini 키가 없거나 실패한 사진, 영상, 13번째부터는 기본 자막 "경복궁에서 보낸 오후"(장소를 모르면 "이동하며 담은 오후"). 이때 오류는 내지 않아요.
+4. 만든 결과는 서버 메모리에 기억해서, 사진 수가 그대로면 다시 부르지 않아요 (서버를 다시 켜면 새로 만듦).
+
+**응답**
+```json
+{ "mood": "잔잔함",
+  "captions": [ { "photoId": 12, "caption": "한옥 지붕 위로 내려앉은 오후" } ] }
+```
+`captions`는 `GET /api/trips/{id}/photos`와 같은 순서·같은 개수예요.
+
+**오류** 404 "여행을 찾을 수 없어요."
 
 ---
 

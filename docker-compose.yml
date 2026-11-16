@@ -1,11 +1,13 @@
 # 착착트립 DB를 도커로 띄우기 (11/12 ④ 신예지)
 #   처음:            docker compose up -d db   → db/*.sql을 docker/db-init/00_init.sql 순서대로 자동 실행 (처음 한 번, 몇 분)
+#   이미지 바뀐 뒤:  docker compose up -d --build db   (11/15 pgvector 추가. 데이터는 그대로 남아요)
 #   진행 보기:       docker compose logs -f db
 #   다시 처음부터:   docker compose down -v    (도커 DB의 데이터가 전부 지워져요)
 #   포트 5433: 내 PC에 설치된 PostgreSQL(5432)과 같이 쓰려고. Spring은 application-local.properties에서 5433으로 바꿔요
 services:
   db:
-    image: postgis/postgis:17-3.5          # PostgreSQL 17 + PostGIS 3.5
+    build: ./docker/db                     # PostgreSQL 17 + PostGIS 3.5 + pgvector (11/15 리뷰 RAG)
+    image: tripbiseo-db:pgvector           # 만든 이미지 이름 (내 PC에만 있음)
     container_name: tripbiseo-db
     environment:
       POSTGRES_DB: tripbiseo
