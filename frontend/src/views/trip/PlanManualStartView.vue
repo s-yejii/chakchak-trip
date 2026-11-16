@@ -1,6 +1,6 @@
 <script setup>
 // 직접 고르기 시작 (②): 질문 없이 한 화면에서 어디(구 지도)·언제(날짜·시작 시각)만 고르고 바로 지도 화면으로
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import TopBar from '@/components/common/TopBar.vue'
 import GuMapPicker from '@/components/plan/GuMapPicker.vue'
@@ -10,14 +10,26 @@ import { showToast } from '@/utils/toast'
 import { daysBetween } from '@/utils/dates'
 
 const DEFAULT_START = '10:00'
+const MANUAL_PATH = '/plan/manual' // 지도 화면 (이 시작 화면 주소도 이걸로 시작해요)
 const router = useRouter()
 const store = useTripStore()
-const startTime = ref(DEFAULT_START)
 
-onMounted(() => {
+// 지도 화면에서 돌아왔나: 바로 앞(back)이나 바로 뒤(forward) 기록이 직접 고르기 화면이면 돌아온 것 (11/13 ② 찬기)
+//   위쪽 뒤로 가기(goBack)는 이 화면으로 바꿔 들어와서 back이 '/plan/manual/start', 폰·브라우저 뒤로 가기는 forward가 '/plan/manual'
+function isReturning() {
+  const state = window.history.state || {}
+  return isManualPath(state.back) || isManualPath(state.forward)
+}
+function isManualPath(path) {
+  return typeof path === 'string' && path.startsWith(MANUAL_PATH)
+}
+
+// 새로 들어온 경우(/new에서 [지도에서 직접 고르기])에만 비워요. 돌아왔으면 구·날짜·시작 시각·담은 장소를 그대로 둬요
+if (!isReturning()) {
   store.resetDraft()
   store.resetPlan()
-})
+}
+const startTime = ref(store.planStartTime || DEFAULT_START)
 
 const canNext = computed(() => store.planAreas.length > 0 && !!store.planStartDate)
 
@@ -38,9 +50,21 @@ function goNext() {
   if (!store.planAreas.length) return showToast('구를 골라 주세요')
   if (!store.planStartDate) return showToast('날짜를 골라 주세요')
   const endDate = store.planEndDate || store.planStartDate
-  store.setDraft({ title: titleOf(endDate), startDate: store.planStartDate, endDate, people: store.planPeople || 2, transports: ['subway', 'bus', 'walk'], stops: [] })
+  const stops = keepStopsIn(daysBetween(store.planStartDate, endDate) + 1)
+  store.setDraft({ title: titleOf(endDate), startDate: store.planStartDate, endDate, people: store.planPeople || 2, transports: ['subway', 'bus', 'walk'], stops })
   store.planStartTime = startTime.value
-  router.push('/plan/manual')
+  router.push(MANUAL_PATH)
+}
+
+// 이미 담은 칸은 이어 붙여요. 날짜를 줄여서 없어진 날의 칸만 빼고 알려 줌
+function keepStopsIn(dayCount) {
+  const kept = []
+  for (const stop of store.draft.stops) {
+    if ((stop.day || 1) <= dayCount) kept.push(stop)
+  }
+  const removed = store.draft.stops.length - kept.length
+  if (removed > 0) showToast(`날짜가 줄어서 ${removed}곳을 뺐어요`)
+  return kept
 }
 </script>
 

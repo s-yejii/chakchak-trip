@@ -127,7 +127,8 @@
     SELECT <include refid="stopColumns"/>
     FROM trip_stop
     WHERE trip_id = #{tripId}
-    ORDER BY day_no, start_time, stop_id
+    <!-- 새벽 4시 전 칸은 그날 밤 늦게 간 곳이라 그날 맨 뒤로 (11/12 ② 찬기, 자정 넘는 일정) -->
+    ORDER BY day_no, CASE WHEN start_time &lt; '04:00' THEN 1 ELSE 0 END, start_time, stop_id
   </select>
 
   <select id="selectStop" resultType="com.tripbiseo.trip.dto.Stop">
