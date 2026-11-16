@@ -977,17 +977,43 @@ public class PlanRuleMaker {
     private Place checkPick(AiDraftStop pick, List<String> slotKinds, Map<String, Place> candidates, Set<String> used,
                             PlanConditions conditions, LocalDate date, int start, int stay, double[] point, Integer maxWalkMeters) {
         Place place = pick.getId() == null ? null : candidates.get(pick.getId()); // 후보 밖 id는 믿지 않음
-        if (place == null || used.contains(place.getId()) || isTooFar(point, place, maxWalkMeters)) {
+        String reason = rejectReasonOf(place, pick, slotKinds, used, conditions, date, start, stay, point, maxWalkMeters);
+        if (reason != null) {
+            log.info("AI가 고른 곳 바꿈: {} · {}", pick.getName(), reason); // 11/16: "N곳 바꿨어요"가 왜 많은지 보려고
             return null;
+        }
+        return place;
+    }
+
+    /**
+     * 볼거리끼리는 칸 종류가 달라도 됨: 관광(tour) 칸에 박물관(culture), 전시 칸에 공원 (11/16).
+     * 예전엔 "칸 종류 다름"으로 AI가 고른 한성백제박물관·논현문화마루도서관을 갈아 끼워서 "N곳 바꿨어요"가 커졌어요
+     */
+    private boolean isSameSightKind(String kind, List<String> slotKinds) {
+        return SIGHT_FAMILY.contains(kind) && (slotKinds.contains(SIGHT_FAMILY.get(0)) || slotKinds.contains(SIGHT_FAMILY.get(1)));
+    }
+
+    /** AI가 고른 곳을 못 쓰는 이유 (쓸 수 있으면 null) */
+    private String rejectReasonOf(Place place, AiDraftStop pick, List<String> slotKinds, Set<String> used, PlanConditions conditions,
+                                  LocalDate date, int start, int stay, double[] point, Integer maxWalkMeters) {
+        if (place == null) {
+            return pick.getId() == null ? "번호 없음" : "후보 밖 번호 또는 다른 구";
+        }
+        if (used.contains(place.getId())) {
+            return "이미 넣은 곳(또는 50m 안 같은 종류)";
+        }
+        if (isTooFar(point, place, maxWalkMeters)) {
+            return "걷는 거리 상한 넘음";
         }
         boolean isUserWish = planCandidateFinder.isMustVisit(place, conditions.getMustVisit()) || planCandidateFinder.isMustVisit(place, conditions.getWishVisit());
         if (!isUserWish && isTooFar(point, place, AI_PICK_LIMIT_M)) {
             return null; // 사용자가 말한 곳이 아니면 앞 장소에서 2km 안에서
         }
         // 꼭 갈 곳·가능하면 갈 곳은 칸 종류와 달라도 됨 (사용자가 직접 말한 곳)
-        boolean isKindOk = slotKinds.contains(place.getKind()) || planCandidateFinder.isMustVisit(place, conditions.getMustVisit())
-                || planCandidateFinder.isMustVisit(place, conditions.getWishVisit());
-        return isKindOk && isOpenFor(place, date, start, stay) ? place : null;
+        if (!slotKinds.contains(place.getKind()) && !isUserWish && !isSameSightKind(place.getKind(), slotKinds)) {
+            return "칸 종류 다름(" + place.getKind() + " ≠ " + slotKinds + ")";
+        }
+        return isOpenFor(place, date, start, stay) ? null : "그 시각 영업 안 함";
     }
 
     /** 도착 시각에 열려 있고 머무는 동안 안 닫는지. 영업시간 정보가 없으면 통과 (모르는 걸 틀렸다고 하지 않음) */
