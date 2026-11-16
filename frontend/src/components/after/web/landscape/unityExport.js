@@ -10,6 +10,7 @@ import { seasonOf } from './season'
 import { isInRings, bboxOf } from './trees'
 import { BUILDING_LOOKS } from './buildingLooks'
 import { sunPosition, koreanDate } from '@/utils/sun'
+import { snapRidesToRoads } from './rideSnap' // 버스·택시 구간을 찻길에 맞춤
 
 const METERS_PER_DEGREE_LAT = 110540
 const METERS_PER_DEGREE_LNG = 111320
@@ -40,6 +41,7 @@ const BRIDGE_CHECK_M = 30 // 다리가 물 위를 지나는지 이 간격마다 
 const WATER_EDGE_DEPTH_M = 0.3 // 강가 칸(옆에 땅이 있는 물 칸)은 조금만 낮춤 → 강가가 계단이 아니라 완만한 비탈이 됨
 // 경로 둘레만 담는 지도(isCorridor): 하루에 여러 동네를 지나면 사각형 하나로는 건물이 너무 많아서
 const WALK_KEEP_M = 300     // 걸은 곳에서 이 안의 건물·길·나무만 담음
+const RIDE_KEEP_M = 60      // 버스·택시로 지나간 길에서 이 안의 건물·길·나무를 담음 (길 양쪽 한 줄쯤)
 const BOAT_KEEP_M = 900     // 배 탄 곳에서 이 안의 강변을 담음 (한강 폭이 1km쯤이라 건너편 강변까지)
 const BOAT_VIEW_MIN_M = 9   // 배에서 보는 강변 건물은 이 높이(3층쯤) 이상만 (낮은 건물은 앞 건물에 가려서)
 const BOAT_ROAD_MIN_M = 8   // 배에서 보는 강변 길은 이 폭 이상만 (강변북로·올림픽대로 같은 큰길)
@@ -93,6 +95,8 @@ export async function buildMapData({ center, halfM, tileUrl, dateText, forest, g
   const toMeters = (position) => [Math.round((position[0] - center[0]) * lngScale * 100) / 100, Math.round((position[1] - center[1]) * METERS_PER_DEGREE_LAT * 100) / 100]
   const route = makeRoute(track, isInBox, toMeters, (x, z) => isWaterAt(water, halfM, gridStepM, x, z))
   markTransitRuns(route, await loadTransitStops(tileUrl, box, toMeters)) // 탈것 구간을 지하철·버스·택시로 나눔
+  const allRoads = await loadRoads(tileUrl, box, isInBox, toMeters) // 지도 안의 길 전부 (아래에서 경로 둘레만 남김)
+  snapRidesToRoads(route, allRoads) // 버스·택시 구간을 찻길 따라가게 (GPS가 20초 간격이라 직선으로 이으면 건물·숲을 뚫고 감)
   const keep = isCorridor ? makeKeepChecker(route, stops, toMeters) : null
   let found = await loadNationalBuildings(box) // 서울: 국가 건물 자료 (빈 곳 없음, 층수 정확)
   if (found.length === 0) found = await loadMapBuildings(tileUrl, box, isInBox) // 그 밖 지역: 지도(OpenStreetMap) 건물로 대신
@@ -114,7 +118,7 @@ export async function buildMapData({ center, halfM, tileUrl, dateText, forest, g
     if (look) item.look = look
     buildings.push(item)
   }
-  let roads = await loadRoads(tileUrl, box, isInBox, toMeters)
+  let roads = allRoads
   if (keep) roads = keep.cutRoads(roads, (x, z) => isWaterAt(water, halfM, gridStepM, x, z))
   const area = { center: center, box: box, lngScale: lngScale, latScale: METERS_PER_DEGREE_LAT }
   let trees = await plantTrees(area, roads, dateText, forest, guNames)
@@ -416,8 +420,9 @@ function makeKeepChecker(route, stops, toMeters) {
     }
   }
   for (let i = 0; i + 1 < route.modes.length; i++) {
-    if (isRideMode(route.modes[i])) continue // 지하철·버스·택시로 지나간 곳은 안 담음
-    const radius = route.modes[i] === MODE.boat ? BOAT_KEEP_M : WALK_KEEP_M
+    if (route.modes[i] === MODE.subway) continue // 지하철로 지나간 곳은 안 담음 (땅속이라 안 보임)
+    // 버스·택시로 지나간 길가는 좁게 담음 (전에는 안 담아서, 차가 길도 건물도 없는 빈 땅을 달렸음)
+    const radius = route.modes[i] === MODE.boat ? BOAT_KEEP_M : isRideMode(route.modes[i]) ? RIDE_KEEP_M : WALK_KEEP_M
     const value = route.modes[i] === MODE.boat ? 2 : 1
     const x0 = route.points[i * 2], z0 = route.points[i * 2 + 1]
     const x1 = route.points[i * 2 + 2], z1 = route.points[i * 2 + 3]
