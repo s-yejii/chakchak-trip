@@ -1,6 +1,7 @@
 // (편집기 도구) 장면을 그림 파일로 찍음. 화면을 열지 않고도 결과를 확인하려고 씀. 게임에는 들어가지 않는 코드
 // 명령줄: Unity -batchmode -executeMethod Capture.Run -shot "파일.png" -eye "x,땅에서 높이,z" -look "x,땅에서 높이,z"
 //   여러 장: -shots "목록.txt" (한 줄에 "파일.png;eye;look") → 지도를 한 번만 만들고 줄마다 찍음
+//   재생 카메라 그대로: 한 줄에 "파일.png;top;210" 또는 "파일.png;street;210" (경로 시작부터 210분째의 위에서 보기 · 내비 화면)
 using System;
 using System.IO;
 using UnityEditor.SceneManagement;
@@ -50,8 +51,19 @@ public static class Capture
     // 한 장 찍기: eye에서 look을 보고 file로 저장
     private static void Shoot(RetroMap map, Camera camera, string file, string eye, string look)
     {
-        camera.transform.position = OnGround(map, ToVector(eye));
-        camera.transform.LookAt(OnGround(map, ToVector(look)));
+        if (eye == "top" || eye == "street") // 실제 재생 화면과 같은 카메라: look 자리에 "경로 시작부터 몇 분째"가 옴
+        {
+            float minute = float.Parse(look);
+            RoutePlayer player = map.GetComponent<RoutePlayer>();
+            player.Seek(minute);
+            map.GetComponent<SkyClock>().SetMinute(minute);
+            player.SnapCamera(eye == "street");
+        }
+        else
+        {
+            camera.transform.position = OnGround(map, ToVector(eye));
+            camera.transform.LookAt(OnGround(map, ToVector(look)));
+        }
         WaterReflection reflection = map.GetComponent<WaterReflection>();
         if (reflection != null) reflection.RenderNow(); // 카메라 자리에서 강물 반사를 찍어 둠
 

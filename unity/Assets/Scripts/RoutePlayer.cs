@@ -23,8 +23,15 @@ public class RoutePlayer : MonoBehaviour
     private const float NAV_TURN_DEGREES = 35f;  // 내비: 1초에 돌 수 있는 최대 각도
     private const float ZOOM_STEP = 1.2f;        // 가까이·멀리 한 번에 거리를 이만큼 곱하거나 나눔
     private const float ZOOM_MIN = 0.3f;         // 가장 가까이 (기본 거리의 30%)
-    private const float ZOOM_MAX = 3f;           // 가장 멀리 (기본 거리의 3배)
+    private const float ZOOM_MAX = 6f;           // 가장 멀리 (기본 거리의 6배. 3배였을 때는 잠실 롯데타워 옆에서 더 물러날 수 없었음)
     private const float ROOF_CLEAR_M = 25f;      // 위에서 보기: 카메라를 둘레 가장 높은 지붕보다 이만큼 위에 (지붕 장식 높이 포함)
+    private const int SIGHT_CHECKS = 10;         // 위에서 보기: 카메라와 사람 사이를 이만큼 나눠서 건물에 가리는지 확인
+    private const int SIGHT_TRIES = 4;           // 가리면 카메라를 사람 머리 위쪽으로 당겨 보는 횟수
+    private const float SIGHT_BACK_RATE = 0.6f;  // 한 번 당길 때 뒤로 떨어진 거리를 이 배수로 줄이고
+    private const float SIGHT_UP_RATE = 1.25f;   //   높이는 이 배수로 올림 (더 가파르게 내려다봄)
+    private const float SIGHT_SKIP_M = 25f;      // 사람 바로 둘레 이 거리는 안 따짐 (사람이 들어가 있는 건물 자체는 어쩔 수 없어서)
+    private const float ROOF_CLEAR_MAX_M = 150f; // 카메라를 지붕 위로 올릴 때 지붕 높이는 이만큼까지만 따짐
+                                                 //   (롯데월드타워 500m 위로 올라가면 사람이 점처럼 작아짐. 타워에 가리는지는 IsSightBlocked가 따로 봄)
     // 따라갈 때 카메라 자리 { 뒤로 물러난 거리, 높이 }: 걷기 · 택시 · 배 · 지하철(땅속이라 높이 올라가 건너뜀) · 버스
     //   "위에서"는 동네가 한눈에 보이게 높이·멀리 (내비 = 사람 눈높이와 확실히 다르게)
     private static readonly Vector2[] FOLLOW_BACK_UP = { new Vector2(90, 75), new Vector2(110, 85), new Vector2(140, 80), new Vector2(220, 170), new Vector2(110, 85) };
@@ -296,12 +303,61 @@ public class RoutePlayer : MonoBehaviour
         Transform target = mode == RouteData.BOAT ? boat : walker;
         Vector3 forward = mode == RouteData.BOAT ? boat.right : walker.forward; // 배는 뱃머리가 +x(right) 쪽
         forward = SmoothForward(forward, TOP_TURN_DEGREES);
-        Vector2 backUp = FOLLOW_BACK_UP[mode] * zoom;
-        Vector3 wanted = target.position - forward * backUp.x + Vector3.up * backUp.y;
-        float roof = ground.HeightAt(wanted.x, wanted.z) + buildings.TallestNear(wanted.x, wanted.z);
-        wanted.y = Mathf.Max(wanted.y, roof + ROOF_CLEAR_M); // 카메라가 언덕·높은 건물 속으로 들어가지 않게
+        Vector3 wanted = FollowPosition(target.position, forward);
         eye.position = Vector3.Lerp(eye.position, wanted, Time.deltaTime * FOLLOW_SMOOTH);
         eye.rotation = Quaternion.Slerp(eye.rotation, Quaternion.LookRotation(target.position + Vector3.up * 2 - eye.position), Time.deltaTime * FOLLOW_SMOOTH * 2);
+    }
+
+    // 위에서 보기 카메라가 있을 자리: 사람(at)의 뒤쪽 위
+    //   그 사이에 높은 건물이 있어 사람이 가리면, 안 가릴 때까지 카메라를 사람 머리 위쪽으로 당김 (뒤로는 덜, 위로는 더)
+    //   예) 걷기 기본은 뒤 90m · 위 75m → 한 번 당기면 뒤 54m · 위 94m → 두 번이면 뒤 32m · 위 117m
+    //   왜: 명동처럼 높은 건물 사이에서는 화면 절반이 건물 벽으로 가려 사람이 안 보였음
+    private Vector3 FollowPosition(Vector3 at, Vector3 forward)
+    {
+        Vector2 backUp = FOLLOW_BACK_UP[mode] * zoom;
+        Vector3 wanted = at - forward * backUp.x + Vector3.up * backUp.y;
+        for (int tryCount = 0; tryCount < SIGHT_TRIES && IsSightBlocked(wanted, at); tryCount++)
+        {
+            backUp = new Vector2(backUp.x * SIGHT_BACK_RATE, backUp.y * SIGHT_UP_RATE);
+            wanted = at - forward * backUp.x + Vector3.up * backUp.y;
+        }
+        float tallest = Mathf.Min(buildings.TallestNear(wanted.x, wanted.z), ROOF_CLEAR_MAX_M);
+        float roof = ground.HeightAt(wanted.x, wanted.z) + tallest;
+        wanted.y = Mathf.Max(wanted.y, roof + ROOF_CLEAR_M); // 카메라가 언덕·높은 건물 속으로 들어가지 않게
+        return wanted;
+    }
+
+    // 카메라(eye)에서 사람(at)까지 그은 선이 건물 지붕보다 낮게 지나는 곳이 있는지
+    //   선을 SIGHT_CHECKS 조각으로 나눠 조각마다 "그 자리 선의 높이 < 그 칸에서 가장 높은 지붕"인지 봄
+    private bool IsSightBlocked(Vector3 eye, Vector3 at)
+    {
+        for (int k = 1; k < SIGHT_CHECKS; k++)
+        {
+            Vector3 point = Vector3.Lerp(at, eye, (float)k / SIGHT_CHECKS);
+            if (Vector2.Distance(new Vector2(point.x, point.z), new Vector2(at.x, at.z)) < SIGHT_SKIP_M) continue;
+            float roof = ground.HeightAt(point.x, point.z) + buildings.TallestAt(point.x, point.z);
+            if (point.y < roof) return true;
+        }
+        return false;
+    }
+
+    // (캡처 도구용) 지금 시각의 카메라 자리로 바로 옮김. 평소에는 부드럽게 따라붙느라 여러 장면이 걸려서 한 장만 찍을 수 없음
+    //   isStreet: true = 내비(사람 눈높이), false = 위에서 보기
+    public void SnapCamera(bool isStreet)
+    {
+        Transform eye = Camera.main.transform;
+        Transform target = mode == RouteData.BOAT ? boat : walker;
+        Vector3 heading = mode == RouteData.BOAT ? boat.right : walker.forward;
+        cameraYaw = Mathf.Atan2(heading.x, heading.z) * Mathf.Rad2Deg;
+        Vector3 forward = Quaternion.Euler(0, cameraYaw, 0) * Vector3.forward;
+        if (isStreet)
+        {
+            eye.position = NavigationPosition(forward);
+            eye.rotation = Quaternion.LookRotation(forward);
+            return;
+        }
+        eye.position = FollowPosition(target.position, forward);
+        eye.LookAt(target.position + Vector3.up * 2);
     }
 
     // 내비게이션: 걷는 중이면 사람 눈높이, 배 위면 위층 갑판 눈높이에서 가는 쪽을 봄
@@ -310,11 +366,17 @@ public class RoutePlayer : MonoBehaviour
         Transform eye = Camera.main.transform;
         bool isOnBoat = mode == RouteData.BOAT;
         Vector3 forward = SmoothForward(isOnBoat ? boat.right : walker.forward, NAV_TURN_DEGREES);
-        Vector3 wanted = isOnBoat
-            ? boat.position + Vector3.up * BoatMaker.DECK_EYE_M + forward * (BoatMaker.LENGTH_M * 0.35f) // 앞쪽 창가 (뒤에 앉으면 배 앞부분에 가려서)
-            : new Vector3(walker.position.x, walker.position.y - WALKER_HEIGHT_M + (mode == RouteData.BUS ? BUS_EYE_M : EYE_M), walker.position.z); // 버스는 조금 높게
+        Vector3 wanted = NavigationPosition(forward);
         eye.position = Vector3.Lerp(eye.position, wanted, Time.deltaTime * FOLLOW_SMOOTH * 2);
         eye.rotation = Quaternion.Slerp(eye.rotation, Quaternion.LookRotation(forward), Time.deltaTime * TURN_SMOOTH);
+    }
+
+    // 내비 카메라가 있을 자리: 걷는 중이면 사람 눈높이, 배 위면 앞쪽 창가
+    private Vector3 NavigationPosition(Vector3 forward)
+    {
+        if (mode == RouteData.BOAT) return boat.position + Vector3.up * BoatMaker.DECK_EYE_M + forward * (BoatMaker.LENGTH_M * 0.35f); // 앞쪽 창가 (뒤에 앉으면 배 앞부분에 가려서)
+        float eyeHeight = mode == RouteData.BUS ? BUS_EYE_M : EYE_M; // 버스는 조금 높게
+        return new Vector3(walker.position.x, walker.position.y - WALKER_HEIGHT_M + eyeHeight, walker.position.z);
     }
 
     // 카메라 방향을 가는 쪽(heading)으로 1초에 maxTurn도까지만 돌림 → 머문 곳에서 GPS가 흔들려도 화면이 빙빙 돌지 않음
