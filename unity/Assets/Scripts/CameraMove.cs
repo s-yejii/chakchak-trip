@@ -1,7 +1,7 @@
 // 카메라를 키보드·마우스로 움직임 (Main Camera에 붙어 있음)
 //   W A S D : 앞·왼쪽·뒤·오른쪽      Q E : 아래·위      Shift : 빠르게
 //   마우스 오른쪽 버튼을 누른 채 움직이기 : 둘러보기      마우스 휠 : 앞뒤로 빨리 가기
-// 땅속으로 들어가지 않게, 항상 땅에서 2m 위보다 높게 둠
+// 땅속·물속으로 들어가지 않게, 항상 땅과 강물에서 2m 위보다 높게 둠
 using UnityEngine;
 
 public class CameraMove : MonoBehaviour
@@ -10,7 +10,7 @@ public class CameraMove : MonoBehaviour
     private const float FAST_TIMES = 6f;    // Shift를 누르면 몇 배 빠르게
     private const float WHEEL_STEP_M = 80f; // 휠 한 칸에 가는 거리
     private const float LOOK_SPEED = 3f;    // 마우스로 둘러보는 빠르기
-    private const float MIN_HEIGHT_M = 2f;  // 땅에서 최소 이만큼 위
+    private const float MIN_HEIGHT_M = 2f;  // 땅(강 위면 물 면)에서 최소 이만큼 위
 
     private RetroMap map;
     private float turn;  // 좌우로 돌린 각도
@@ -44,7 +44,9 @@ public class CameraMove : MonoBehaviour
 
         if (map != null && map.Ground != null)
         {
-            position.y = Mathf.Max(position.y, map.Ground.HeightAt(position.x, position.z) + MIN_HEIGHT_M);
+            // 강바닥은 물 면보다 2.5m 낮아서, 땅만 보면 강 위에서 물속으로 들어갔음 → 땅과 물 면 중 높은 쪽 기준
+            float floor = Mathf.Max(map.Ground.HeightAt(position.x, position.z), map.WaterLevel);
+            position.y = Mathf.Max(position.y, floor + MIN_HEIGHT_M);
         }
         transform.position = position;
     }
