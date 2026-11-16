@@ -173,6 +173,9 @@ public class PlanCheckServiceImpl implements PlanCheckService {
             return "이날 휴무예요 (" + open.getClosedReason().replace("오늘 휴무 (", "").replace(")", "") + ")";
         }
         checked.setHoursUnknown(open.getOpen() == null && needsHours(stop, place)); // 영업시간을 모름 (휴무는 위에서 이미 걸러짐)
+        if (Boolean.TRUE.equals(stop.getFixed())) {
+            return issue; // 예약(고정) 칸은 본인이 예약 시각을 알아요 → 휴무만 보고 영업시간 경고는 안 해요 (11/16)
+        }
         if (Boolean.FALSE.equals(open.getOpen())) {
             checks.setHours(false);
             return Geo.toHhmm(arrive) + "에는 영업 시간이 아니에요";
