@@ -109,6 +109,7 @@ public class PlanServiceImpl implements PlanService {
     private final PlanCandidateFinder planCandidateFinder; // 후보 장소 찾기 (RAG의 찾기)
     private final RouteOrderer routeOrderer;               // 하루 동선 정리 (직접 고르기 [동선 정리]와 같은 함수)
     private final PlanVerifier planVerifier;               // 예약·꼭 갈 곳 검증 줄 (11/13)
+    private final PlanHoursFilter planHoursFilter;         // 영업시간 모르는 곳은 후보에서 뺌 (11/16)
     private final PlanRuleMaker planRuleMaker;             // AI가 안 될 때 규칙으로 일정 + 숙소 칸 (11/03)
     private final ReviewNeedChecker reviewNeedChecker;     // 칩에 없는 요청을 후보 리뷰로 확인 (11/04)
     private final PlanLimitChecker planLimitChecker;       // 끝 장소·도착 마감, 걷는 시간 상한 (11/04)
@@ -218,6 +219,7 @@ public class PlanServiceImpl implements PlanService {
 
         Map<String, Place> found = findCandidates(conditions, region, isNearMe, baseLat, baseLng, response.getNotes());
         int avoided = removeAvoided(conditions, found);
+        planHoursFilter.removeUnknownHours(conditions, found, response.getStartDate(), days); // 영업시간 모르는 곳은 뺌 (11/16)
         progress.accept(makeProgress("candidates", "done", 20, "장소 후보 " + found.size() + "곳 찾기",
                 avoided > 0 ? "피하고 싶은 곳·종류 " + avoided + "곳 뺌" : null));
         Map<String, PlaceTagCount> tagCounts = planCandidateFinder.countTags(found);
