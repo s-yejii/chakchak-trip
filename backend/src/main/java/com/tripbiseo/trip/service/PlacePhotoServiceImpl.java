@@ -261,34 +261,24 @@ public class PlacePhotoServiceImpl implements PlacePhotoService {
         return photo;
     }
 
+    /** 홈·장소 카드 사진도 일정 사진과 같은 검사(DB → TourAPI → 그곳만 다룬 블로그 글)로 찾고, 첫 사진만 (11/16 ①: 모음 글의 엉뚱한 사진 막기) */
     private PlacePhoto searchPhoto(String placeId) {
         Place place = placeService.getPlace(placeId);
-        if (place.getImageUrl() != null && !place.getImageUrl().isBlank()) {
-            return makePhoto(placeId, place.getImageUrl().replace("http://", "https://"), null, null);
-        }
-        return searchBlog(place);
-    }
-
-    /** "{가게 이름} {구}"로 블로그 검색 → 제목에 가게 이름이 있고 사진이 있는 첫 글 */
-    private PlacePhoto searchBlog(Place place) {
-        if (kakaoKey.isBlank()) {
+        TripPhotoRequest request = new TripPhotoRequest();
+        request.setPlaceId(placeId);
+        request.setName(place.getName());
+        request.setAddress(place.getAddress());
+        request.setCategory(place.getCategory());
+        request.setLat(place.getLat());
+        request.setLng(place.getLng());
+        List<PlacePhoto> images = new ArrayList<>();
+        searchImages(request, images);
+        if (images.isEmpty()) {
             return null;
         }
-        String[] words = place.getAddress() == null ? new String[0] : place.getAddress().split(" ");
-        String query = place.getName() + (words.length > 1 ? " " + words[1] : "");
-        Map<String, Object> params = new LinkedHashMap<>();
-        params.put("query", query);
-        params.put("size", RESULT_SIZE);
-        JsonNode json = externalApi.getJson(externalApi.buildUrl(BLOG_URL, params), Map.of("Authorization", "KakaoAK " + kakaoKey), LABEL);
-        String name = compact(place.getName());
-        for (JsonNode doc : json.path("documents")) {
-            String title = compact(doc.path("title").asString("").replaceAll(BOLD_TAG, ""));
-            String thumbnail = doc.path("thumbnail").asString("");
-            if (title.contains(name) && !thumbnail.isBlank()) {
-                return makePhoto(place.getId(), thumbnail, doc.path("blogname").asString(""), doc.path("url").asString(""));
-            }
-        }
-        return null;
+        PlacePhoto photo = images.get(0);
+        photo.setPlaceId(placeId);
+        return photo;
     }
 
     private PlacePhoto makePhoto(String placeId, String imageUrl, String siteName, String linkUrl) {
