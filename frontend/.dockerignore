@@ -1,0 +1,5 @@
+# 이미지에 넣지 않을 것 (11/16 ④). node_modules는 이미지 안에서 npm ci로 새로 받아요
+node_modules/
+dist/
+.vscode/
+.env*

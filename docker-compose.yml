@@ -1,14 +1,21 @@
-# 착착트립 DB를 도커로 띄우기 (11/12 ④ 신예지)
+# 착착트립 도커 (11/12 ④ 신예지 DB, 11/16 서버·화면 추가)
+# ── 평소 개발 (DB만 도커, 서버·화면은 STS·vite로) ──
 #   처음:            docker compose up -d db   → db/*.sql을 docker/db-init/00_init.sql 순서대로 자동 실행 (처음 한 번, 몇 분)
 #   이미지 바뀐 뒤:  docker compose up -d --build db   (11/15 pgvector 추가. 데이터는 그대로 남아요)
 #   진행 보기:       docker compose logs -f db
 #   다시 처음부터:   docker compose down -v    (도커 DB의 데이터가 전부 지워져요)
 #   포트 5433: 내 PC에 설치된 PostgreSQL(5432)과 같이 쓰려고. Spring은 application-local.properties에서 5433으로 바꿔요
+# ── 전부 도커로 (시연 PC·AWS 서버) ──
+#   준비: .env.example을 복사해 .env로 저장하고 키를 채워요
+#   켜기:  docker compose --profile app up -d --build   → 브라우저에서 http://서버주소 (80번)
+#   끄기:  docker compose --profile app down             (데이터·사진은 볼륨에 남아요)
+#   구조:  브라우저 → web(nginx :80) ─/api→ backend(Spring :8080) → db(:5432). 밖으로 열리는 건 web 하나
 services:
   db:
     build: ./docker/db                     # PostgreSQL 17 + PostGIS 3.5 + pgvector (11/15 리뷰 RAG)
     image: tripbiseo-db:pgvector           # 만든 이미지 이름 (내 PC에만 있음)
     container_name: tripbiseo-db
+    restart: unless-stopped
     environment:
       POSTGRES_DB: tripbiseo
       POSTGRES_USER: postgres
@@ -16,16 +23,45 @@ services:
       TZ: Asia/Seoul                       # 90·95번이 '오늘' 날짜로 데이터를 만들어서 한국 시간으로
       PGTZ: Asia/Seoul
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"              # 이 PC 안에서만 접속 (11/16: AWS에서 DB가 인터넷에 열리지 않게)
     volumes:
       - db-data:/var/lib/postgresql/data   # DB 데이터 (컨테이너를 지워도 남음)
       - ./db:/db:ro                        # 우리 SQL 파일 (읽기만)
       - ./docker/db-init:/docker-entrypoint-initdb.d:ro   # 처음 켤 때 실행할 순서
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d tripbiseo"]
+      # -h 127.0.0.1: 처음 SQL을 넣는 동안엔 통과하지 않게 (다 넣고 진짜로 켜졌을 때만 OK → 서버가 그때 켜짐)
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d tripbiseo"]
       interval: 10s
       timeout: 5s
       retries: 10
+      start_period: 15m                    # 처음 SQL 넣기가 몇 분 걸려서 그동안의 실패는 세지 않음
+
+  backend:
+    profiles: ["app"]                      # --profile app 일 때만 켜짐 (평소 개발엔 안 켜짐)
+    build: ./backend
+    container_name: tripbiseo-backend
+    restart: unless-stopped
+    env_file: .env                         # API 키들 (이미지에는 안 들어감)
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/tripbiseo   # 컨테이너끼리는 이름(db)으로 찾아가요
+      PHOTO_DIR: /app/uploads/photos
+      TZ: Asia/Seoul
+    volumes:
+      - uploads:/app/uploads               # 올린 사진·영상 (컨테이너를 새로 만들어도 남음)
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    profiles: ["app"]
+    build: ./frontend
+    container_name: tripbiseo-web
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-80}:80"
+    depends_on:
+      - backend
 
 volumes:
   db-data:
+  uploads:
