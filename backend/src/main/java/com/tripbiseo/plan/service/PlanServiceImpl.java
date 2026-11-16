@@ -68,8 +68,10 @@ public class PlanServiceImpl implements PlanService {
     private static final int MAX_MESSAGE_LENGTH = 300;
     private static final int MAX_TITLE_LENGTH = 60;
     private static final int MAX_PROMPT_CANDIDATES = 90;
+    private static final java.util.regex.Pattern COUPLE_WORDS = java.util.regex.Pattern.compile("데이트|연인|커플");
+    private static final java.util.regex.Pattern SOLO_WORDS = java.util.regex.Pattern.compile("혼밥|혼자|1인");
     private static final int MAX_REASON_LENGTH = 40;      // Gemini 이유 한 줄
-    private static final java.util.regex.Pattern GUESS_REASON = java.util.regex.Pattern.compile("걸어서|도보|가까|가깝|인접|근처|바로 옆|인근|위치|동선|니다$|평점|리뷰 ?[\\d,]+개|에 있어|에 있는|편리"); // 확인 안 된 거리 말·숫자·뻔한 말 (11/14)
+    private static final java.util.regex.Pattern GUESS_REASON = java.util.regex.Pattern.compile("걸어서|도보|가까|가깝|인접|근처|바로 옆|인근|위치|동선|니다$|평점|리뷰 ?[\\d,]+개|에 있어|에 있는|편리|즐길 수 있|다양한|유명한|대표적|의미가 있|의미 있는|꼭 방문|가득한"); // 확인 안 된 거리 말·숫자·뻔한 말 (11/14)
     private static final int MAX_MEMO_LENGTH = 200;       // trip_stop.memo 저장 규칙
     private static final java.util.regex.Pattern WEAK_EVIDENCE = java.util.regex.Pattern.compile("리뷰 \\d+개 중 (\\d+)개");
     private static final int MIN_EVIDENCE_COUNT = 3;      // 리뷰에서 이만큼은 나와야 근거로 붙임 (11/12)
@@ -1216,7 +1218,9 @@ public class PlanServiceImpl implements PlanService {
             }
             if (place == null) {
                 String name = pick.getName() == null ? "" : pick.getName();
-                response.getNotes().add(makeNote(name + "의 위치를 찾지 못해 뺐어요", placeService.getNaverUrl(name, null)));
+                if (!hasNoteAbout(response.getNotes(), name)) { // 11/16: 후보 찾을 때 이미 "위치를 찾지 못했어요"라고 했으면 또 안 씀
+                    response.getNotes().add(makeNote(name + "의 위치를 찾지 못해 뺐어요", placeService.getNaverUrl(name, null)));
+                }
                 continue;
             }
             Stop stop = toDraftStop(pick, place, days);
@@ -1258,10 +1262,11 @@ public class PlanServiceImpl implements PlanService {
 
     /** 누구랑에 안 맞는 이유인지: 연인이 아니면 "데이트", 혼자가 아니면 "혼밥" 이유는 안 붙임 */
     private boolean isFitReason(String text, String companion) {
-        if (text.contains("데이트") && !"연인".equals(companion)) {
+        // 11/16: '데이트'·'혼밥'만 거르던 것 → '연인·커플'·'혼자·1인'도 (2명인데 "연인과 함께…", "혼자 와서 먹기 편하다"가 붙었어요)
+        if (COUPLE_WORDS.matcher(text).find() && !"연인".equals(companion)) {
             return false;
         }
-        return !text.contains("혼밥") || "혼자".equals(companion);
+        return !SOLO_WORDS.matcher(text).find() || "혼자".equals(companion);
     }
 
     /**
@@ -1520,6 +1525,16 @@ public class PlanServiceImpl implements PlanService {
     private boolean hasNote(PlanGenerateResponse response, String text) {
         for (PlanNote note : response.getNotes()) {
             if (text.equals(note.getText())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** 이미 이 이름으로 시작하는 안내가 있는지 (같은 곳 안내를 두 번 안 쓰게) */
+    private boolean hasNoteAbout(List<PlanNote> notes, String name) {
+        for (PlanNote note : notes) {
+            if (!name.isEmpty() && note.getText() != null && note.getText().startsWith(name + "의 위치를")) {
                 return true;
             }
         }
