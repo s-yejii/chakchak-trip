@@ -362,8 +362,11 @@ function isScenarioIncident(current) {
 }
 
 async function startIncident(current, next, status) {
-  if (!current || !next.fixed || next.day !== current.day || isIncidentDone(next.id) || !isScenarioIncident(current)) return false
-  markIncidentDone(next.id)
+  // 11/16 리허설: 돌발은 하루에 한 번 (늦잠 뒤 스시이세이로 바꿔 넣어도 다시 늦게 만들지 않게). 예전엔 다음 칸 id마다 한 번이라 새 칸에서 또 늦었어요
+  if (!current) return false
+  const doneKey = 'overstay-' + current.day
+  if (!next.fixed || next.day !== current.day || isIncidentDone(doneKey) || !isScenarioIncident(current)) return false
+  markIncidentDone(doneKey)
   if (!status || !status.fixed || status.fixed.id !== next.id || status.fixed.slackMin <= 0) return false // 이미 늦었으면 카드가 이미 떠 있음
   await makeLate(status, current, scenario.value.overstayLateMin)
   return true
