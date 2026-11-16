@@ -182,7 +182,9 @@ const countdown = computed(() => {
   if (!next) return { cap: '오늘 일정', big: '모두 다녀왔어요' }
   const now = appNow() // 개발자 모드면 시연 시계 (11/06)
   const left = toMinutes(next.time) - (now.getHours() * 60 + now.getMinutes())
-  return { cap: next.name + ' (' + next.time + ')까지', big: left > 0 ? toDuration(left) : '지금 출발' }
+  if (left > 0) return { cap: next.name + ' (' + next.time + ')까지', big: toDuration(left) }
+  // 시각이 이미 지났으면 "지금 출발" 대신 얼마나 지났는지 (11/16)
+  return { cap: next.name + ' (' + next.time + ')', big: left === 0 ? '지금이에요' : toDuration(-left) + ' 지났어요' }
 })
 
 // 칸 글자: "다음 · 로라멘" / 큰 글자 "19:44 도착" / "20:30 출발 · 일본식라면"
