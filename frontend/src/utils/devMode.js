@@ -233,3 +233,32 @@ export async function prepareDemo() {
   await readAllNotifications().catch(() => {})
   return trips.filter((trip) => trip.status === 'ongoing' && !isPracticeTrip(trip)).length // 연습이 아닌 진행 중 여행 수 (있으면 안내)
 }
+
+// 다른 창·탭으로 가면 시연 시계 자동 멈춤 (11/16 주형): 화면을 안 보는 동안 시연 시각이 흘러 예약에 늦어지는 일 막기
+//   돌아오면 멈추기 전 배속으로 다시 흘러요 (서버가 멈춘 시각을 그대로 이어서 세서 시각이 건너뛰지 않음)
+//   발표자가 직접 멈춰 둔 상태(배속 0)면 건드리지 않고, 돌아와도 멈춘 그대로예요. 시연 계정(개발자 모드)만, 다른 계정은 아무 일 안 함
+let isPausedByHide = false // 이 화면이 숨으면서 멈췄는지 (발표자가 멈춘 것과 구분)
+let speedBeforeHide = 1
+
+async function pauseWhileHidden() {
+  if (!devMode.isOn) return
+  if (document.hidden) {
+    if (devMode.speed === 0 || isPausedByHide) return // 이미 멈춰 있음
+    speedBeforeHide = devMode.speed
+    isPausedByHide = true
+    try {
+      syncClock(await setDevSpeed(0))
+    } catch {
+      isPausedByHide = false // 못 멈췄으면 돌아와도 손대지 않음
+    }
+  } else if (isPausedByHide) {
+    isPausedByHide = false
+    try {
+      syncClock(await setDevSpeed(speedBeforeHide))
+    } catch {
+      // 서버에 못 닿으면 멈춘 그대로 (발표자가 설정에서 배속을 다시 고르면 됨)
+    }
+  }
+}
+
+if (typeof document !== 'undefined') document.addEventListener('visibilitychange', pauseWhileHidden)
