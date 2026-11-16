@@ -9,4 +9,6 @@ public class AiCapture {
     private String date;    // YYYY-MM-DD
     private String time;    // HH:mm
     private String address;
+    private Boolean hasYear;    // 화면에 연도가 보였는지 (없으면 서버가 연도를 정함, 11/16)
+    private String koreanName;  // 가게 이름이 영어면 한국에서 쓰는 한글 이름 (DB 찾기용, 11/16)
 }
