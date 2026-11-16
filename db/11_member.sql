@@ -19,3 +19,11 @@ CREATE TABLE IF NOT EXISTS notification (
   UNIQUE (member_id, notice_key)
 );
 CREATE INDEX IF NOT EXISTS idx_notification_member ON notification (member_id, created_at DESC);
+
+-- 11/16 상재: 일정 공유 링크 (카카오톡으로 보낸 /s/{code}를 로그인 없이 열어 일정만 봄). 한 여행에 코드 하나
+CREATE TABLE IF NOT EXISTS trip_share (
+  code       TEXT      PRIMARY KEY,                                              -- 공유 코드 (URL용 22글자)
+  trip_id    BIGINT    NOT NULL REFERENCES trip(trip_id) ON DELETE CASCADE,     -- 공유한 여행
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_trip_share_trip ON trip_share (trip_id);

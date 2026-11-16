@@ -57,6 +57,7 @@
 | ① | `member_style` | 여행 스타일 | ③ 읽기 | 만들 예정 |
 | ① | `notification` | 알림함 | ④⑤는 `NotificationService.send`로 | 있음 (11/03) |
 | ① | `friend` | 친구 | | 만들 예정 (여유) |
+| ① | `trip_share` | 일정 공유 링크 (로그인 없이 보는 `/s/{code}`) | `trip` 읽기(JOIN) | 있음 (11/16) |
 | ② | `trip_chat` | 대화 기록 | ③④는 ② 메서드로 저장 | 있음 |
 | ② | `pack_item` | 챙길 것 | | 만들 예정 (여유) |
 | ③ | `theme`, `theme_stop` | 테마 코스 | ② 읽기 | 만들 예정 |
@@ -275,7 +276,19 @@
 ```
 
 ### ① 회원·알림 (이상재)
-(member_style, notification, friend)
+(member_style, notification, friend, trip_share)
+
+### trip_share · 일정 공유 링크 (①, `11_member.sql`, 11/16)
+
+카카오톡으로 보낸 링크(`/s/{code}`)를 로그인 없이 열어 일정만 보게 해요. 한 여행에 코드 하나 (이미 있으면 그 코드를 다시 써요).
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| code | TEXT PK | 공유 코드 (SecureRandom 16바이트 → URL용 22글자, 맞히기 어려움) |
+| trip_id | BIGINT NOT NULL → trip (ON DELETE CASCADE) | 공유한 여행. 여행을 영구 삭제하면 코드도 지워짐 |
+| created_at | TIMESTAMP NOT NULL DEFAULT NOW() | |
+
+인덱스 `idx_trip_share_trip (trip_id)`
 
 ### ② 여행·일정 (이찬기)
 (pack_item — 여유)
