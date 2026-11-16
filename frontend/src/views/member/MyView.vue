@@ -1,29 +1,22 @@
 <script setup>
-// S19 마이 (①): 내 정보 · 여행 스타일 · 친구 · 결제 카드 · 알림 설정 · 권한
-import { computed, onMounted, ref, watch } from 'vue'
+// S19 마이 (①): 내 정보 · 여행 스타일 · 결제 카드 · 알림 설정 · 권한
+import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { get, post } from '@/api/http'
 import { getTripList } from '@/api/trips'
 import TabBar from '@/components/common/TabBar.vue'
-import BottomSheet from '@/components/common/BottomSheet.vue'
 import TopBar from '@/components/common/TopBar.vue'
 import VersionTap from '@/components/member/VersionTap.vue'
 import { readAlarms, readStyle, saveAlarms } from '@/utils/mySettings'
-import SavePlaceButton from '@/components/plan/SavePlaceButton.vue'
 import DevDot from '@/components/live/DevDot.vue'
 import { turnOffDevMode } from '@/utils/devMode'
 import { clearAllChats } from '@/utils/askChat'
 import { showToast } from '@/utils/toast'
-import { friendNews } from '@/data/friendNews'
-import { useTripStore } from '@/stores/trip'
 import { readTransports } from '@/utils/transports'
 import { withoutPractice } from '@/utils/practice'
 
-// 가짜 데이터: 내 정보 (백엔드가 붙으면 member · member_style · friend · card 테이블)
+// 가짜 데이터: 내 정보 (백엔드가 붙으면 member · member_style · card 테이블)
 const router = useRouter()
-const store = useTripStore()
-const WHEN_STEP = 3 // 여행 정보 단계 번호: 언제
-const SEEN_KEY = 'friendNewsSeen' // 이 브라우저에서 본 소식 번호
 
 // 내 정보: 화면이 열리면 서버(GET /api/auth/me)에서 받아 와요
 const me = ref({ name: '', id: '', area: '서울' }) // 지역은 아직 DB에 없어서 그대로
@@ -55,41 +48,7 @@ const savedStyle = readStyle()
 const PACE_NAMES = { slow: '느긋한 여행', mid: '보통 여행', fast: '빡빡한 여행' }
 const styleChips = [PACE_NAMES[savedStyle.pace] || '보통 여행', ...savedStyle.likes]
 const transports = readTransports() // 설정 > 이동 수단 줄에 보여 줄 값 (11/06)
-const friends = ['엄마', '민지', '준호']
-
-// 친구 소식 (시연용 데이터, data/friendNews.js). 안 본 소식은 하늘색 테두리, 본 소식은 회색
-const seenNews = ref(readSeen())
-const openFriend = ref(null) // 소식 시트를 연 친구 이름
-const openNews = computed(() => (openFriend.value ? friendNews[openFriend.value] : null))
-const newsCount = computed(() => friends.filter((friend) => friendNews[friend]).length)
-
-function readSeen() {
-  try {
-    return JSON.parse(localStorage.getItem(SEEN_KEY)) || []
-  } catch {
-    return []
-  }
-}
-function showNews(friend) {
-  openFriend.value = friend
-  const id = friendNews[friend].id
-  if (seenNews.value.includes(id)) return
-  seenNews.value = [...seenNews.value, id]
-  try {
-    localStorage.setItem(SEEN_KEY, JSON.stringify(seenNews.value))
-  } catch {
-    // 저장이 안 돼도 소식은 보여 줌
-  }
-}
-// 이 코스 따라하기: 그 장소들을 꼭 갈 곳으로 넣고 여행 정보의 날짜 칸부터
-function followCourse() {
-  const news = openNews.value
-  store.resetPlan()
-  store.planArea = { ...news.area }
-  store.planConditions = { mustVisit: [...news.places] }
-  store.planStep = WHEN_STEP
-  router.push('/plan/info')
-}
+// 11/16 상재: 친구 칸은 가짜 데이터뿐이라 마이 화면에서 뺐어요
 const cards = ref([
   { name: '신한카드', last: '4821', main: true },
 ])
@@ -158,25 +117,14 @@ async function logout() {
           <i class="ic i-next subtle" aria-hidden="true"></i>
         </RouterLink>
 
-        <!-- 11/06: 큰 앱 마이 화면처럼 자주 쓰는 순서로 — 내 여행 → 친구 → 알림 → 결제 → 설정 → 언어 -->
+        <!-- 11/06: 큰 앱 마이 화면처럼 자주 쓰는 순서로 — 내 여행 → 알림 → 결제 → 설정 → 언어 (친구 칸은 11/16에 뺌) -->
         <section class="my-sec" aria-labelledby="tr-h">
           <h2 id="tr-h" class="t-sub">내 여행</h2>
           <div class="group">
             <RouterLink to="/trips" class="row"><span class="ico-tile ico-tile--sky"><i class="ic i-calendar" aria-hidden="true"></i></span><span class="row__body"><span class="row__title">내 여행 일정</span><span class="row__meta tn">예정 {{ tripStats.planned }} · 다녀온 {{ tripStats.done }}</span></span><i class="ic i-next subtle" aria-hidden="true"></i></RouterLink>
-            <RouterLink to="/my/places" class="row"><span class="ico-tile ico-tile--sky"><i class="ic i-bookmark" aria-hidden="true"></i></span><span class="row__body"><span class="row__title">내 장소</span><span class="row__meta">친구 코스·링크에서 저장한 곳</span></span><i class="ic i-next subtle" aria-hidden="true"></i></RouterLink>
+            <RouterLink to="/my/places" class="row"><span class="ico-tile ico-tile--sky"><i class="ic i-bookmark" aria-hidden="true"></i></span><span class="row__body"><span class="row__title">저장한 장소</span></span><i class="ic i-next subtle" aria-hidden="true"></i></RouterLink>
             <RouterLink to="/my/trash" class="row"><span class="ico-tile ico-tile--neutral"><i class="ic i-route" aria-hidden="true"></i></span><span class="row__body"><span class="row__title">여행 기록</span><span class="row__meta">지운 여행 다시 살리기</span></span><i class="ic i-next subtle" aria-hidden="true"></i></RouterLink>
             <RouterLink to="/my/location" class="row"><span class="ico-tile ico-tile--lilac"><i class="ic i-pin" aria-hidden="true"></i></span><span class="row__body"><span class="row__title">내 위치 기록</span></span><i class="ic i-next subtle" aria-hidden="true"></i></RouterLink>
-          </div>
-        </section>
-
-        <section class="my-sec" aria-labelledby="fr-h">
-          <h2 id="fr-h" class="t-sub">친구 <span class="my-count tn">{{ friends.length }}</span><span class="fr-count tn">소식 {{ newsCount }}</span></h2>
-          <div class="friends">
-            <RouterLink to="/my/friends"><span class="ava ava--add"><i class="ic i-plus" aria-hidden="true"></i></span>추가</RouterLink>
-            <template v-for="(friend, i) in friends" :key="friend">
-              <button v-if="friendNews[friend]" type="button" class="fr-btn" :aria-label="friend + ' 소식 보기'" @click="showNews(friend)"><span class="ava fr-ring" :class="['ava--c' + (i % 3), { 'is-seen': seenNews.includes(friendNews[friend].id) }]">{{ friend[0] }}</span>{{ friend }}</button>
-              <span v-else><span class="ava" :class="'ava--c' + (i % 3)">{{ friend[0] }}</span>{{ friend }}</span>
-            </template>
           </div>
         </section>
 
@@ -234,18 +182,6 @@ async function logout() {
         </div>
       </div>
 
-      <template v-if="openNews">
-        <div class="dim" style="z-index: 20"></div>
-        <BottomSheet closable data-drag :on-close="() => (openFriend = null)" class="fr-sheet" role="dialog" aria-modal="true" :aria-label="openFriend + ' 소식'">
-          <h2 class="h-title">{{ openFriend }}의 코스</h2>
-          <p class="t-cap tn">{{ openNews.date }} · {{ openNews.area.name }} · {{ openNews.places.length }}곳</p>
-          <ol class="fr-places">
-            <li v-for="(place, i) in openNews.places" :key="place"><span class="fr-no tn">{{ i + 1 }}</span><span class="fr-name">{{ place }}</span><SavePlaceButton :name="place" :from-name="openFriend" /></li>
-          </ol>
-          <button type="button" class="btn btn--primary btn--lg btn--block" @click="followCourse">이 코스 따라하기</button>
-          <button type="button" class="btn btn--ghost btn--md btn--block" @click="openFriend = null">닫기</button>
-        </BottomSheet>
-      </template>
       <TabBar active="my" />
     </div>
   </div>
@@ -272,25 +208,7 @@ async function logout() {
 .scr-My .my-style__body b{font-size:16px;line-height:22px;font-weight:700}
 .scr-My .my-style__body span{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:13px;color:var(--lilac)}
 .scr-My .my-sec{display:flex;flex-direction:column;gap:10px}
-.scr-My .my-count{margin-left:2px;font-weight:700;color:var(--coral)}
-.scr-My .ava{width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px;flex:none;background:var(--navy-soft);color:var(--navy)}
-.scr-My .ava--c0{background:var(--coral-soft);color:var(--coral-ink)}
-.scr-My .ava--c1{background:var(--sky-soft);color:var(--sky)}
-.scr-My .ava--c2{background:var(--success-soft);color:var(--success)}
-.scr-My .ava--add{background:transparent;border:1.5px dashed var(--line-strong);color:var(--ink-muted)}
 .scr-My .ico-tile--add{background:transparent;border:1.5px dashed var(--line-strong);color:var(--navy)}
-.scr-My .friends{display:flex;gap:18px}
-.scr-My .fr-count{margin-left:8px;font-size:12px;font-weight:600;color:var(--sky)}
-.scr-My .fr-btn{display:flex;flex-direction:column;align-items:center;gap:6px;padding:0;border:0;background:none;font:inherit;font-size:12px;color:var(--ink-muted);cursor:pointer}
-.scr-My .fr-ring{box-shadow:0 0 0 2px #fff,0 0 0 4px var(--sky)}
-.scr-My .fr-ring.is-seen{box-shadow:0 0 0 2px #fff,0 0 0 4px var(--line-strong)}
-.scr-My .fr-sheet{z-index:21;gap:8px;padding:8px 16px 24px}
-.scr-My .fr-sheet .h-title{margin:0}
-.scr-My .fr-name{flex:1;min-width:0}
-.scr-My .fr-places{list-style:none;margin:8px 0;padding:0;display:flex;flex-direction:column;gap:12px}
-.scr-My .fr-places li{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:600;color:var(--ink)}
-.scr-My .fr-no{flex:none;width:24px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:var(--navy);color:#fff;font-size:12px;font-weight:700}
-.scr-My .friends span,.scr-My .friends a{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12px;color:var(--ink-muted);text-decoration:none}
 .scr-My .my-before{padding:0 16px 12px 68px}
 .scr-My .my-foot{display:flex;justify-content:space-between;align-items:center;padding-bottom:16px}
 .scr-My .my-lang-row{width:100%;border:0;background:none;font:inherit;text-align:left;cursor:pointer}
