@@ -1218,7 +1218,9 @@ public class PlanServiceImpl implements PlanService {
             }
             if (place == null) {
                 String name = pick.getName() == null ? "" : pick.getName();
-                response.getNotes().add(makeNote(name + "의 위치를 찾지 못해 뺐어요", placeService.getNaverUrl(name, null)));
+                if (!hasNoteAbout(response.getNotes(), name)) { // 11/16: 후보 찾을 때 이미 "위치를 찾지 못했어요"라고 했으면 또 안 씀
+                    response.getNotes().add(makeNote(name + "의 위치를 찾지 못해 뺐어요", placeService.getNaverUrl(name, null)));
+                }
                 continue;
             }
             Stop stop = toDraftStop(pick, place, days);
@@ -1523,6 +1525,16 @@ public class PlanServiceImpl implements PlanService {
     private boolean hasNote(PlanGenerateResponse response, String text) {
         for (PlanNote note : response.getNotes()) {
             if (text.equals(note.getText())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** 이미 이 이름으로 시작하는 안내가 있는지 (같은 곳 안내를 두 번 안 쓰게) */
+    private boolean hasNoteAbout(List<PlanNote> notes, String name) {
+        for (PlanNote note : notes) {
+            if (!name.isEmpty() && note.getText() != null && note.getText().startsWith(name + "의 위치를")) {
                 return true;
             }
         }
