@@ -181,7 +181,11 @@ const slider = ref(null)
 // 여행 전·일정이 없을 때 카드 숫자: 여행까지 며칠 / 다음 장소까지 남은 시간
 const countdown = computed(() => {
   if (!trip.value) return null
-  if (!isNow.value) return { cap: '여행까지', big: daysLeft(trip.value.startDate) + '일' }
+  if (!isNow.value) {
+    // 11/16 ①: "여행까지 / 1일" 대신 여행 중 칸처럼 "첫 일정 · 10:00 ○○" + "내일 떠나요"
+    const left = daysLeft(trip.value.startDate)
+    return { cap: firstStopText(), big: left === 1 ? '내일 떠나요' : left + '일 남았어요' }
+  }
   const next = dayStops.value.find((stop) => stop.state === 'todo')
   if (!next) return { cap: '오늘 일정', big: '모두 다녀왔어요' }
   const now = appNow() // 개발자 모드면 시연 시계 (11/06)
@@ -190,6 +194,13 @@ const countdown = computed(() => {
   // 시각이 이미 지났으면 "지금 출발" 대신 얼마나 지났는지 (11/16)
   return { cap: next.name + ' (' + next.time + ')', big: left === 0 ? '지금이에요' : toDuration(-left) + ' 지났어요' }
 })
+
+// 여행 전 작은 글: 첫째 날 첫 일정 ("첫 일정 · 10:00 경복궁"), 일정이 없으면 "여행 준비"
+function firstStopText() {
+  const first = dayStops.value[0]
+  if (!first) return '여행 준비'
+  return '첫 일정 · ' + (first.time ? first.time + ' ' : '') + first.name
+}
 
 // 칸 글자: "다음 · 로라멘" / 큰 글자 "19:44 도착" / "20:30 출발 · 일본식라면"
 function slideCap(stop) {
