@@ -54,8 +54,7 @@ public class RetroMap : MonoBehaviour
     private const string POST_RESOURCES_PATH = "Packages/com.unity.postprocessing/PostProcessing/PostProcessResources.asset";
 
     public Ground Ground { get; private set; } // 다른 스크립트가 땅 높이를 물어볼 때 씀
-    public float WaterLevel { get; private set; } = NO_WATER_LEVEL; // 강물 높이 (카메라가 물속으로 들어가지 않게 CameraMove가 씀)
-    private const float NO_WATER_LEVEL = -10000f; // 강이 없는 지도: 어떤 땅보다도 낮게
+    private MapData mapData;                   // 지금 그린 지도 자료 (FloorAt이 물 높이를 물어볼 때 씀)
     private Material groundMaterial;           // 땅 재질 (위성 사진을 여기에 입힘)
     private readonly List<Material> nightMaterials = new List<Material>(); // 밤에 창문·간판 불을 켤 벽 재질들 (SkyClock이 켬)
     private Material lampMaterial; // 가로등·다리 조명 (지도마다 새로)
@@ -118,6 +117,8 @@ public class RetroMap : MonoBehaviour
         QualitySettings.shadowDistance = SHADOW_DISTANCE_M;
         SetSkyLight();
 
+        WaterPrep.Prepare(data); // 물 자료 다듬기 (둑길을 땅으로 · 호수마다 물 높이 · 강가 매끈하게). 땅을 만들기 전에
+        mapData = data;
         Ground = new Ground(data);
         RouteArea area = new RouteArea(data.route, data.stops); // 걸은 길·다녀온 곳 둘레 (가까운 곳만 자세하게)
         PropMaker props = new PropMaker();          // 간판·발코니·차·신호등·사람 같은 소품을 모으는 곳
@@ -149,7 +150,6 @@ public class RetroMap : MonoBehaviour
         if (clouds == null) clouds = gameObject.AddComponent<CloudLayer>();
         clouds.Show();
         bool hasWater = data.water != null && data.water.cells != null && data.water.cells.Length > 0;
-        WaterLevel = hasWater ? data.water.level : NO_WATER_LEVEL;
         WaterReflection reflection = GetComponent<WaterReflection>();
         if (reflection == null) reflection = gameObject.AddComponent<WaterReflection>();
         reflection.Show(hasWater ? data.water.level : Ground.LowestHeight(), data.sizeM);
@@ -157,6 +157,15 @@ public class RetroMap : MonoBehaviour
         if (clock == null) clock = gameObject.AddComponent<SkyClock>();
         clock.Show(data.sun, nightMaterials, streetMaterials);
         clock.SetMinute(0);
+    }
+
+    // 이 자리의 바닥 높이: 땅, 물 위면 물 면 (카메라가 물속으로 들어가지 않게 CameraMove가 씀)
+    //   강바닥·호수 바닥은 물 면보다 2.5m 낮아서, 땅만 보면 물 위에서 물속으로 들어감
+    public float FloorAt(float x, float z)
+    {
+        float floor = Ground.HeightAt(x, z);
+        if (WaterMaker.IsWaterAt(mapData, x, z)) floor = Mathf.Max(floor, WaterMaker.LevelAt(mapData, x, z));
+        return floor;
     }
 
     // 땅: 위성 사진 바닥 + 가까이 가면 잔디·보도블록 무늬 + 지도 바깥 넓은 바닥

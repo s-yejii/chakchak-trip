@@ -162,12 +162,21 @@ public class BridgeMaker
         for (int i = 0; i < line.Count; i++)
         {
             bool isOverWater = WaterMaker.IsWaterAt(data, line[i].x, line[i].y);
-            heights[i] = isOverWater ? data.water.level + DECK_M : ground.HeightAt(line[i].x, line[i].y) + 0.5f;
+            heights[i] = isOverWater ? DeckOverWater(line[i]) : ground.HeightAt(line[i].x, line[i].y) + 0.5f;
         }
         for (int i = 1; i < line.Count; i++) heights[i] = Mathf.Max(heights[i], heights[i - 1] - Vector2.Distance(line[i], line[i - 1]) * RAMP_SLOPE);
         for (int i = line.Count - 2; i >= 0; i--) heights[i] = Mathf.Max(heights[i], heights[i + 1] - Vector2.Distance(line[i], line[i + 1]) * RAMP_SLOPE);
         LowerLandEnds(line, heights);
         return heights;
+    }
+
+    // 물 위 점의 상판 높이: 한강(자료의 물 높이 그대로인 큰 물)은 물에서 DECK_M, 호수·연못 다리는 낮게 WATER_CLEAR_M
+    //   왜: 호수 다리는 길과 거의 같은 높이로 건너감. 한강 다리처럼 12m 띄우면 양쪽 길과 끊김
+    private float DeckOverWater(Vector2 point)
+    {
+        float level = WaterMaker.LevelAt(data, point.x, point.y);
+        bool isMainWater = level <= data.water.level + 0.01f;
+        return level + (isMainWater ? DECK_M : WATER_CLEAR_M);
     }
 
     // 다리 끝이 땅 위면 그 끝은 땅 높이로 내리고, 끝에서 END_SLOPE로 오르게 함 (공중에서 끊기지 않고 땅 위 길과 이어지게)
@@ -188,7 +197,7 @@ public class BridgeMaker
             if (isFirstOnLand) heights[i] = Mathf.Min(heights[i], firstHeight + fromFirst * END_SLOPE);
             if (isLastOnLand) heights[i] = Mathf.Min(heights[i], lastHeight + fromLast[i] * END_SLOPE);
             heights[i] = Mathf.Max(heights[i], ground.HeightAt(line[i].x, line[i].y) + 0.5f); // 땅 밑으로는 안 내려감
-            if (WaterMaker.IsWaterAt(data, line[i].x, line[i].y)) heights[i] = Mathf.Max(heights[i], data.water.level + WATER_CLEAR_M);
+            if (WaterMaker.IsWaterAt(data, line[i].x, line[i].y)) heights[i] = Mathf.Max(heights[i], WaterMaker.LevelAt(data, line[i].x, line[i].y) + WATER_CLEAR_M);
         }
     }
 
