@@ -72,7 +72,7 @@ async function onFilesPicked(event) {
     const result = await uploadPhotos(files, uploadTripId)
     snack.value = result.savedCount + '개 올렸어요'
     if (result.unmatchedCount > 0) {
-      snack.value += ' · ' + result.unmatchedCount + '개는 그날 여행이 없어요'
+      snack.value += ' · ' + result.unmatchedCount + '개는 여행 날짜 밖이라 빠졌어요' // 고른 여행 기간 밖이거나, 그날 여행이 없음
     }
     openTripId.value = null
     await loadAlbums()
@@ -104,6 +104,10 @@ function toCountText(album) {
     <div class="app">
       <header class="topbar">
         <h1 class="topbar__title" style="padding-left: 8px">앨범</h1>
+        <!-- 지난 여행 사진을 쇼츠처럼 자동으로 넘겨 보기 (S19-d) -->
+        <RouterLink v-if="albums.length > 0" to="/shorts" class="btn btn--secondary btn--sm" style="margin-right: 6px">
+          <i class="ic ic--s i-play" aria-hidden="true"></i>쇼츠
+        </RouterLink>
         <button type="button" class="btn btn--secondary btn--sm" style="margin-right: 8px" :disabled="uploading" @click="pickFiles(null)">
           <i class="ic ic--s i-plus" aria-hidden="true"></i>{{ uploading ? '올리는 중…' : '사진 불러오기' }}
         </button>

@@ -51,6 +51,7 @@ public class PaymentServiceImpl implements PaymentService {
     private static final int OTHER_AMOUNT = 9800;          // 그 밖 (계획 없이 머문 곳 등)
     private static final int STORE_NAME_MAX = 100;         // store_name VARCHAR(100)
     private static final int MEMO_MAX = 200;               // memo VARCHAR(200)
+    private static final int APPROVAL_NO_MAX = 30;         // approval_no VARCHAR(30)
     private static final int PAYER_MAX = 20;               // payer VARCHAR(20)
     private static final String DEFAULT_PAYER = "나";
 
@@ -88,6 +89,7 @@ public class PaymentServiceImpl implements PaymentService {
         payment.setSource(toSource(request.getSource()));
         payment.setMemo(request.getMemo());
         payment.setPayer(toPayer(request.getPayer()));
+        payment.setApprovalNo(toApprovalNo(request.getApprovalNo()));
         paymentMapper.insertPayment(payment);
         return paymentMapper.selectPayment(payment.getPaymentId());
     }
@@ -237,6 +239,7 @@ public class PaymentServiceImpl implements PaymentService {
             CardTransaction transaction = new CardTransaction();
             transaction.setApprovalDate(date);
             transaction.setApprovalTime(time);
+            transaction.setApprovalNo(approval.getApprovalNo());
             transaction.setPaidAt(paidAt);
             transaction.setDay(day);
             transaction.setStoreName(approval.getStoreName());
@@ -276,6 +279,14 @@ public class PaymentServiceImpl implements PaymentService {
         // 결제 시각 순으로. "2026-11-04T11:35"는 글자 순서 = 시간 순서라 글자로 비교해도 됨 (람다: 두 개를 받아 비교하는 짧은 함수)
         list.sort((a, b) -> a.getPaidAt().compareTo(b.getPaidAt()));
         return list;
+    }
+
+    // 승인번호: 앞뒤 빈칸을 빼고, 비었으면 null (직접 입력·영수증). 너무 길면 400
+    private static String toApprovalNo(String approvalNo) {
+        if (approvalNo == null || approvalNo.isBlank()) return null;
+        String value = approvalNo.trim();
+        if (value.length() > APPROVAL_NO_MAX) throw fail(400, "승인번호는 30자까지예요.");
+        return value;
     }
 
     // 요청 확인: 가게 이름·금액·결제 시각(모양, 여행 기간 안)
@@ -355,18 +366,27 @@ public class PaymentServiceImpl implements PaymentService {
         transaction.setDay(day + minutes / 1440);
         transaction.setStoreName(storeName);
         transaction.setAmount(amount);
+        // 목업 승인번호: 날짜 + 시각 + 가게·금액으로 만든 4자리 (다시 불러도 같은 값이라 "이미 가져옴"을 알 수 있음)
+        int code = Math.abs((storeName + amount).hashCode()) % 10000; // hashCode: 글자를 숫자 하나로 바꿈 (같은 글자면 늘 같은 숫자)
+        transaction.setApprovalNo(transaction.getApprovalDate() + time.replace(":", "") + String.format("%04d", code));
         transaction.setImported(isImported(saved, transaction));
         return transaction;
     }
 
-    // 이미 가져온 결제인가: 같은 날·시각·가게·금액이 결제 내역에 있으면
+    // 이미 가져온 결제인가
+    //   승인번호가 있는 결제와는 승인번호로만 비교 → 같은 가게·시각·금액 결제가 두 번이어도 둘 다 가져올 수 있음
+    //   승인번호 없이 예전에 가져온 결제(source = card, 11/16 전)는 같은 날·시각·가게·금액으로 비교 (두 번 가져오지 않게)
     private static boolean isImported(List<PaymentResponse> saved, CardTransaction transaction) {
         String time = transaction.getPaidAt().substring(11, 16);
         for (PaymentResponse payment : saved) {
-            if (payment.getDay() == transaction.getDay() && payment.getPaidAt().equals(time)
-                    && payment.getAmount() == transaction.getAmount() && payment.getStoreName().equals(transaction.getStoreName())) {
-                return true;
+            if (payment.getApprovalNo() != null) {
+                if (payment.getApprovalNo().equals(transaction.getApprovalNo())) return true;
+                continue;
             }
+            boolean isOldCard = "card".equals(payment.getSource());
+            boolean isSame = payment.getDay() == transaction.getDay() && payment.getPaidAt().equals(time)
+                    && payment.getAmount() == transaction.getAmount() && payment.getStoreName().equals(transaction.getStoreName());
+            if (isOldCard && isSame) return true;
         }
         return false;
     }

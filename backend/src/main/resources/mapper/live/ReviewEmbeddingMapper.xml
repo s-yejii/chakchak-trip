@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- ④ 리뷰 RAG: 리뷰 임베딩 (review_embedding). retrip_review·retrip_place(공통)는 읽기만 -->
+<mapper namespace="com.tripbiseo.live.mapper.ReviewEmbeddingMapper">
+
+  <!-- 아직 임베딩이 없는 리뷰 = review_embedding에 짝이 없는 리뷰 (LEFT JOIN … IS NULL).
+       그래서 중간에 멈춰도 다시 부르면 남은 것부터 이어서 해요.
+       범위 (11/15): Gemini 무료 임베딩이 하루 약 1,000개라 5개 구 3.2만 개 대신 시연 동선 장소 500m 안만 (리뷰 약 3,100개).
+       좌표는 plan/service/DemoScenario.java 시연 일정과 같은 곳 (종로3가·익선, 명동 숙소, 남산나들길, 팔각정, 예장공원, 을지로, 강남 스시도, 동서울터미널)
+       11/16 더 줄임 (리뷰 약 1,830개, 무료로 2일): minLength자 이상 리뷰 중 가게마다 긴 순 perPlace개만.
+       긴 리뷰에 분위기 이야기가 많고, 짧은 리뷰는 검색 때도 안 씀(selectMoodReviewList의 minLength와 같은 값)
+       안쪽 SELECT: 범위 안 가게 리뷰마다 가게별 긴 순 번호(ROW_NUMBER). 바깥: 번호 perPlace 이하 + 아직 임베딩 없는 것 -->
+  <sql id="notEmbeddedYet">
+    FROM (
+      SELECT r.id, r.content,
+             ROW_NUMBER() OVER (PARTITION BY r.place_id ORDER BY length(r.content) DESC, r.id) AS rank_in_place
+      FROM retrip_review r
+      JOIN retrip_place p ON p.id = r.place_id
+      WHERE length(r.content) &gt;= #{minLength}
+        AND EXISTS (
+          SELECT 1
+          FROM (VALUES (37.5732, 126.9898), (37.5616, 126.9827), (37.5549, 126.9867), (37.5516, 126.9876),
+                       (37.5605, 126.9889), (37.5658, 126.9906), (37.4952, 127.0850), (37.5344, 127.0941)) AS demo(lat, lng)
+          WHERE ST_DWithin(p.geom, ST_SetSRID(ST_MakePoint(demo.lng, demo.lat), 4326)::geography, 500)
+        )
+    ) r
+    LEFT JOIN review_embedding e ON e.review_id = r.id
+    WHERE r.rank_in_place &lt;= #{perPlace}
+      AND e.review_id IS NULL
+  </sql>
+
+  <select id="selectReviewToEmbedList" resultType="com.tripbiseo.live.dto.ReviewText">
+    SELECT r.id AS reviewId, r.content
+    <include refid="notEmbeddedYet"/>
+    ORDER BY r.id
+    LIMIT #{count}
+  </select>
+
+  <select id="selectRemainingCount" resultType="int">
+    SELECT COUNT(*)
+    <include refid="notEmbeddedYet"/>
+  </select>
+
+  <!-- foreach: 목록을 돌면서 (…), (…), (…) 를 이어 붙여 INSERT 한 문장으로 -->
+  <insert id="insertReviewEmbeddingList">
+    INSERT INTO review_embedding (review_id, embedding, model)
+    VALUES
+    <foreach collection="list" item="item" separator=",">
+      (#{item.reviewId}, #{item.embedding}::vector, #{model})
+    </foreach>
+    ON CONFLICT (review_id) DO NOTHING
+  </insert>
+
+  <!-- 후보 가게마다 질문과 가장 가까운 리뷰 perPlace개 (리뷰 RAG의 R: 찾기)
+       안쪽 SELECT: 후보 가게 리뷰마다 질문과 거리를 재고, ROW_NUMBER로 가게마다 가까운 순 1, 2, 3… 번호를 매김
+       바깥 SELECT: 번호가 perPlace 이하인 것만 = 가게마다 위에서 perPlace개 -->
+  <select id="selectMoodReviewList" resultType="com.tripbiseo.live.dto.MoodReview">
+    SELECT place_id AS placeId, review_id AS reviewId, content, distance
+    FROM (
+      SELECT r.place_id,
+             r.id AS review_id,
+             r.content,
+             e.embedding &lt;=&gt; #{query}::vector AS distance,
+             ROW_NUMBER() OVER (PARTITION BY r.place_id
+                                ORDER BY e.embedding &lt;=&gt; #{query}::vector) AS rank_in_place
+      FROM review_embedding e
+      JOIN retrip_review r ON r.id = e.review_id
+      WHERE r.place_id IN
+      <foreach collection="placeIds" item="placeId" open="(" separator="," close=")">#{placeId}</foreach>
+        AND length(r.content) &gt;= #{minLength}   -- "좋아요"·"친절해요"처럼 짧은 글은 어떤 질문과도 적당히 가까워서 근거에서 뺌
+        AND e.model = #{model}                     -- 다른 모델로 만든 좌표끼리는 비교하면 안 됨 (모델을 바꾸면 다시 임베딩)
+    ) ranked
+    WHERE rank_in_place &lt;= #{perPlace}
+    ORDER BY place_id, distance
+  </select>
+
+  <!-- 후보 가게 중 임베딩된 리뷰가 하나라도 있는 가게 수 -->
+  <select id="selectEmbeddedPlaceCount" resultType="int">
+    SELECT COUNT(DISTINCT r.place_id)
+    FROM review_embedding e
+    JOIN retrip_review r ON r.id = e.review_id
+    WHERE e.model = #{model}
+      AND r.place_id IN
+    <foreach collection="placeIds" item="placeId" open="(" separator="," close=")">#{placeId}</foreach>
+  </select>
+
+  <!-- 평가용 후보: Gemini SQL 없이 고정 (같은 질문이면 늘 같은 후보). ask_place는 ④ 뷰 (18_ask_place.sql) -->
+  <select id="selectCandidateList" resultType="com.tripbiseo.live.dto.MoodComparePlace">
+    SELECT id, name
+    FROM ask_place
+    WHERE kind = #{kind}
+      AND ST_DWithin(geom, ST_SetSRID(ST_MakePoint(#{lng}, #{lat}), 4326)::geography, #{meters})
+    ORDER BY rating_adj DESC, id
+  </select>
+
+  <!-- 예전 방식: 리뷰 글자에 word가 들어간 리뷰가 minCount개 이상인 가게 (AI SQL이 쓰던 ILIKE 조건과 같음).
+       '%' || #{word} || '%' : 값은 #{}로 넣고 앞뒤 %는 SQL에서 붙임 -->
+  <select id="selectKeywordPlaceIdList" resultType="string">
+    SELECT r.place_id
+    FROM retrip_review r
+    WHERE r.place_id IN
+    <foreach collection="placeIds" item="placeId" open="(" separator="," close=")">#{placeId}</foreach>
+      AND r.content ILIKE '%' || #{word} || '%'
+    GROUP BY r.place_id
+    HAVING COUNT(*) &gt;= #{minCount}
+  </select>
+
+</mapper>

@@ -71,7 +71,8 @@ class PlaceAskServiceImplTest {
         askSqlRunner = mock(AskSqlRunner.class);
         placeService = mock(PlaceService.class);
         placeAskService = new PlaceAskServiceImpl(liveTripReader, statusService, routeClient, aiService,
-                new SqlPromptMaker(), new SqlChecker(), askSqlRunner, placeService, new WalkRanker(routeClient));
+                new SqlPromptMaker(), new SqlChecker(), askSqlRunner, placeService, new WalkRanker(routeClient),
+                mock(ReviewRagService.class));
 
         when(liveTripReader.getOngoingTrip(anyLong(), anyLong(), any(), any())).thenReturn(makeTrip());
         when(statusService.getStatus(anyLong(), anyLong(), any())).thenReturn(makeStatus());

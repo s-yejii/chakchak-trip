@@ -25,6 +25,7 @@
 | `db/14_live.sql` | ④ 테이블 (`trip_track`) | ④ |
 | `db/17_place_area.sql` | 넓은 장소 경계 `place_area` + 여의도한강공원 1줄 (OSM, 11/06, 이상재 확인 필요) | ④ |
 | `db/18_ask_place.sql` | AI에게 묻기(Text-to-SQL)용 뷰 `ask_place`·`ask_review`, 함수 `detour_minutes`, 읽기 전용 계정 `ask_reader`, 리뷰 검색 인덱스 (11/06, 이상재 확인 필요) | ④ |
+| `db/20_review_rag.sql` | 리뷰 RAG: pgvector 확장 + 리뷰 임베딩 `review_embedding` (11/15). pgvector 있는 DB(도커)에서만. 리뷰 RAG 관리 계정 `ragadmin` 한 명도 넣어요 (임베딩·평가 API용, 비밀번호는 팀 카톡, 11/16) | ④ |
 | `db/15_after.sql` | ⑤ 테이블 | ⑤ |
 | `db/90_test_data.sql` | 테스트 계정(tripuser / tripuser1234)·샘플 여행 | DB 총괄 |
 | `db/91_drop_old.sql` | 예전 DB에서 안 쓰는 테이블 정리 (예전 DB만 한 번) | DB 총괄 |
@@ -62,6 +63,7 @@
 | ③ | `vector_store` | RAG 임베딩 (768차원) | | 만들 예정 (여유) |
 | ③ | `my_place` | 내 장소 (친구 소식·장소 상세에서 저장한 곳) | ① 마이 화면에서 읽기 | 만들 예정 (11/06, 확인 필요) |
 | ④ | `trip_track` | GPS 기록 | ⑤① 읽기 | 있음 |
+| ④ | `review_embedding` | 리뷰 임베딩 (768차원, 리뷰 RAG) | | 있음 (11/15) |
 | ⑤ | `payment` | 결제 내역 (직접 입력·카드 내역) | | 있음 (11/07) |
 | ⑤ | `card` | 카드사 연결 (CODEF connected_id) | | 있음 (11/07, 쓰는 건 다음) |
 | ⑤ | `trip_companion` | 같이 간 사람 (정산) | | 있음 (11/07) |
@@ -331,6 +333,21 @@
 - kind·rating_adj 계산은 `PlaceMapper.xml`의 kindCase·adjustedRating과 같아요. 한쪽을 고치면 같이 고쳐요
 - 확인: `SET ROLE ask_reader; SELECT * FROM member;` → permission denied가 나와야 정상 (`RESET ROLE;`로 돌아오기)
 
+### review_embedding · 리뷰 임베딩 (④, `20_review_rag.sql`, 11/15)
+
+AI에게 묻기의 분위기 조건("조용한", "작업하기 좋은")을 글자(ILIKE)가 아니라 뜻으로 찾으려고 리뷰를 임베딩해 둬요 (리뷰 RAG). pgvector 확장이 필요해서 도커 DB에서만 만들어요.
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| review_id | TEXT PK → retrip_review (ON DELETE CASCADE) | 리뷰 하나 = 한 줄 (리뷰가 짧아서 자르지 않음) |
+| embedding | vector(768) NOT NULL | Gemini 임베딩. 비슷한 정도는 코사인 거리 `<=>` (0에 가까울수록 비슷) |
+| model | VARCHAR(60) NOT NULL | 만든 임베딩 모델. 모델이 바뀌면 다시 만들어야 해요 |
+| created_at | TIMESTAMP NOT NULL DEFAULT NOW() | |
+
+- `retrip_review`(공통)는 읽기만 해요. 장소는 `retrip_review.place_id`로 JOIN
+- 벡터 인덱스(HNSW)는 아직 없어요. 시연 동선 리뷰 약 1,830개(가게마다 긴 리뷰 6개)는 전부 비교해도 빨라서, 정확한 전체 비교를 써요
+- ③의 `vector_store`(만들 예정, 여유)와는 따로예요. 이건 리뷰 전용
+
 ### ⑤ 여행 후 (박석진)
 (payment, card, photo, extra_visit, amenity)
 
@@ -364,6 +381,7 @@
 | source | VARCHAR(10) NOT NULL DEFAULT 'manual' | manual(직접 입력) / card(카드 내역 가져옴) / capture(결제 캡처, 나중에) |
 | memo | VARCHAR(200) | 메모 |
 | payer | VARCHAR(20) NOT NULL DEFAULT '나' | 낸 사람: 나 / 동행 1 / 동행 2 … (정산용, 11/07 ALTER로 추가) |
+| approval_no | VARCHAR(30) | 카드 승인번호 (CODEF `resApprovalNo`). 카드 내역에서 가져온 결제만, 나머지는 NULL. 같은 가게·시각·금액 결제를 구별하려고 (11/16 ALTER로 추가) |
 | created_at | TIMESTAMP NOT NULL DEFAULT NOW() | 저장 시각 |
 
 인덱스 `idx_payment_trip (trip_id, paid_at)`.
