@@ -61,6 +61,13 @@ public static class Palette
     {
         if (name == "Tree" || name == "Props") return new Material(Shader.Find("Retro/VertexColor")); // 하나하나 색이 달라서 꼭짓점 색 셰이더
 
+        if (name == "Route" || name == "BusLine" || name == "RideLine") // 땅을 따라가는 경로 띠: 길 밑이나 건물 뒤로 가려져도 옅게 비쳐 보이는 전용 셰이더
+        {
+            Material line = new Material(Shader.Find("Retro/RouteLine"));
+            line.color = COLORS[name];
+            return line;
+        }
+
         Material material = new Material(Shader.Find("Standard"));
         material.color = COLORS[name];
         material.SetFloat("_Glossiness", 0.05f); // 번들거림 줄이기
