@@ -17,6 +17,10 @@ const METERS_PER_DEGREE_LNG = 111320
 const MAX_BUILDINGS = 40000 // 유니티는 건물을 한 덩어리로 그려서 많아도 됨
 const CELL_DEG = 0.01       // 국가 건물 파일 한 칸 크기(도). make_buildings_seoul.py와 같아야 함
 const CELL_UNIT = 1000000   // 칸 파일의 좌표 단위: 백만분의 1도
+const FLOOR_M = 3            // 수치지도 층수 → 높이: 한 층 3m (국가 건물 자료와 같은 어림)
+const UNKNOWN_HEIGHT_M = 3.5 // 국가 건물 자료에서 높이가 이 이하면 "높이를 모르는 건물"로 봄 (높이도 층수도 없으면 3m로 와서)
+const ADD_MIN_FLOORS = 5     // 국가 자료에 아예 없는 건물은 이 층수 이상만 새로 넣음
+const MATCH_CELL_DEG = 0.0005 // 건물을 빨리 찾으려고 나눠 담는 칸 크기 (약 50m)
 const SMOOTH_CELLS = 3 // 땅 높이를 고르게 할 때 양옆으로 몇 칸까지 평균 낼지
 // 모양을 따로 만드는 눈에 띄는 건물. kind: 0 = N서울타워 · 1 = 롯데월드타워 (유니티 RetroMap.cs의 ShowLandmarks가 그림)
 // 이 점이 들어간 건물 윤곽은 건물 목록에서 뺌 (상자 건물과 겹치지 않게)
@@ -100,6 +104,7 @@ export async function buildMapData({ center, halfM, tileUrl, dateText, forest, g
   const keep = isCorridor ? makeKeepChecker(route, stops, toMeters) : null
   let found = await loadNationalBuildings(box) // 서울: 국가 건물 자료 (빈 곳 없음, 층수 정확)
   if (found.length === 0) found = await loadMapBuildings(tileUrl, box, isInBox) // 그 밖 지역: 지도(OpenStreetMap) 건물로 대신
+  else fillFromFloors(found, await loadFloorBuildings(box)) // 높이를 모르는 건물·빠진 큰 건물을 수치지도 층수로 채움
   const buildings = []
   for (const building of found) {
     const points = []
@@ -109,12 +114,13 @@ export async function buildMapData({ center, halfM, tileUrl, dateText, forest, g
       points.push(Math.round((position[0] - center[0]) * lngScale * 100) / 100, Math.round((position[1] - center[1]) * METERS_PER_DEGREE_LAT * 100) / 100)
     }
     if (!isInside) continue // 지형 밖으로 걸친 건물은 뺌
-    if (keep && !keep.isBuildingKept(points, building.height)) continue // 경로에서 먼 건물은 뺌
-    if (hasLandmarkInside(building.ring)) continue // 랜드마크는 따로 그림
-    const item = { points: points, height: building.height, kind: building.kind }
+    const look = lookOf(building.ring)
+    const height = look && look.height ? look.height : building.height // 로드뷰로 높이를 적어 둔 건물은 그 높이
+    if (keep && !keep.isBuildingKept(points, height)) continue // 경로에서 먼 건물은 뺌
+    if (hasLandmarkInside(building.ring) && !(look && look.height)) continue // 랜드마크는 따로 그림 (아래 건물 높이를 적어 둔 롯데월드몰은 그 높이로 같이 그림)
+    const item = { points: points, height: height, kind: building.kind }
     if (building.height <= HANOK_MAX_M && isInZone(building.ring[0], lngScale, HANOK_ZONES)) item.style = 1
     else if (building.height <= EULJIRO_MAX_M && EULJIRO_KINDS.includes(building.kind) && isInZone(building.ring[0], lngScale, EULJIRO_ZONES)) item.style = 2
-    const look = lookOf(building.ring)
     if (look) item.look = look
     buildings.push(item)
   }
@@ -513,7 +519,7 @@ function smoothHeights(heights, gridCount) {
 // 로드뷰를 보고 따로 적어 둔 모습(buildingLooks.js)이 있으면 돌려줌: 적어 둔 점이 이 건물 윤곽 안에 있으면 그 건물 것
 function lookOf(ring) {
   for (const look of BUILDING_LOOKS) {
-    if (isInRings(look.lng, look.lat, [ring])) return { wall: look.wall, sign: look.sign, pattern: look.pattern, ground: look.ground }
+    if (isInRings(look.lng, look.lat, [ring])) return { wall: look.wall, sign: look.sign, pattern: look.pattern, ground: look.ground, height: look.height || 0 }
   }
   return null
 }
@@ -568,6 +574,76 @@ async function loadGroundAreas(box) {
     }
   }
   return list
+}
+
+// 수치지도 건물(3층 이상) 읽기: /geo/floors/경도칸_위도칸.json. 한 건물 = [층수, x, y, x, y, …]
+// 돌려줌: [{ floors, ring: [[경도, 위도], …] }]
+async function loadFloorBuildings(box) {
+  const list = []
+  for (let cellX = Math.floor(box[0] / CELL_DEG); cellX <= Math.floor(box[2] / CELL_DEG); cellX++) {
+    for (let cellY = Math.floor(box[1] / CELL_DEG); cellY <= Math.floor(box[3] / CELL_DEG); cellY++) {
+      for (const item of await fetchCell('floors', cellX + '_' + cellY)) {
+        const ring = []
+        for (let i = 1; i + 1 < item.length; i += 2) ring.push([cellX * CELL_DEG + item[i] / CELL_UNIT, cellY * CELL_DEG + item[i + 1] / CELL_UNIT])
+        list.push({ floors: item[0], ring: ring })
+      }
+    }
+  }
+  return list
+}
+
+// 수치지도 건물(층수)로 국가 건물 목록(found)을 채움
+//   1) 수치지도 건물의 가운데가 국가 건물 안에 있으면 같은 건물 → 국가 쪽 높이를 모를 때만 "층수 × 3m"로 바꿈
+//      예) 르메르디앙 명동: 국가 자료 3m(높이 없음) → 수치지도 15층 → 45m
+//   2) 겹치는 국가 건물이 없으면 국가 자료에 빠진 건물 → ADD_MIN_FLOORS층 이상이면 새로 넣음 (예: 롯데월드몰)
+//   건물이 1만 채가 넘어서 하나하나 다 견주면 느림 → 국가 건물을 약 50m 칸에 나눠 담아 두고, 같은 칸의 건물만 봄
+function fillFromFloors(found, list) {
+  const cells = new Map() // 칸 이름 → 그 칸에 걸친 국가 건물들
+  const keyOf = (lng, lat) => Math.floor(lng / MATCH_CELL_DEG) + ',' + Math.floor(lat / MATCH_CELL_DEG)
+  for (const building of found) {
+    building.center = centerOf(building.ring)
+    const [west, south, east, north] = boxOf(building.ring)
+    for (let lng = west; lng <= east + MATCH_CELL_DEG; lng += MATCH_CELL_DEG) {
+      for (let lat = south; lat <= north + MATCH_CELL_DEG; lat += MATCH_CELL_DEG) {
+        const key = keyOf(lng, lat)
+        if (!cells.has(key)) cells.set(key, [])
+        cells.get(key).push(building)
+      }
+    }
+  }
+  for (const item of list) {
+    const center = centerOf(item.ring)
+    let match = null
+    for (const building of cells.get(keyOf(center[0], center[1])) || []) {
+      const isSame = isInRings(center[0], center[1], [building.ring]) || isInRings(building.center[0], building.center[1], [item.ring])
+      if (isSame) match = building
+    }
+    if (match && match.height <= UNKNOWN_HEIGHT_M) match.height = item.floors * FLOOR_M
+    if (!match && item.floors >= ADD_MIN_FLOORS) found.push({ ring: item.ring, height: item.floors * FLOOR_M, kind: 4 })
+  }
+}
+
+// 윤곽 점들의 평균 자리 [경도, 위도] (건물 가운데쯤)
+function centerOf(ring) {
+  let lng = 0
+  let lat = 0
+  for (const position of ring) {
+    lng += position[0]
+    lat += position[1]
+  }
+  return [lng / ring.length, lat / ring.length]
+}
+
+// 윤곽을 감싸는 네모 [서, 남, 동, 북]
+function boxOf(ring) {
+  const box = [Infinity, Infinity, -Infinity, -Infinity]
+  for (const position of ring) {
+    box[0] = Math.min(box[0], position[0])
+    box[1] = Math.min(box[1], position[1])
+    box[2] = Math.max(box[2], position[0])
+    box[3] = Math.max(box[3], position[1])
+  }
+  return box
 }
 
 // 칸 파일 하나 (folder: 'buildings' · 'ground' · 'floors'). 없는 칸(서울 밖·산·강)은 빈 목록

@@ -9,6 +9,9 @@
 - 한 도형 = [종류, x, y, x, y, …]  종류: 0 도로 · 1 보도 · 2 횡단보도
 - 좌표와 칸 나누기는 건물 파일과 같음 (make_buildings_seoul.py): EPSG:5186 → 경위도, 0.01도 칸, 칸 모서리에서 백만분의 1도
 - zip은 풀지 않고 그대로 읽음 (도엽이 수백 개라 풀면 파일이 수만 개가 됨)
+- 건물 층수 파일도 같이 만듦 (frontend/public/geo/floors/{칸}.json): N1A_B0010000 건물 면 중 3층 이상
+  한 건물 = [층수, x, y, x, y, …]
+  왜: 국가 건물 자료에 높이가 없거나(숙소가 납작한 판으로 나옴) 건물이 통째로 빠진 곳(롯데월드몰)을 채우려고
 
 실행: python db/geo/make_ground_seoul.py <zip들이 있는 폴더>
 """
@@ -24,6 +27,9 @@ import zipfile
 from make_buildings_seoul import CELL_DEG, UNIT, to_lnglat  # 좌표 바꾸는 식과 칸 크기는 건물 파일과 같은 것을 씀
 
 OUT_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'frontend', 'public', 'geo', 'ground')
+FLOORS_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'frontend', 'public', 'geo', 'floors')
+BUILDING_LAYER = 'N1A_B0010000'  # 건물 면 (층수 칸이 있음)
+MIN_FLOORS = 3                   # 이 층수 이상인 건물만 담음 (낮은 건물은 높이를 몰라도 티가 안 남)
 LAYERS = {'N1A_A0010000': 0, 'N1A_A0033320': 1, 'N1A_A0043325': 2}  # 레이어 이름 → 종류
 MIN_AREA_M2 = 1.0  # 이보다 작은 조각은 뺌 (그려도 안 보임)
 
@@ -43,6 +49,24 @@ def read_rings(shp_bytes):
         end = struct.unpack('<i', body[48:52])[0] if num_parts > 1 else num_points  # 첫 고리(바깥)만
         rings.append([struct.unpack('<2d', body[start + 16 * i:start + 16 * i + 16]) for i in range(end)])
     return rings
+
+
+def read_numbers(dbf_bytes, field_name):
+    """DBF 파일 내용에서 field_name 칸의 값을 줄마다 정수로 (숫자가 아니면 0)"""
+    count, header, record_len = struct.unpack('<IHH', dbf_bytes[4:12])
+    pos, offset, found = 32, 1, None
+    while dbf_bytes[pos] != 0x0D:  # 칸 설명이 32바이트씩 이어지다가 0x0D로 끝남
+        name = dbf_bytes[pos:pos + 11].split(b'\0')[0].decode('cp949', 'replace')
+        length = dbf_bytes[pos + 16]
+        if name == field_name:
+            found = (offset, length)
+        offset += length
+        pos += 32
+    numbers = []
+    for i in range(count):
+        text = dbf_bytes[header + i * record_len + found[0]:header + i * record_len + found[0] + found[1]].decode('cp949', 'replace').strip() if found else ''
+        numbers.append(int(float(text)) if text.replace('.', '', 1).isdigit() else 0)
+    return numbers
 
 
 def area_of(ring):
@@ -65,10 +89,26 @@ def to_item(ring, kind):
     return '%d_%d' % (cell_x, cell_y), item
 
 
-def add_sheet(cells, counts, sheet_zip):
-    """도엽 zip 하나에서 쓰는 레이어를 읽어 cells(칸 이름 → 도형 목록)에 더함"""
+def add_buildings(floor_cells, sheet_zip, name):
+    """도엽의 건물 레이어에서 MIN_FLOORS층 이상 건물을 floor_cells(칸 이름 → 건물 목록)에 더함. 돌려줌: 더한 수"""
+    floors = read_numbers(sheet_zip.read(name[:-4] + '.dbf'), '층수')
+    added = 0
+    for i, ring in enumerate(read_rings(sheet_zip.read(name))):
+        if i >= len(floors) or floors[i] < MIN_FLOORS or len(ring) < 4:
+            continue
+        cell, item = to_item(ring, floors[i])
+        floor_cells.setdefault(cell, []).append(item)
+        added += 1
+    return added
+
+
+def add_sheet(cells, counts, sheet_zip, floor_cells):
+    """도엽 zip 하나에서 쓰는 레이어를 읽어 cells(칸 이름 → 도형 목록)에 더함. 건물은 floor_cells에"""
     for name in sheet_zip.namelist():
         layer = os.path.basename(name)[:-4].upper()
+        if name.upper().endswith('.SHP') and layer == BUILDING_LAYER:
+            counts[3] += add_buildings(floor_cells, sheet_zip, name)
+            continue
         if not name.upper().endswith('.SHP') or layer not in LAYERS:
             continue
         kind = LAYERS[layer]
@@ -82,7 +122,8 @@ def add_sheet(cells, counts, sheet_zip):
 
 def main(folder):
     cells = {}
-    counts = [0, 0, 0]
+    floor_cells = {}
+    counts = [0, 0, 0, 0]  # 도로 · 보도 · 횡단보도 · 건물
     seen = set()  # 이미 읽은 도엽 (구 경계에 걸친 도엽은 두 구의 zip에 다 들어 있어서, 두 번 넣지 않게)
     for gu_path in sorted(glob.glob(os.path.join(folder, '2MAP1000_SHP_*.zip'))):
         with zipfile.ZipFile(gu_path) as gu_zip:
@@ -90,16 +131,22 @@ def main(folder):
                 if not sheet_name.lower().endswith('.zip') or sheet_name in seen:
                     continue
                 seen.add(sheet_name)
-                add_sheet(cells, counts, zipfile.ZipFile(io.BytesIO(gu_zip.read(sheet_name))))
-        print(os.path.basename(gu_path), '→ 도로', counts[0], '· 보도', counts[1], '· 횡단보도', counts[2])
-    os.makedirs(OUT_DIR, exist_ok=True)
+                add_sheet(cells, counts, zipfile.ZipFile(io.BytesIO(gu_zip.read(sheet_name))), floor_cells)
+        print(os.path.basename(gu_path), '→ 도로', counts[0], '· 보도', counts[1], '· 횡단보도', counts[2], '· 3층 이상 건물', counts[3])
+    write_cells(OUT_DIR, cells, '바닥')
+    write_cells(FLOORS_DIR, floor_cells, '건물 층수')
+
+
+def write_cells(folder, cells, label):
+    """칸마다 파일 하나로 저장"""
+    os.makedirs(folder, exist_ok=True)
     total = 0
     for name, items in cells.items():
-        path = os.path.join(OUT_DIR, name + '.json')
+        path = os.path.join(folder, name + '.json')
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(items, f, separators=(',', ':'))
         total += os.path.getsize(path)
-    print('파일', len(cells), '개 ·', round(total / 1e6, 1), 'MB')
+    print(label, '파일', len(cells), '개 ·', round(total / 1e6, 1), 'MB')
 
 
 if __name__ == '__main__':
