@@ -9,6 +9,7 @@ import { useRoute, useRouter } from 'vue-router'
 import BottomSheet from '@/components/common/BottomSheet.vue'
 import PageMessage from '@/components/common/PageMessage.vue'
 import KakaoMap from '@/components/common/KakaoMap.vue'
+import HangangBusOption from '@/components/plan/HangangBusOption.vue' // ③ 한강버스로도 가요 (11/16, 석진 OK)
 import { getTrip, getLiveStatus, getRouteGuide, getTripList, sendTrack } from '@/api/trips'
 import { useTripStore } from '@/stores/trip'
 import { distanceMeters, pathLength, pointAlongPath, snapToPath } from '@/utils/geo'
@@ -176,7 +177,7 @@ function applyStatus(status) {
     return null
   }
   const stop = stops[index]
-  destination.value = { id: stop.id, no: index + 1, name: stop.name, lat: stop.lat, lng: stop.lng, moveMode: stop.moveMode, fixed: stop.fixed }
+  destination.value = { id: stop.id, no: index + 1, name: stop.name, lat: stop.lat, lng: stop.lng, moveMode: stop.moveMode, fixed: stop.fixed, time: stop.time }
   const here = stops.find((item) => item.reach === 'here')
   originName.value = here ? here.name : '지금 위치'
   // 시연 출발점: 지금 있는 곳 → 마지막으로 다녀온 곳 → 도착지 근처
@@ -489,6 +490,8 @@ const statusText = computed(() => {
               </li>
             </ol>
           </template>
+          <!-- ③ 다음 칸이 예약(고정)이고 지하철·버스를 볼 때만: 시간이 많이 뜨면 한강버스 한 줄 (권할 게 없으면 안 보임) -->
+          <HangangBusOption v-if="destination.fixed && destination.time && position && (modeKey === 'subway' || modeKey === 'bus')" :from-lat="position.lat" :from-lng="position.lng" :to-lat="destination.lat" :to-lng="destination.lng" :arrive-by="destination.time" />
         </BottomSheet>
 
         <div class="cta cta--white">
