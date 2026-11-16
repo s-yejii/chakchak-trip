@@ -85,6 +85,7 @@ const nearPlaces = ref([]) // 근처 찾기 결과
 const askFound = ref(null) // AI에게 묻기로 찾은 결과 { places, band, ... } (없으면 null)
 const askPickedId = ref(null) // 지도에서 누른 AI 결과 장소 id
 const nearRadius = ref(null)
+const nearCenter = ref(null) // 원 중심 (없으면 지금 위치)
 const nearPickedId = ref(null)
 const mePoint = ref(null) // 지도 위 내 위치 px (AI 패널 위치에 씀)
 const isMapFailed = ref(false)
@@ -184,6 +185,7 @@ const pageRoute = useRoute()
 const SNOOZE_MS = 10 * 60 * 1000 // [10분 뒤 다시]
 let snoozeTimer = null
 const similarStop = ref(null) // 비슷한 근처 가게를 찾는 중인 놓친 칸 (지도에 핀으로)
+const similarNext = ref(null) // 그 칸 다음 고정 일정 { name, lat, lng } ("가는 길" 기준)
 // 시연 계정(11/09 주형): KTX는 "몇 분 늦어요" 대신 놓치는지로 말함. 다른 계정은 서버 문구 그대로
 function lateTitle(alert) {
   const fixedStatus = status.value && status.value.fixed
@@ -203,6 +205,13 @@ const isLostOpen = computed(() => {
   return manualLostId.value !== null || (!isAlertMuted.value && laterKey.value !== currentAlert.value.key)
 })
 const lostText = computed(() => (manualLostId.value ? '예약한 곳에 못 가게 됐나요?' : currentAlert.value.text))
+// 놓침 카드 한 줄: "13:05 도착 (35분 늦음)" (도착 예상이 예약 시각보다 늦을 때만, 11/16 ③)
+const lostArriveText = computed(() => {
+  const stop = lostStop.value
+  if (!stop || !stop.eta || !stop.time) return ''
+  const late = toMinutes(stop.eta) - toMinutes(stop.time)
+  return late > 0 ? stop.eta + ' 도착 (' + toDuration(late) + ' 늦음)' : ''
+})
 const isCardOpen = isLostOpen // 가운데 카드는 놓침 카드 하나뿐 (11/12)
 // 고른 카드가 아직 안 간 식당·카페 예약이면 "못 가게 됐어요" 버튼
 const selectedMealFixed = computed(() => stops.value.find((stop) => stop.id === selected.value && stop.fixed && stop.meal && stop.reach !== 'done' && stop.reach !== 'here') || null)
@@ -214,8 +223,18 @@ function openSimilar() {
   closeLost()
   asking.value = false
   info.value = null
-  similarStop.value = { id: stop.id, placeId: stop.placeId, name: stop.name }
+  similarStop.value = { id: stop.id, placeId: stop.placeId, name: stop.name, lat: stop.lat, lng: stop.lng }
+  similarNext.value = findNextFixed(stop)
   adding.value = true
+}
+
+// 놓친 칸 뒤의 첫 고정 일정 (비슷한 가게 "가는 길" 기준, 11/16 ③). 없으면 null → 현위치만
+function findNextFixed(lost) {
+  const index = stops.value.findIndex((stop) => stop.id === lost.id)
+  for (const stop of stops.value.slice(index + 1)) {
+    if (stop.fixed && stop.reach !== 'done' && stop.lat != null) return { name: stop.name, lat: stop.lat, lng: stop.lng }
+  }
+  return null
 }
 
 // 빼고 다음 장소로: 그 칸을 빼고 남은 일정을 당겨 다시 계산
@@ -729,15 +748,21 @@ function openNear() {
 function closeNear() {
   adding.value = false
   similarStop.value = null
+  similarNext.value = null
   nearPlaces.value = []
   nearRadius.value = null
+  nearCenter.value = null
   nearPickedId.value = null
 }
 function onNearResults(result) {
   nearPlaces.value = result.places
   nearRadius.value = result.radius
+  nearCenter.value = result.center || null // 비슷한 가게 "가는 길"이면 원 중심이 지금 위치가 아님
 }
-const nearRing = computed(() => (adding.value && nearRadius.value && live.position.value ? { ...live.position.value, radius: nearRadius.value } : null))
+const nearRing = computed(() => {
+  const center = nearCenter.value || live.position.value
+  return adding.value && nearRadius.value && center ? { lat: center.lat, lng: center.lng, radius: nearRadius.value } : null
+})
 const nearFitKey = computed(() => (nearPlaces.value.length ? nearPlaces.value.map((place) => place.id).join(',') + '|' + nearRadius.value : ''))
 const NEAR_MAP_PADDING = { top: 100, right: 40, bottom: 230, left: 40 } // 근처 찾기: 아래 검색 카드만큼 비움
 const PREVIEW_LEVEL = 3 // 카드를 눌러 볼 때 확대 단계 (겹친 핀이 벌어져 보이는 정도)
@@ -952,7 +977,7 @@ function finishTour() {
 
         <!-- 중요한 알림: 가운데 카드 (이게 떠 있으면 위쪽 배너는 안 띄움) -->
         <!-- 예약 놓침: 가운데 카드 (11/12) -->
-        <LostFixedCard v-if="isLostOpen" :name="lostStop.name" :text="lostText" :can-find-similar="!!lostStop.placeId && !!lostStop.meal" :is-skipping="isSkipping" @similar="openSimilar" @skip="skipLost" @keep="keepLost" />
+        <LostFixedCard v-if="isLostOpen" :name="lostStop.name" :text="lostText" :arrive-text="lostArriveText" :place-id="lostStop.placeId" :can-find-similar="!!lostStop.placeId && !!lostStop.meal" :is-skipping="isSkipping" @similar="openSimilar" @skip="skipLost" @keep="keepLost" />
         <!-- 위쪽 알림 줄: 한 장씩, 닫아야(위로 밀기) 다음 알림 · 저절로 안 사라짐 (11/08 주형) -->
         <AppNoti
           v-if="!isCardOpen && !isAskingEnd && liveBanner.queue.length && !adding"
@@ -1018,6 +1043,8 @@ function finishTour() {
           :trip-id="live.tripId.value"
           :position="live.position.value"
           :stop="similarStop"
+          :next-fixed="similarNext"
+          start-on-route
           @results="onNearResults"
           @added="onAdded"
           @close="closeNear"
