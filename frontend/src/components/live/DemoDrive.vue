@@ -120,6 +120,7 @@ async function moveToNext() {
   // 같은 건물·바로 옆(200m 안)은 길 이동 없이 걸어서 몇 분 (11/08 주형: 더현대 → 지하 1층 테디뵈르)
   const from = props.live.position.value || (current ? { lat: current.lat, lng: current.lng } : origin.value)
   if (current && !isNextDay && distanceMeters(current, next) < NEARBY_M) return walkInside(current, next)
+  if (current && !isNextDay && isBusDownStart(current)) return busDown(current, from) // 장면 2: 걸어서 내려갈 계획인데 순환버스로
 
   // 이동 시간: 실제 길찾기(상황 응답의 다음 경로), 없으면 거리로 어림
   await props.live.refresh()
@@ -227,6 +228,43 @@ async function showNotice(next, travelMin) {
     ? { key: 'drive-' + next.id, at: hhmm(appNow()), title: '지금 출발해야 해요', body: next.name + ' ' + next.time + ' 예약 · ' + move, warn: true }
     : { key: 'drive-' + next.id, at: hhmm(appNow()), title: '다음 ' + next.name + '(으)로 이동해요', body: move, warn: false })
   await wait(NOTICE_MS)
+}
+
+// 11/16 장면 2(주형 A안): 시나리오가 정한 칸(남산 팔각정)에서 처음 누르면, 걸어서 내려가는 대신 순환버스로 남산 아래까지 내려감
+//   걸어서 갈 계획이라 팔각정에서는 회식까지 여유가 적게 보이고, 버스로 빨리 내려오면 여유가 늘어남 → 그 자리에서 AI에게 카페 묻기
+function isBusDownStart(current) {
+  const setup = scenario.value
+  return !!setup && !!setup.busDownFrom && current.name === setup.busDownFrom && !isIncidentDone('busdown-' + current.id)
+}
+
+async function busDown(current, from) {
+  const setup = scenario.value
+  markIncidentDone('busdown-' + current.id)
+  const date = dateText(appNow())
+  const departMin = Math.max(minutesOf(appNow()), stayEndOf(current))
+  if (departMin > minutesOf(appNow())) await setClock(date, departMin)
+  showLiveNotice({ key: 'busdown-' + current.id, at: hhmm(appNow()), title: '순환버스로 내려가요', body: '걸어서 내려가는 대신 버스 · 약 ' + setup.busDownMin + '분', warn: false })
+  await wait(NOTICE_MS)
+  const path = [[from.lat, from.lng], [setup.busDownLat, setup.busDownLng]]
+  demoRoute.value = path
+  await wait(FOLLOW_START_MS)
+  for (let step = 1; step <= LEFT_STEP; step++) { // 처음 몇 걸음은 서버에도 보내 "팔각정에서 떠났다"를 알림 (일반 이동과 같음)
+    const [lat, lng] = pointAlong(path, step / MOVE_STEPS)
+    if (step >= LEFT_STEP - 1) await props.live.placeAt(lat, lng, false)
+    else props.live.showAt(lat, lng)
+    await wait(MOVE_MS / MOVE_STEPS)
+  }
+  await setSpeed(Math.max(1, Math.round((setup.busDownMin * 60 * 1000) / MOVE_MS)))
+  for (let step = LEFT_STEP + 1; step <= MOVE_STEPS; step++) {
+    const [lat, lng] = pointAlong(path, step / MOVE_STEPS)
+    props.live.showAt(lat, lng)
+    await wait(MOVE_MS / MOVE_STEPS)
+  }
+  demoRoute.value = null
+  await setSpeed(STAY_SPEED)
+  await setClock(date, departMin + setup.busDownMin)
+  await props.live.placeAt(setup.busDownLat, setup.busDownLng, true) // 장소 칸은 아니고 버스에서 내린 자리 (다음 [다음 장소로]는 여기서 출발)
+  await props.live.refresh()
 }
 
 // 도착: 시계를 정확히 도착 시각으로, 다시 실제 시간으로

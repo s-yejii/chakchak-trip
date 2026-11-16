@@ -55,6 +55,12 @@ public class DemoScenario {
     private static final int OVERSTAY_DAY = 2;          // 돌발: 2일차에
     private static final String OVERSTAY_NAME = STAY_NAME; // 11/12 돌발: 늦잠 → 숙소에서 나갈 시각이 지나도 그대로 → 스시도 지각 (앱은 이유를 모름)
     private static final int OVERSTAY_MIN = 0;          // 0 = 다음 예약(스시도) 도착 목표보다 늦어지는 순간까지 머묾 (그때 시계 멈춤)
+    // 11/16 장면 2(주형 A안): 팔각정 → 회식은 걸어서 내려갈 계획(여유가 적게 보임) → [다음 장소로]를 누르면 순환버스로 빨리 내려와 여유가 늘어남
+    private static final String BUS_DOWN_FROM = "남산 팔각정";
+    private static final String WALK_DOWN_TO = "산청숯불가든 을지로"; // 이 칸까지는 걸어서 가는 계획 (move_mode walk)
+    private static final double BUS_DOWN_LAT = 37.5605217984; // 버스에서 내리는 곳: 남산 아래 퇴계로(예전 예장공원 자리)
+    private static final double BUS_DOWN_LNG = 126.9888869118;
+    private static final int BUS_DOWN_MIN = 13;         // 순환버스로 내려오는 분
     private static final int OVERSTAY_LATE_MIN = 35;    // 11/16 대본: 늦잠 → 12:00 출발 → 스시도 13:05 도착 = 35분 늦음 (돌발은 이것 하나뿐)
     private static final String START_TIME = "11:30"; // 시연 계정은 1일차 이 시각부터 (종로3가역 모임, 11/12)
 
@@ -109,7 +115,11 @@ public class DemoScenario {
         response.setPeople(DEFAULT_PEOPLE); // 11/16 리허설: 대본은 다섯 명. 단계에서 인원을 안 바꿔도(기본 2명) 시연 일정은 늘 5명
         response.setTransports(new ArrayList<>(List.of("subway", "walk", "bus")));
         for (Object[] row : STOPS) {
-            response.getStops().add(toStop(row));
+            Stop stop = toStop(row);
+            if (WALK_DOWN_TO.equals(stop.getName())) {
+                stop.setMode("walk"); // 장면 2: 팔각정에서 걸어서 내려갈 계획 → 여유가 적게 보였다가 버스를 타면 늘어남
+            }
+            response.getStops().add(stop);
         }
         response.getNotes().add(makeNote("1일차 19:00 산청숯불가든 을지로 회식은 예약 시각 그대로 고정했어요"));
         response.getNotes().add(makeNote("2일차 12:30 스시도 점심 예약 시각을 고정했어요"));
@@ -158,6 +168,10 @@ public class DemoScenario {
         setup.setOverstayName(OVERSTAY_NAME);
         setup.setOverstayMin(OVERSTAY_MIN);
         setup.setOverstayLateMin(OVERSTAY_LATE_MIN);
+        setup.setBusDownFrom(BUS_DOWN_FROM);
+        setup.setBusDownLat(BUS_DOWN_LAT);
+        setup.setBusDownLng(BUS_DOWN_LNG);
+        setup.setBusDownMin(BUS_DOWN_MIN);
         setup.setRainDay(IS_RAIN_NOTICE_ON ? RAIN_DAY : null);
         setup.setRainFrom(RAIN_FROM);
         for (Object[] row : RAIN_DAY_STOPS) {
