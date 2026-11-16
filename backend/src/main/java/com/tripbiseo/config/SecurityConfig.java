@@ -4,6 +4,7 @@ import java.io.IOException;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -19,7 +20,7 @@ import jakarta.servlet.http.HttpServletResponse;
 
 /**
  * 스프링 시큐리티 설정 (Vue 화면용 JSON API + 세션 쿠키)
- *  로그인 없이 : 로그인·회원가입(/api/auth/**), 지도 키(/api/config/public), Swagger 화면
+ *  로그인 없이 : 로그인·회원가입(/api/auth/**), 지도 키(/api/config/public), 공유 일정 보기(GET /api/share/{code}), Swagger 화면
  *  그 밖       : 로그인 필요 → 401 {"message": "로그인이 필요해요."} (로그인 페이지로 튕기지 않음, 화면이 처리)
  */
 @Configuration
@@ -43,6 +44,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .dispatcherTypeMatchers(DispatcherType.FORWARD, DispatcherType.ERROR, DispatcherType.ASYNC).permitAll() // ASYNC: 진행 알림(SSE)이 끝날 때 서버 안에서 한 번 더 도는 요청 (첫 요청에서 이미 로그인 확인함, 11/04)
                 .requestMatchers(PUBLIC_URLS).permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/share/*").permitAll() // 공유 일정 보기만 (링크 만들기 POST는 로그인 필요, 11/16 ①)
                 .anyRequest().authenticated()
             )
             .exceptionHandling(e -> e
