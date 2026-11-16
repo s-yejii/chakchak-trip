@@ -347,6 +347,8 @@ public static class FacadePainter
     private static readonly Color32 NO_LIGHT = C(0, 0, 0);
     private const byte WINDOW_DEPTH = 60;        // 깊이 그림에서 창 자리 높이 (0 가장 깊음 ~ 255 벽 면)
     private const float GLASS_WALL_RATIO = 0.6f; // 칸의 60% 넘게 창이면 유리 빌딩으로 봄
+    private const float BIG_WINDOW_RATIO = 0.3f; // 창이 칸의 이만큼을 넘으면 큰 진열창으로 봄 (1층 가게)
+    private const float SHOP_LIGHT = 0.45f;      // 큰 진열창의 밤 불빛 세기 (1 = 보통 창과 같음)
     private const float OFFICE_LIGHT = 0.16f;    // 유리 빌딩 불빛 세기 (보통 창의 16%. 유리벽 전체가 빛나서 이 정도면 충분)
 
     // 벽 그림 한 칸을 4 × 4로 되풀이한 큰 그림 (낮 그림. NightLights와 칸 배치가 같아야 함)
@@ -368,7 +370,9 @@ public static class FacadePainter
     public static Texture2D NightLights(Texture2D cell, int seed, float litChance)
     {
         Color32[] source = cell.GetPixels32();
-        bool isGlassWall = CountWindowPixels(source) > source.Length * GLASS_WALL_RATIO; // 유리 빌딩 (벽 전체가 창)
+        int windowPixels = CountWindowPixels(source);
+        bool isGlassWall = windowPixels > source.Length * GLASS_WALL_RATIO; // 유리 빌딩 (벽 전체가 창)
+        bool isBigWindow = !isGlassWall && windowPixels > source.Length * BIG_WINDOW_RATIO; // 가게 진열창처럼 창이 칸의 큰 부분을 차지함
         int big = SIZE * NIGHT_REPEAT;
         Color32[] pixels = new Color32[big * big];
         for (int cellY = 0; cellY < NIGHT_REPEAT; cellY++)
@@ -380,6 +384,7 @@ public static class FacadePainter
                 bool isLit = dice < litChance;
                 Color32 light = dice < litChance * 0.3f ? COOL_LIGHT : WARM_LIGHT;
                 if (isGlassWall) light = Color32.Lerp(NO_LIGHT, COOL_LIGHT, OFFICE_LIGHT); // 유리벽 전체가 빛나면 너무 세서 약하게
+                if (isBigWindow) light = Color32.Lerp(NO_LIGHT, light, SHOP_LIGHT);        // 큰 진열창도 약하게 (걷는 눈높이에서 새하얀 네모로 번져 보였음)
                 PaintCellLights(source, pixels, big, cellX, cellY, isLit, light);
             }
         }

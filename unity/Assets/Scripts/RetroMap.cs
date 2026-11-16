@@ -27,6 +27,8 @@ public class RetroMap : MonoBehaviour
     private const float VEHICLE_LINE_WIDTH_M = 2.4f; // 버스·택시 구간 띠 폭
     private const float ROUTE_WIDTH_M = 1f;       // 걸은 경로 선 폭 (걷는 길 폭이 2m라, 넓으면 길을 다 덮음)
     private const float PIN_HEIGHT_M = 16f;       // 다녀온 곳 핀 높이
+    private const float LOTTE_BODY_M = 500f;      // 롯데월드타워 유리 몸통 높이
+    private const float LOTTE_BASE_M = 36f;       // 롯데월드타워 바닥 쪽 반지름
     private const float PIN_FOOT_GAP_M = 4f;      // 핀 기둥을 땅에서 이만큼 띄워서 시작 (걷는 눈높이에서 기둥이 화면 가운데를 막지 않게, 사람 키보다 위)
     private const float PIN_POLE_WIDTH_M = 0.25f; // 핀 기둥 굵기
     private const float BOAT_LINE_LIFT_M = 0.3f;  // 배가 지나간 물길 선을 물에서 띄우는 높이
@@ -134,7 +136,7 @@ public class RetroMap : MonoBehaviour
         Show("Props", props.BuildMesh(), new Material[] { Palette.Get("Props") });
         Show("BridgeLights", bridgeLights.BuildMesh(), new Material[] { LampMaterial() });
         ShowTrees(data, area, finder);
-        ShowLandmarks(data.landmarks);
+        ShowLandmarks(data.landmarks, finder);
         LoadPostResources();
         PostEffects.Apply(Camera.main, postResources);
         ShowSky(data); // 재질이 다 만들어진 뒤에 (밤 불빛 재질 목록을 하늘 시계에 넘겨야 해서)
@@ -227,7 +229,7 @@ public class RetroMap : MonoBehaviour
     }
 
     // 눈에 띄는 건물: 지금은 전망 타워 하나 (기둥 → 전망대 두 단 → 안테나를 유니티 기본 기둥으로 쌓음)
-    private void ShowLandmarks(LandmarkData[] landmarks)
+    private void ShowLandmarks(LandmarkData[] landmarks, BuildingFinder finder)
     {
         Transform old = transform.Find("Landmarks");
         if (old != null) DestroyImmediate(old.gameObject);
@@ -241,6 +243,7 @@ public class RetroMap : MonoBehaviour
             if (landmark.kind == 1)
             {
                 AddLotteTower(parent.transform, foot);
+                finder.AddTower(landmark.x, landmark.z, LOTTE_BASE_M, LOTTE_BODY_M); // 카메라가 타워 뒤에서 가린 줄 알게
                 continue;
             }
             // { 아래쪽 높이, 키, 반지름 } 순서. N서울타워를 본뜬 치수 (전체 약 236m)
@@ -260,26 +263,36 @@ public class RetroMap : MonoBehaviour
     private void AddLotteTower(Transform parent, Vector3 foot)
     {
         const int STEPS = 24;
-        const float BODY_M = 500f;  // 유리 몸통 높이 (그 위 55m는 왕관)
-        const float BASE_M = 36f;   // 바닥 쪽 반지름 (폭 약 72m)
+        const float BODY_M = LOTTE_BODY_M;  // 유리 몸통 높이 (그 위 55m는 왕관)
+        const float BASE_M = LOTTE_BASE_M;  // 바닥 쪽 반지름 (폭 약 72m)
         const float TOP_M = 12f;    // 몸통 꼭대기 반지름
+        const float BAND_M = 1.5f;  // 단 사이에 두르는 어두운 띠의 높이
+        Color GLASS_LOW = new Color(0.58f, 0.72f, 0.82f);  // 아래쪽 유리 색 (그늘진 면은 훨씬 어둡게 나와서 밝게 잡음)
+        Color GLASS_HIGH = new Color(0.84f, 0.92f, 0.97f); // 꼭대기 쪽 유리 색
+        Color GLASS_BAND = new Color(0.40f, 0.52f, 0.62f); // 단 사이 띠
         PropMaker tower = new PropMaker();
         for (int i = 0; i < STEPS; i++)
         {
             float rate = Mathf.Pow((i + 0.5f) / STEPS, 1.4f); // 아래는 천천히, 위로 갈수록 빨리 좁아짐 (붓 끝 같은 모양)
-            tower.AddPrism(Octagon(Mathf.Lerp(BASE_M, TOP_M, rate)), BODY_M * i / STEPS, BODY_M * (i + 1) / STEPS, Color.white);
+            float radius = Mathf.Lerp(BASE_M, TOP_M, rate);
+            float bottom = BODY_M * i / STEPS;
+            float top = BODY_M * (i + 1) / STEPS;
+            // 유리 색: 아래는 짙은 푸른 회색, 위로 갈수록 옅게 (하늘이 비친 느낌). 단 사이에는 어두운 띠를 둘러 층이 보이게
+            //   전에는 전부 흰색이라 가까이서 보면 흰 기둥이었음
+            tower.AddPrism(Octagon(radius), bottom, top - BAND_M, Color.Lerp(GLASS_LOW, GLASS_HIGH, (float)i / STEPS));
+            tower.AddPrism(Octagon(radius + 0.4f), top - BAND_M, top, GLASS_BAND);
         }
         for (int k = 0; k < 4; k++) // 왕관: 네 모서리에서 솟은 가는 날
         {
             float angle = (45 + k * 90) * Mathf.Deg2Rad;
             Vector3 at = new Vector3(Mathf.Cos(angle), 0, Mathf.Sin(angle)) * (TOP_M - 2);
-            tower.AddBox(at + Vector3.up * (BODY_M + 27), new Vector3(3, 55, 3), 45 + k * 90, Color.white);
+            tower.AddBox(at + Vector3.up * (BODY_M + 27), new Vector3(3, 55, 3), 45 + k * 90, GLASS_HIGH);
         }
         GameObject item = new GameObject("Lotte World Tower");
         item.transform.SetParent(parent, false);
         item.transform.position = foot;
         item.AddComponent<MeshFilter>().sharedMesh = tower.BuildMesh();
-        item.AddComponent<MeshRenderer>().sharedMaterial = GlowMaterial("Glass", new Color(0.75f, 0.85f, 1f)); // 밤에 탑 전체가 은은하게 빛남
+        item.AddComponent<MeshRenderer>().sharedMaterial = Palette.Get("Props"); // 꼭짓점 색으로 칠하는 재질 (단마다 색이 달라서. 유리 재질은 꼭짓점 색을 안 봐서 흰 기둥으로 나왔음)
     }
 
     // 반지름 radius인 팔각형 (위에서 본 모양)
