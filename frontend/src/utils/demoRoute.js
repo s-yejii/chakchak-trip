@@ -9,3 +9,7 @@ export const demoRoute = ref(null)
 // 시연 한강버스 타는 동안 여행 중 화면 맨 위 줄 (11/17 주형, ④ 예지 OK)
 // 서버 계산 "다음 OO까지 대중교통 45분" 대신 "한강버스 타는 중 · 잠실 14:03 도착"을 보여 줘요. 값: { cap, big, strong } 또는 null
 export const demoRide = ref(null)
+
+// 출발 전 한강버스 카드(여행 중 화면)가 계산 중이거나 떠 있는지 (11/17 주형: 카드를 고르기 전에 [다음 장소로]로 그냥 떠나던 문제)
+// HangangBusOption(출발 전 모양)이 켜고 끔. DemoDrive는 이게 true면 출발 안 함
+export const boatPending = ref(false)
