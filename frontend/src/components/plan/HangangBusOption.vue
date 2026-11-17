@@ -18,15 +18,23 @@ const props = defineProps({
   toLat: { type: Number, required: true },
   toLng: { type: Number, required: true },
   arriveBy: { type: String, required: true }, // 예약 시각 "15:00"
+  beforeLeave: { type: Boolean, default: false }, // 11/17: 여행 중 화면에서 출발 전에 먼저 묻는 모양 ("딱 맞게 도착해요" + [그냥 지하철])
 })
 
 const option = ref(null)
+const emit = defineEmits(['skip']) // [그냥 지하철]: 이 카드 닫기 (여행 중 화면)
 const router = useRouter()
 
 // 시연 계정(가짜 GPS)만: [배 타고 갈게요] → 여행 중 화면에서 숙소 → 선착장 → 배 → 버스로 움직여요 (DemoDrive). 일반 계정은 버튼 없음
 function rideDemo() {
   sendCommand({ type: 'hangang', option: option.value })
   router.push('/live')
+}
+
+// [배 타고 갈게요]: 시연 계정은 가짜 GPS로 배 타고 이동, 일반 계정은 길 안내로 (배·선착장 길 보기)
+function ride() {
+  if (isFakeGps()) rideDemo()
+  else router.push('/live/route')
 }
 
 async function load() {
@@ -61,10 +69,14 @@ function earlyMin(item) {
 
 <template>
   <section v-if="option" class="hb-option" aria-label="한강버스로 가는 방법">
-    <b class="hb-option__title"><span aria-hidden="true">⛴</span> 한강버스로 가요</b>
+    <b class="hb-option__title"><span aria-hidden="true">⛴</span> {{ beforeLeave ? '한강버스로 가면 딱 맞게 도착해요' : '한강버스로 가요' }}</b>
     <span class="tn">{{ leaveTime(option) }} 출발 · 배 {{ option.boardAt }} → {{ option.alightPier }} {{ option.alightAt }}</span>
     <span class="tn">{{ arriveTime(option) }} 도착 · 예약 {{ earlyMin(option) }}분 전</span>
-    <button v-if="isFakeGps()" type="button" class="btn btn--secondary btn--sm" @click="rideDemo">⛴ 배 타고 갈게요</button>
+    <div v-if="beforeLeave" class="hb-option__actions">
+      <button type="button" class="btn btn--primary btn--sm" @click="ride">⛴ 배 타고 갈게요</button>
+      <button type="button" class="btn btn--secondary btn--sm" @click="emit('skip')">그냥 지하철</button>
+    </div>
+    <button v-else-if="isFakeGps()" type="button" class="btn btn--secondary btn--sm" @click="rideDemo">⛴ 배 타고 갈게요</button>
     <p class="t-cap tn hb-option__sub">지하철은 {{ option.directArriveAt }} 도착, {{ toDuration(option.directWaitMin) }} 기다려요</p>
   </section>
 </template>
@@ -73,4 +85,6 @@ function earlyMin(item) {
 .hb-option{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--radius-md);background:var(--surface-raised)}
 .hb-option__title{font-weight:700}
 .hb-option__sub{margin:0}
+.hb-option__actions{display:flex;gap:8px}
+.hb-option__actions .btn{flex:1}
 </style>
