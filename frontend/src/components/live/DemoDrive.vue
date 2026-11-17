@@ -42,7 +42,8 @@ const isBusy = ref(false)
 const replan = useReplanStore()
 const router = useRouter()
 const MUTE_AGAIN_MIN = 10 // 여행 중 화면 MUTE_AGAIN_MIN과 같음
-const TIGHT_SLACK_MIN = 3 // 11/17: 5 → 3 (카페를 예약 5분 전 도착에 맞춰 넣으면 여유 5분이라 멈추지 않게) · 예약까지 여유가 이 이하면 돌발 (서버 "지금 나가지 않으면 늦어요"와 같은 기준)
+const TIGHT_SLACK_MIN = 5 // 예약까지 여유가 이 이하면 돌발 (서버 "지금 나가지 않으면 늦어요"와 같은 기준)
+const CAFE_KEEP_MIN = 5 // 카페를 예약에 맞춰 넣을 때 예약 이만큼 전 도착 (서버 CafeStay.KEEP_SLACK_MIN과 같음, 11/17)
 const origin = ref(null) // 시나리오 출발지 (가마산로 242)
 const scenario = ref(null) // 시연 시나리오 (조금 더 머무는 곳 등)
 let wanderTimer = null
@@ -169,7 +170,9 @@ async function moveToNext() {
   }
   // 떠난 뒤 다시 계산해서 예약에 늦게 되면 그 자리에서 멈춤 (시계도 멈춤) → 카드에서 고른 뒤 다시 [다음 장소로] (11/09 주형: 시간도 공간도 stop)
   const after = props.live.status.value
-  const isNowTight = next.fixed && after && after.fixed && after.fixed.slackMin <= TIGHT_SLACK_MIN && !replan.isMutedFor(props.live.tripId.value, after.fixed.name, Math.max(0, -after.fixed.slackMin))
+  // 11/17: 예약에 맞춰 넣은 카페(서버 CafeStay: 예약 5분 전 도착)에서 떠나는 거면 여유 5분도 계획대로라 안 멈춤
+  const isFittedCafe = isCafeStop(current) && after && after.fixed && after.fixed.slackMin >= CAFE_KEEP_MIN
+  const isNowTight = next.fixed && after && after.fixed && after.fixed.slackMin <= TIGHT_SLACK_MIN && !isFittedCafe && !replan.isMutedFor(props.live.tripId.value, after.fixed.name, Math.max(0, -after.fixed.slackMin))
   if (isIncident(after) || isNowTight) {
     blockedKey = after.alert ? after.alert.key : blockedKey
     demoRoute.value = null // 멈추면 서버가 지금 자리에서 다시 잰 길을 보여 줌
@@ -196,6 +199,10 @@ function isIncident(status) {
   const lateMin = Math.max(0, -status.fixed.slackMin)
   return !replan.isMutedFor(props.live.tripId.value, status.fixed.name, lateMin)
 }
+/** 카페·디저트·베이커리 칸인지 (서버 CafeStay.isCafe와 같은 글자) */
+function isCafeStop(stop) {
+  return !!stop && /카페|디저트|베이커리/.test(stop.category || '')
+}
 // 출발 안내와 같은 계산(planDeparture)으로 여유 5분 이하면 막음. 대안을 골랐거나 그냥 가기로 한 늦음(10분 더 늦기 전), 카드에서 [나중에] 뒤 다시 누름은 통과
 async function isBlocked(plan, status) {
   // 늦음(가운데 카드)인데 아직 대안도 "그냥 갈게요"도 안 골랐으면 [나중에] 뒤라도 떠나지 않음 → 늦음 화면으로
@@ -207,6 +214,7 @@ async function isBlocked(plan, status) {
     return true
   }
   if (!plan.isTight) return false
+  if (isCafeStop(currentStop()) && plan.slack >= CAFE_KEEP_MIN) return false // 예약에 맞춰 넣은 카페에서 떠남 (11/17)
   const fixedName = status && status.fixed ? status.fixed.name : ''
   if (replan.isMutedFor(props.live.tripId.value, fixedName, Math.max(0, -plan.slack))) return false
   const key = status && status.alert && /^late-/.test(status.alert.key || '') ? status.alert.key : 'tight-' + plan.departMin
