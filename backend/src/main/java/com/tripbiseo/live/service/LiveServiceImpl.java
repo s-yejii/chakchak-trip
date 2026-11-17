@@ -178,7 +178,7 @@ public class LiveServiceImpl implements LiveService {
         List<Stop> plan = makeInsertPlan(todayStops, current, newStop, request.getReplaceStopId(), request.getAfterStopId());
         plan = alternativeCalculator.copyStops(plan); // 원본을 고치지 않게 복사본으로 계산
         Alternative result = alternativeCalculator.calculate(trip, current, plan, request.getLat(), request.getLng());
-        if (stretchCafe(plan, result, place.getId())) { // 여유가 많으면 카페에 더 머묾 (11/17, AI 카드와 같은 규칙)
+        if (CafeStay.fitNewCafe(plan, liveStopFinder.findFixedStop(plan, null), result.getSlackMin())) { // 카페는 다음 예약 5분 전 도착에 맞춰 머묾 (11/17, AI 카드와 같은 계산)
             result = alternativeCalculator.calculate(trip, current, plan, request.getLat(), request.getLng());
         }
         String shortened = shortenBeforeFixed(plan, result);
@@ -398,7 +398,7 @@ public class LiveServiceImpl implements LiveService {
         return recommend;
     }
 
-    /** 카페·디저트·베이커리면 30분(넣을 때 여유가 많으면 stretchCafe가 늘림), 아니면 60분 */
+    /** 카페·디저트·베이커리면 30분(넣을 때 다음 예약에 맞춰 CafeStay.fitNewCafe가 바꿈), 아니면 60분 */
     private int getStay(String category) {
         return CafeStay.isCafe(category) ? CAFE_STAY_MIN : OTHER_STAY_MIN;
     }
@@ -431,30 +431,6 @@ public class LiveServiceImpl implements LiveService {
         }
         newStop.setFixed(true);
         newStop.setTime(reservedTime);
-    }
-
-    /**
-     * 새로 넣은 카페 칸을 여유에 맞게 늘림 (CafeStay 규칙: 30분 머물고 남는 여유로 예약 15분 전까지, 최대 60분).
-     * 다음 예약(고정 칸)이 새 칸 뒤에 있을 때만. 늘렸으면 true (다시 계산해야 함)
-     */
-    private boolean stretchCafe(List<Stop> plan, Alternative result, String placeId) {
-        Stop fixedStop = liveStopFinder.findFixedStop(plan, null);
-        Stop newStop = null;
-        for (Stop stop : plan) {
-            if (stop.getId() == null && placeId.equals(stop.getPlaceId())) {
-                newStop = stop;
-            }
-        }
-        if (newStop == null || fixedStop == null || !CafeStay.isCafe(newStop.getCategory())
-                || Boolean.TRUE.equals(newStop.getFixed()) || plan.indexOf(newStop) > plan.indexOf(fixedStop)) {
-            return false;
-        }
-        int extra = CafeStay.extraMinutes(result.getSlackMin());
-        if (extra <= 0) {
-            return false;
-        }
-        newStop.setStay(newStop.getStay() + extra);
-        return true;
     }
 
     /** 고정 일정에 늦으면 그 바로 앞 칸(고정 아님)의 머묾을 최대 절반까지 줄임. 줄였으면 그 칸 이름, 아니면 null */

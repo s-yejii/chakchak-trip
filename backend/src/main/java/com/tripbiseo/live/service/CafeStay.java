@@ -1,17 +1,23 @@
 package com.tripbiseo.live.service;
 
+import java.util.List;
+
+import com.tripbiseo.trip.dto.Stop;
+
 /**
- * 여행 중 들르는 카페 머무는 시간 (11/17 ③ 주형 결정, ④ 예지 OK).
- * AI 카드("들러도 여유"), [일정에 넣기]·비슷한 가게 담기, 링크로 넣기가 모두 이 규칙을 같이 써서
- * 카드에서 본 여유와 넣은 뒤 여유가 같아요.
- *   기본 30분. 30분 머물고도 다음 예약(고정 칸)까지 여유가 많으면 예약 15분 전 도착까지 더 머묾 (최대 60분)
- *   예) 여유 43분 → 30분(여유 13분) · 여유 2시간 → 60분(남는 시간은 여유) · 다음 예약 없음 → 30분
+ * 여행 중 다음 예약(고정 칸) 앞에 들르는 카페 머무는 시간 (11/17 ③ 주형 결정, ④ 예지 OK).
+ * AI 카드("N분 쉬었다 가면 돼요"), [일정에 넣기]·비슷한 가게 담기·넣기 미리보기가 모두 이 계산을 같이 써요.
+ *   머묾 = 예약 5분 전 도착에 맞춰 남는 시간 (= 예약 시각 − 5분 − 카페→예약지 이동 − 카페 도착 시각), 최대 60분
+ *   15분도 안 되면 권하지 않음 ("들르면 빠듯해요"). 다음 예약이 없으면 기본 30분
+ *   계산은 "30분 머물렀을 때 남는 여유"(slackAfterBase)로: 머묾 = 30 + 여유 − 5
+ *   예) 30분 머물고 여유 13분 → 38분 · 여유 −1분 → 24분 · 여유 2시간 → 60분 · 여유 −12분 → 13분이라 안 권함
  */
 final class CafeStay {
 
-    static final int BASE_MIN = 30;       // 카페 기본 머묾
+    static final int BASE_MIN = 30;       // 다음 예약이 없을 때 머묾, 그리고 여유를 잴 때 기준
+    static final int MIN_MIN = 15;        // 이보다 짧게밖에 못 있으면 권하지 않음
     static final int MAX_MIN = 60;        // 여유가 많아도 이보다 오래는 안 머묾
-    static final int KEEP_SLACK_MIN = 15; // 늘려도 다음 예약 이만큼 전에는 도착
+    static final int KEEP_SLACK_MIN = 5;  // 다음 예약에 이만큼 먼저 도착
 
     private CafeStay() {}
 
@@ -20,11 +26,37 @@ final class CafeStay {
         return category != null && (category.contains("카페") || category.contains("디저트") || category.contains("베이커리"));
     }
 
-    /** 30분 머물렀을 때 남는 여유(분)로 더 머물 분. 다음 예약이 없으면(null) 0 */
-    static int extraMinutes(Integer slackAfterBase) {
-        if (slackAfterBase == null || slackAfterBase <= KEEP_SLACK_MIN) {
-            return 0;
+    /** 머무는 분. 다음 예약이 없으면(null) 30분. 15분도 못 있으면 null (권하지 않음) */
+    static Integer stayMinutes(Integer slackAfterBase) {
+        if (slackAfterBase == null) {
+            return BASE_MIN;
         }
-        return Math.min(MAX_MIN - BASE_MIN, slackAfterBase - KEEP_SLACK_MIN);
+        int stay = BASE_MIN + slackAfterBase - KEEP_SLACK_MIN;
+        if (stay < MIN_MIN) {
+            return null;
+        }
+        return Math.min(MAX_MIN, stay);
+    }
+
+    /**
+     * 새로 넣는 카페 칸(id 없음)이 다음 예약(fixedStop) 앞에 있으면 머무는 시간을 예약에 맞춤.
+     * slackMin = 지금 머무는 시간으로 계산한 예약 여유. 바꿨으면 true (다시 계산해야 함)
+     */
+    static boolean fitNewCafe(List<Stop> plan, Stop fixedStop, int slackMin) {
+        Stop newStop = null;
+        for (Stop stop : plan) {
+            if (stop.getId() == null && !Boolean.TRUE.equals(stop.getFixed()) && isCafe(stop.getCategory())) {
+                newStop = stop;
+            }
+        }
+        if (newStop == null || fixedStop == null || newStop.getStay() == null || plan.indexOf(newStop) > plan.indexOf(fixedStop)) {
+            return false;
+        }
+        Integer stay = stayMinutes(slackMin + newStop.getStay() - BASE_MIN);
+        if (stay == null || stay.equals(newStop.getStay())) {
+            return false;
+        }
+        newStop.setStay(stay);
+        return true;
     }
 }

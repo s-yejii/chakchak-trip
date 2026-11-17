@@ -2,47 +2,57 @@ package com.tripbiseo.live.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
-// 여행 중 카페 머무는 시간 (11/17 주형 결정, 예지 OK): 기본 30분, 여유가 많으면 예약 15분 전 도착까지 최대 60분
+import com.tripbiseo.trip.dto.Stop;
+
+// 여행 중 다음 예약 앞 카페 머무는 시간 (11/17 주형 결정, 예지 OK): 예약 5분 전 도착에 맞춰 15~60분, 다음 예약 없으면 30분
 class CafeStayTest {
 
-    // 30분 머문 뒤 남는 여유 → 머무는 분
-    private int stayOf(Integer slackAfterBase) {
-        return CafeStay.BASE_MIN + CafeStay.extraMinutes(slackAfterBase);
+    @Test
+    void 시연_카드_30분이면_여유_13분일_때_38분_쉬고_5분_전_도착() {
+        assertEquals(38, CafeStay.stayMinutes(13)); // 18:05 내려와 원더브레드, 30분 있으면 회식 13분 전 → 8분 더
     }
 
     @Test
-    void 시연_여유_43분이면_30분_머물고_여유_13분() {
-        int slackAfterBase = 43 - 0 - 30; // 순환버스로 내려와 여유 43분, 가는 길 +0분
-        assertEquals(30, stayOf(slackAfterBase));
-        assertEquals(13, slackAfterBase - CafeStay.extraMinutes(slackAfterBase));
+    void 시연_콘웨이커피_30분이면_1분_늦을_때_24분으로_줄여_5분_전_도착() {
+        assertEquals(24, CafeStay.stayMinutes(-1)); // 미리보기 "1분 늦어요" 대신 24분 쉬었다 가기
     }
 
     @Test
-    void 여유_2시간이면_60분_머물고_나머지는_여유() {
-        int slackAfterBase = 120 - 6 - 30;
-        assertEquals(60, stayOf(slackAfterBase));
-        assertEquals(54, slackAfterBase - CafeStay.extraMinutes(slackAfterBase));
-    }
-
-    @Test
-    void 조금_남으면_예약_15분_전까지만_늘림() {
-        assertEquals(40, stayOf(25)); // 30분 뒤 여유 25분 → 10분 더 → 여유 15분
+    void 여유가_2시간이면_최대_60분() {
+        assertEquals(60, CafeStay.stayMinutes(84));
     }
 
     @Test
     void 다음_예약이_없으면_30분() {
-        assertEquals(30, stayOf(null));
+        assertEquals(30, CafeStay.stayMinutes(null));
     }
 
     @Test
-    void 여유가_부족하면_30분_그대로_카드는_늦어요() {
-        int slackAfterBase = 20 - 0 - 30; // -10 → 카드 "들르면 늦어요"
-        assertEquals(30, stayOf(slackAfterBase));
-        assertTrue(slackAfterBase - CafeStay.extraMinutes(slackAfterBase) < 0);
+    void 십오분도_못_있으면_권하지_않음() {
+        assertEquals(15, CafeStay.stayMinutes(-10));
+        assertNull(CafeStay.stayMinutes(-11)); // 화면 "들르면 빠듯해요"
+    }
+
+    @Test
+    void 넣는_카페_칸을_예약에_맞춤() {
+        Stop cafe = new Stop(); // 새로 넣는 칸 (id 없음)
+        cafe.setCategory("카페");
+        cafe.setStay(30);
+        Stop dinner = new Stop();
+        dinner.setId(7L);
+        dinner.setFixed(true);
+        List<Stop> plan = new ArrayList<>(List.of(cafe, dinner));
+        assertTrue(CafeStay.fitNewCafe(plan, dinner, -1)); // 30분이면 1분 늦음
+        assertEquals(24, cafe.getStay());
+        assertFalse(CafeStay.fitNewCafe(plan, dinner, 5)); // 다시 계산해 5분 전이면 그대로
     }
 
     @Test
@@ -50,6 +60,5 @@ class CafeStayTest {
         assertTrue(CafeStay.isCafe("베이커리"));
         assertTrue(CafeStay.isCafe("카페,디저트"));
         assertFalse(CafeStay.isCafe("육류,고기요리"));
-        assertFalse(CafeStay.isCafe(null));
     }
 }

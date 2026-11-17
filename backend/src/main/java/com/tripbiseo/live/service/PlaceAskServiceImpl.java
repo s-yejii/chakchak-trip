@@ -289,11 +289,19 @@ public class PlaceAskServiceImpl implements PlaceAskService {
         return new ArrayList<>(places.subList(0, count));
     }
 
-    /** 카드에 머무는 시간·여유: 카페는 [일정에 넣기]와 같은 CafeStay 규칙 (여유가 많으면 최대 60분까지 늘리고 그만큼 여유를 줄여 보여 줌) */
+    /**
+     * 카드에 머무는 시간·여유. 카페는 [일정에 넣기]와 같은 CafeStay 계산 (다음 예약 5분 전 도착에 맞춰 머묾, 최대 60분)
+     * → 화면 "N분 쉬었다 가면 돼요". 15분도 못 있으면 stayMinutes null (화면 "들르면 빠듯해요"). 카페 아닌 곳은 30분 기준 그대로
+     */
     private void setStayAndSlack(AskedPlace place, Integer slackAfterBase) {
-        int extra = CafeStay.isCafe(place.getCategory()) ? CafeStay.extraMinutes(slackAfterBase) : 0;
-        place.setStayMinutes(STAY_MINUTES + extra);
-        place.setSlackAfter(slackAfterBase == null ? null : slackAfterBase - extra);
+        if (!CafeStay.isCafe(place.getCategory()) || slackAfterBase == null) {
+            place.setStayMinutes(STAY_MINUTES);
+            place.setSlackAfter(slackAfterBase);
+            return;
+        }
+        Integer stay = CafeStay.stayMinutes(slackAfterBase);
+        place.setStayMinutes(stay);
+        place.setSlackAfter(stay == null ? slackAfterBase : slackAfterBase + STAY_MINUTES - stay);
     }
 
     /** 들르고 남는 여유 = 지금 여유 − (돌아가는 분 + 머무는 분). 여유나 돌아가는 분을 모르면 null */
