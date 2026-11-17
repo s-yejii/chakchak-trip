@@ -213,8 +213,12 @@ function resetLiveTour() {
   }
 }
 
+// DemoDrive가 돌발(늦잠·순환버스 등)을 한 번만 띄우려고 브라우저에 적어 두는 기록 (11/17: [시연 준비]가 안 지워서 두 번째 판엔 늦잠이 안 떴어요)
+export const INCIDENT_STORE_KEY = 'demo-incident-done'
+
 export async function prepareDemo() {
   clearLiveNotices()
+  try { sessionStorage.removeItem(INCIDENT_STORE_KEY) } catch (e) { /* 지우지 못해도 진행 */ }
   resetLiveTour() // 11/16: [시연 준비] 뒤 여행 중 화면을 처음 열 때 ④ 첫 안내(튜토리얼)가 한 번 다시 뜨게
   const trips = await getTripList()
   for (const trip of trips) {
