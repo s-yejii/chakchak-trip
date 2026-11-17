@@ -233,10 +233,14 @@ function distanceOf(place) {
 function infoText(place) {
   if (place.detourMinutes == null) return '지금 위치에서 ' + distText(distanceOf(place))
   let text = '가는 길 +' + toDuration(place.detourMinutes) + (place.isEstimate ? ' (어림)' : '')
-  // 11/17: 카페는 여유가 많으면 더 머물러요(CafeStay) → 늘었을 때만 머무는 시간을 같이 ("1시간 쉬어도 여유 54분")
-  const stayText = place.stayMinutes && place.stayMinutes > 30 ? toDuration(place.stayMinutes) + ' 쉬어도' : '들러도'
-  if (place.slackAfter != null) text += place.slackAfter >= 0 ? ' · ' + stayText + ' 여유 ' + toDuration(place.slackAfter) : ' · 들르면 늦어요'
+  // 11/17: 카페는 다음 예약 5분 전 도착에 맞춰 머무는 시간을 서버가 정해요(CafeStay) → "24분 쉬었다 가면 돼요"
+  if (place.slackAfter != null && isCafe(place)) text += place.stayMinutes ? ' · ' + toDuration(place.stayMinutes) + ' 쉬었다 가면 돼요' : ' · 들르면 빠듯해요'
+  else if (place.slackAfter != null) text += place.slackAfter >= 0 ? ' · 들러도 여유 ' + toDuration(place.slackAfter) : ' · 들르면 늦어요'
   return text
+}
+/** 카페·디저트·베이커리인지 (서버 CafeStay.isCafe와 같은 글자) */
+function isCafe(place) {
+  return /카페|디저트|베이커리/.test(place.category || '')
 }
 function isLate(place) {
   return place.slackAfter != null && place.slackAfter < 0
