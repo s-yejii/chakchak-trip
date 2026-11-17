@@ -46,7 +46,7 @@ public class PlaceAskServiceImpl implements PlaceAskService {
 
     private static final Logger log = LoggerFactory.getLogger(PlaceAskServiceImpl.class); // 왜 못 찾았는지 남김 (좌표·질문 원문은 안 남김)
 
-    private static final int STAY_MINUTES = 30;  // 들르면 머무는 시간(분). 프롬프트 규칙과 같음
+    private static final int STAY_MINUTES = CafeStay.BASE_MIN; // 들르면 머무는 시간(분) 30. 프롬프트 규칙과 같음. 카페는 여유가 많으면 CafeStay 규칙으로 늘림 (11/17)
     private static final int BAND_METERS = 190;  // 지도 띠 폭: 가는 길 양옆 190m = 걸어서 왕복 약 5분
     private static final String ROUTE = "route";
     private static final String ME = "me";
@@ -275,7 +275,7 @@ public class PlaceAskServiceImpl implements PlaceAskService {
                 place.setCloseAt(open.getCloseAt());
                 place.setClosingSoon(open.getClosingSoon());
             }
-            place.setSlackAfter(getSlackAfter(slack, place.getDetourMinutes()));
+            setStayAndSlack(place, getSlackAfter(slack, place.getDetourMinutes()));
             openPlaces.add(place);
         }
         return openPlaces;
@@ -287,6 +287,13 @@ public class PlaceAskServiceImpl implements PlaceAskService {
             return places;
         }
         return new ArrayList<>(places.subList(0, count));
+    }
+
+    /** 카드에 머무는 시간·여유: 카페는 [일정에 넣기]와 같은 CafeStay 규칙 (여유가 많으면 최대 60분까지 늘리고 그만큼 여유를 줄여 보여 줌) */
+    private void setStayAndSlack(AskedPlace place, Integer slackAfterBase) {
+        int extra = CafeStay.isCafe(place.getCategory()) ? CafeStay.extraMinutes(slackAfterBase) : 0;
+        place.setStayMinutes(STAY_MINUTES + extra);
+        place.setSlackAfter(slackAfterBase == null ? null : slackAfterBase - extra);
     }
 
     /** 들르고 남는 여유 = 지금 여유 − (돌아가는 분 + 머무는 분). 여유나 돌아가는 분을 모르면 null */
