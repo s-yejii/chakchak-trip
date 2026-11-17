@@ -75,6 +75,15 @@ const pickedDistText = computed(() => {
   return props.nextFixed.name + ' 가는 길 · ' + distText(meters)
 })
 
+// 가는 길 1등 칸 이유 한 줄: "리뷰 2,064개 · ★4.92 · 가는 길에서 0.5km만 돌아가요"
+function bestReason(place) {
+  const parts = []
+  if (place.reviewCount) parts.push('리뷰 ' + place.reviewCount.toLocaleString() + '개')
+  if (place.rating != null) parts.push('★' + place.rating)
+  if (place.detour != null) parts.push('가는 길에서 ' + distText(Math.max(0, place.detour)) + '만 돌아가요')
+  return parts.join(' · ')
+}
+
 // 기준 칩: 현위치 ↔ 가는 길
 function pickBasis(onRoute) {
   if (isOnRoute.value === onRoute) return
@@ -95,7 +104,7 @@ async function search(meters, center = props.position) {
   isLoading.value = true
   error.value = ''
   try {
-    const res = await askRecommend(props.tripId, center.lat, center.lng, meters, null, [], props.stop.placeId, isOnRoute.value)
+    const res = await askRecommend(props.tripId, center.lat, center.lng, meters, null, [], props.stop.placeId, isOnRoute.value ? props.nextFixed : null)
     places.value = res.places
     closedSkipped.value = res.closedSkipped
   } catch (e) {
@@ -193,12 +202,14 @@ async function addPicked() {
           <template v-else-if="places.length"><i class="ic ic--s i-pin c-navy" aria-hidden="true"></i>{{ places.length }}곳 · 지도에서 핀을 눌러 보세요<template v-if="closedSkipped"> · 지금 문 닫은 {{ closedSkipped }}곳은 뺐어요</template></template>
           <template v-else><i class="ic ic--s i-info" aria-hidden="true"></i>이 반경엔 비슷한 가게가 없어요 · 더 넓게 찾아보세요</template>
         </p>
-        <!-- 11/17 ③: 가는 길이면 평점 순 이름 목록 (누르면 지도 핀을 누른 것과 같아요) -->
+        <!-- 11/17 ③: 가는 길이면 이름 목록 (서버 순서 = 평점 4.9·리뷰 1000개 넘는 곳 중 덜 돌아가는 순). 누르면 지도 핀을 누른 것과 같아요 -->
         <ol v-if="isOnRoute && !isLoading && places.length" class="lp-names">
-          <li v-for="place in places" :key="place.id">
+          <li v-for="(place, index) in places" :key="place.id">
             <button type="button" class="lp-names__item tn" @click="emit('update:pickedId', place.id)">
-              <span>{{ place.name }}</span><span v-if="place.rating != null" class="lp-names__rate"><i class="ic ic--s i-star c-warning" aria-hidden="true"></i>{{ place.rating }}</span>
+              <span class="lp-names__name"><span v-if="index === 0" class="badge badge--success">추천</span>{{ place.name }}</span>
+              <span v-if="place.rating != null" class="lp-names__rate"><i class="ic ic--s i-star c-warning" aria-hidden="true"></i>{{ place.rating }}</span>
             </button>
+            <p v-if="index === 0" class="lp-names__why t-cap tn">{{ bestReason(place) }}</p>
           </li>
         </ol>
       </template>
@@ -213,4 +224,6 @@ async function addPicked() {
 .lp-names{display:flex;flex-direction:column;gap:2px;margin:0;padding:0;list-style:none}
 .lp-names__item{display:flex;justify-content:space-between;gap:8px;width:100%;padding:6px 4px;border:0;border-bottom:1px solid var(--line);background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
 .lp-names__rate{display:inline-flex;align-items:center;gap:2px;white-space:nowrap}
+.lp-names__name{display:inline-flex;align-items:center;gap:6px;min-width:0}
+.lp-names__why{margin:2px 4px 4px;color:var(--ink-muted)}
 </style>
