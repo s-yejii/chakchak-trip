@@ -1318,7 +1318,7 @@ key 끝의 숫자가 바뀔 때만 화면이 같은 알림을 다시 띄워요.
 | sql | string | AI가 쓴 SQL. 빈칸(`:route`·`:me`·`:next`·`:slack`·`:prev`) 그대로라 좌표 없음. 화면에는 안 보여 줌 (11/13) |
 | slack | number | 다음 일정까지 지금 여유(분), 남은 일정이 없으면 null |
 | band | string | 지도에 그릴 가는 길 띠 (경로 양옆 190m, GeoJSON). 가는 길로 찾지 않았으면 null |
-| places | array | 찾은 곳 (최대 10, AI SQL이 정한 순서). `id`, `name`, `kind`, `category`, `lat`, `lng`, `rating`(보정 평점), `reviewCount`, `detourMinutes`(가는 길에서 몇 분 더, 없으면 null. 덜 돌아가는 순으로 찾았으면 실제 걷는 길로 다시 잰 값), `walkMinutes`(지금 위치 → 이곳 실제 걷는 시간, 다시 재지 않았으면 null), `isEstimate`(다시 잴 때 길찾기가 실패해 거리로 어림했으면 true), `joinLat`·`joinLng`(가는 길 위 가장 가까운 점), `closeAt`, `closingSoon`, `slackAfter`(`stayMinutes`만큼 머물고 남는 여유, 계산 못 하면 null), `stayMinutes`(머무는 분: 30, 카페는 30분 머물고도 다음 예약까지 여유가 많으면 예약 15분 전 도착까지 늘려 최대 60, 11/17), `moodReason`·`moodEvidence`(분위기 질문일 때 리뷰 RAG가 고른 이유 한 줄·근거 리뷰 문장. 근거는 실제 리뷰에 있는 글인지 서버가 확인함. 분위기 질문이 아니거나 예전 방식으로 찾았으면 null, 11/15). 지금 닫힌 곳은 빠짐. 분위기 질문("조용한 카페")은 SQL로 후보 30곳을 뽑고 리뷰 RAG(임베딩 → Gemini 판단 → 인용 검사)로 다시 골라요 |
+| places | array | 찾은 곳 (최대 10, AI SQL이 정한 순서). `id`, `name`, `kind`, `category`, `lat`, `lng`, `rating`(보정 평점), `reviewCount`, `detourMinutes`(가는 길에서 몇 분 더, 없으면 null. 덜 돌아가는 순으로 찾았으면 실제 걷는 길로 다시 잰 값), `walkMinutes`(지금 위치 → 이곳 실제 걷는 시간, 다시 재지 않았으면 null), `isEstimate`(다시 잴 때 길찾기가 실패해 거리로 어림했으면 true), `joinLat`·`joinLng`(가는 길 위 가장 가까운 점), `closeAt`, `closingSoon`, `slackAfter`(`stayMinutes`만큼 머물고 남는 여유, 계산 못 하면 null), `stayMinutes`(머무는 분: 카페는 다음 예약 5분 전 도착에 맞춘 15~60분, 15분도 안 되면 null = "들르면 빠듯해요", 다음 예약이 없으면 30. 카페 아닌 곳은 30, 11/17), `moodReason`·`moodEvidence`(분위기 질문일 때 리뷰 RAG가 고른 이유 한 줄·근거 리뷰 문장. 근거는 실제 리뷰에 있는 글인지 서버가 확인함. 분위기 질문이 아니거나 예전 방식으로 찾았으면 null, 11/15). 지금 닫힌 곳은 빠짐. 분위기 질문("조용한 카페")은 SQL로 후보 30곳을 뽑고 리뷰 RAG(임베딩 → Gemini 판단 → 인용 검사)로 다시 골라요 |
 
 > Text-to-SQL: Gemini가 SQL을 쓰고(좌표 없이 빈칸만) → `SqlChecker`(JSqlParser)가 SELECT 하나·허용한 뷰(`ask_place`·`ask_review`)·함수·상한·LIMIT 10을 검사(떨어지면 이유를 붙여 한 번 더) → 읽기 전용 트랜잭션에서 `ask_reader` 계정 + 3초 제한으로 실행해요 (`db/18_ask_place.sql`). 가는 길(`:route`)은 다음 칸까지 걸어갈 때만 써요. Gemini 실패·검사 두 번 탈락·DB 3초 초과면 `"ask-radius"`로 돌아가요.
 
@@ -1361,7 +1361,7 @@ key 끝의 숫자가 바뀔 때만 화면이 같은 알림을 다시 띄워요.
 
 **요청** `placeId`(장소 카드의 `id`), `lat`, `lng`, `replaceStopId`(선택, 11/12: 놓친 예약 칸 id), `afterStopId`(선택, 11/13: 이 남은 칸 바로 뒤에 넣기), `reservedTime`(선택, 11/16 ③·④ 예지 OK: 예약 시각 "15:00". 있으면 새 칸을 고정 일정 🔒 + 그 시각으로)
 
-**동작** 새 칸(카페·디저트·베이커리면 30분, 아니면 60분. 카페는 다음 예약(고정 칸)이 뒤에 있고 30분 머물고도 여유가 많으면 예약 15분 전 도착까지 늘려 최대 60분 — AI에게 묻기 카드의 `slackAfter`와 같은 규칙, 11/17)을 넣고 남은 일정 시각을 다시 계산해 저장. 고정 일정에 늦으면 그 앞 칸 머무는 시간을 최대 절반까지 줄임. `replaceStopId`가 있으면 맨 앞 대신 그 칸 자리에 넣고, 그 칸은 `skipped`가 돼요. `afterStopId`가 있으면 그 칸 바로 뒤에 넣어요 (화면: 넣을 자리 고르기 시트, 고를 때마다 `/live/preview`로 바뀐 시각을 보여 줌). `reservedTime`이 있으면 새 칸은 고정 일정이라 그 시각보다 일찍 도착해도 그 시각에 시작하고, 뒤 일정·여유도 그 시각 기준으로 다시 계산해요 (화면: 비슷한 가게 [예약했어요] → 시각 고르기, SimilarSearch).
+**동작** 새 칸(카페·디저트·베이커리면 30분, 아니면 60분. 카페는 다음 예약(고정 칸)이 뒤에 있으면 예약 5분 전 도착에 맞춰 15~60분으로 바꿈(늘리거나 줄임) — AI에게 묻기 카드·`/live/preview`와 같은 계산, 11/17)을 넣고 남은 일정 시각을 다시 계산해 저장. 고정 일정에 늦으면 그 앞 칸 머무는 시간을 최대 절반까지 줄임. `replaceStopId`가 있으면 맨 앞 대신 그 칸 자리에 넣고, 그 칸은 `skipped`가 돼요. `afterStopId`가 있으면 그 칸 바로 뒤에 넣어요 (화면: 넣을 자리 고르기 시트, 고를 때마다 `/live/preview`로 바뀐 시각을 보여 줌). `reservedTime`이 있으면 새 칸은 고정 일정이라 그 시각보다 일찍 도착해도 그 시각에 시작하고, 뒤 일정·여유도 그 시각 기준으로 다시 계산해요 (화면: 비슷한 가게 [예약했어요] → 시각 고르기, SimilarSearch).
 
 **응답** `{ "trip": Trip, "message": "카페OO을(를) 다음 일정으로 넣었어요. 세종문화회관에는 12분 여유가 있어요." }`
 
