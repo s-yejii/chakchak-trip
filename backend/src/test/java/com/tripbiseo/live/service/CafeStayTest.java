@@ -61,4 +61,17 @@ class CafeStayTest {
         assertTrue(CafeStay.isCafe("카페,디저트"));
         assertFalse(CafeStay.isCafe("육류,고기요리"));
     }
+
+    @Test
+    void 예약에_맞춰_넣은_카페_뒤_예약이면_빠듯_경고_안_함() {
+        Stop cafe = new Stop();
+        cafe.setCategory("카페");
+        Stop dinner = new Stop();
+        dinner.setFixed(true);
+        Stop park = new Stop();
+        park.setCategory("관광지");
+        assertTrue(CafeStay.isFittedBefore(List.of(cafe, dinner), dinner, 5));
+        assertFalse(CafeStay.isFittedBefore(List.of(cafe, dinner), dinner, 4)); // 5분 전 도착도 못 하면 경고
+        assertFalse(CafeStay.isFittedBefore(List.of(park, dinner), dinner, 8)); // 카페가 아니면 경고 그대로
+    }
 }

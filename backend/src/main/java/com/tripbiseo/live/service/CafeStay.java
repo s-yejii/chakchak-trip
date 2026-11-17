@@ -59,4 +59,16 @@ final class CafeStay {
         newStop.setStay(stay);
         return true;
     }
+
+    /**
+     * 예약(fixedStop) 바로 앞 칸이 카페이고 여유가 KEEP_SLACK_MIN(5분) 이상이면 true:
+     * 카페 머묾을 예약에 맞춰 넣은 계획대로라 "여유가 얼마 없어요" 경고를 안 띄움 (그 밖의 칸·계정은 경고 기준 그대로)
+     */
+    static boolean isFittedBefore(List<Stop> todayStops, Stop fixedStop, Integer slack) {
+        if (todayStops == null || fixedStop == null || slack == null || slack < KEEP_SLACK_MIN) {
+            return false;
+        }
+        int index = todayStops.indexOf(fixedStop);
+        return index > 0 && isCafe(todayStops.get(index - 1).getCategory());
+    }
 }

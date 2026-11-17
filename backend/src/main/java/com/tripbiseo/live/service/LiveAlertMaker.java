@@ -19,7 +19,7 @@ import com.tripbiseo.trip.dto.Stop;
 public class LiveAlertMaker {
 
     private static final int LEAVE_WINDOW_MIN = 10;  // 출발 시각 앞뒤 10분 안이면 출발 알림
-    private static final int TIGHT_SLACK_MIN = 4;    // 고정 일정 여유가 이 이하면 "여유가 얼마 없어요" (11/17: 10 → 4. 카페를 예약 5분 전 도착에 맞춰 넣어서, 맞춰 넣은 뒤엔 안 뜨게)
+    private static final int TIGHT_SLACK_MIN = 10;   // 고정 일정 여유가 이 이하면 "여유가 얼마 없어요"
     private static final int LEAVE_NOW_SLACK_MIN = 5; // 나갈 시간이 지났는데 고정 일정 여유가 이 이하면 "지금 안 나가면 늦어요" (늦기 전에 먼저)
 
     /**
@@ -94,7 +94,8 @@ public class LiveAlertMaker {
             return newAlert("missed-" + missed.getId(), "warn",
                     missed.getName() + " 계획 시간이 지났어요", "아직 안 갔다면 '대안 보기'에서 빼거나 바꿀 수 있어요");
         }
-        if (slack != null && slack <= TIGHT_SLACK_MIN) {
+        // 11/17: 예약 바로 앞 칸이 예약에 맞춰 넣은 카페(CafeStay, 예약 5분 전 도착)면 여유가 적어도 계획대로라 경고 안 함
+        if (slack != null && slack <= TIGHT_SLACK_MIN && !CafeStay.isFittedBefore(context.getTodayStops(), fixedStop, slack)) {
             return newAlert("tight-" + fixedStop.getId(), "warn",
                     fixedStop.getName() + "까지 여유가 " + Geo.toDuration(slack) + "뿐이에요", "다음 장소는 짧게 들르는 게 좋아요");
         }
