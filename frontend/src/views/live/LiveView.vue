@@ -493,6 +493,7 @@ function onPickPin(pin) {
 // ------------------------------------------------------------ 시트 위 큰 글자
 const head = computed(() => {
   if (!isReady.value) return null
+  if (demoRide.value) return { ...demoRide.value, cls: '' } // ③ 시연 한강버스 타는 중: 숙소 칸이 아직 "지금 칸"이어도 이 줄 먼저 (11/17 예지 OK, 일반 계정은 늘 null)
   const now = toMinutes(status.value.now)
   const current = currentStop.value
   if (current) {
@@ -512,7 +513,6 @@ const head = computed(() => {
     }
     return { cap: '출발 시간 지남', big: '+' + toDuration(-left), small: toTime(leaveAt) + ' 출발', cls: 'c-warning' }
   }
-  if (demoRide.value) return { ...demoRide.value, cls: '' } // ③ 시연 한강버스 타는 중 (11/17 예지 OK, 일반 계정은 늘 null)
   const next = nextStop.value
   if (next) {
     const label = doneCount.value === 0 ? '첫 장소 ' : '다음 '
