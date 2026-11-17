@@ -459,6 +459,8 @@ const statusText = computed(() => {
           </div>
           <h1 class="sr">{{ destination.name }}까지 가는 길</h1>
 
+          <!-- ③ 다음 칸이 예약(고정)이고 지하철·버스 탭일 때만: 시간이 많이 뜨면 한강버스 한 줄. 목록 위에 둬야 아래 "도착 예상" 바에 안 가리고, 길찾기가 안 돼도 보여요 (11/16 리허설) -->
+          <HangangBusOption v-if="destination.fixed && destination.time && position && (modeKey === 'subway' || modeKey === 'bus')" :from-lat="position.lat" :from-lng="position.lng" :to-lat="destination.lat" :to-lng="destination.lng" :arrive-by="destination.time" />
           <p v-if="!guide || !guide.available" class="t-cap" style="display: flex; gap: 6px; margin: 0">
             <i class="ic ic--s i-info" aria-hidden="true"></i>{{ guide && guide.message ? guide.message : '이 수단으로는 길을 찾지 못했어요' }}
           </p>
@@ -490,8 +492,6 @@ const statusText = computed(() => {
               </li>
             </ol>
           </template>
-          <!-- ③ 다음 칸이 예약(고정)이고 지하철·버스를 볼 때만: 시간이 많이 뜨면 한강버스 한 줄 (권할 게 없으면 안 보임) -->
-          <HangangBusOption v-if="destination.fixed && destination.time && position && (modeKey === 'subway' || modeKey === 'bus')" :from-lat="position.lat" :from-lng="position.lng" :to-lat="destination.lat" :to-lng="destination.lng" :arrive-by="destination.time" />
         </BottomSheet>
 
         <div class="cta cta--white">

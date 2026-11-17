@@ -5,7 +5,7 @@
 //   개발자 모드(시연 계정)이고 가짜 GPS가 켜져 있을 때만 보여요. 다른 계정은 이 컴포넌트가 아무것도 안 해요.
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { showLiveNotice } from '@/utils/liveBanner'
+import { clearLiveNotices, showLiveNotice } from '@/utils/liveBanner'
 import { getDevScenario, setDevClock, setDevSpeed } from '@/api/dev'
 import { getTrip } from '@/api/trips'
 import { useReplanStore } from '@/stores/replan'
@@ -120,6 +120,7 @@ async function moveToNext() {
   // 같은 건물·바로 옆(200m 안)은 길 이동 없이 걸어서 몇 분 (11/08 주형: 더현대 → 지하 1층 테디뵈르)
   const from = props.live.position.value || (current ? { lat: current.lat, lng: current.lng } : origin.value)
   if (current && !isNextDay && distanceMeters(current, next) < NEARBY_M) return walkInside(current, next)
+  if (current && !isNextDay && isBusDownStart(current)) return busDown(current, from) // 장면 2: 걸어서 내려갈 계획인데 순환버스로
 
   // 이동 시간: 실제 길찾기(상황 응답의 다음 경로), 없으면 거리로 어림
   await props.live.refresh()
@@ -182,7 +183,8 @@ async function moveToNext() {
 //   → 가운데 카드에서 대안을 고르면(안 늦게 되면) 다음에 누를 때 출발. "나중에"·"그냥 갈게요" 뒤 한 번 더 누르면 그대로 출발
 // 돌발(가운데 카드가 뜨는 늦음 알림)인지. 대안을 골랐거나 "그냥 갈게요"면 10분 더 늦기 전까지는 아님 (여행 중 화면과 같은 기준)
 function isIncident(status) {
-  if (!status || !status.alert || !status.fixed || !/^late-/.test(status.alert.key || '')) return false
+  // 11/16 리허설: 놓침 카드(lost-, 예지 11/12)도 돌발 카드라서 같이 멈춤 (영상 트는 동안 시각이 흐르지 않게)
+  if (!status || !status.alert || !status.fixed || !/^(late|lost)-/.test(status.alert.key || '')) return false
   const lateMin = Math.max(0, -status.fixed.slackMin)
   return !replan.isMutedFor(props.live.tripId.value, status.fixed.name, lateMin)
 }
@@ -228,9 +230,116 @@ async function showNotice(next, travelMin) {
   await wait(NOTICE_MS)
 }
 
+// 11/16 장면 2(주형 A안): 시나리오가 정한 칸(남산 팔각정)에서 처음 누르면, 걸어서 내려가는 대신 순환버스로 남산 아래까지 내려감
+//   걸어서 갈 계획이라 팔각정에서는 회식까지 여유가 적게 보이고, 버스로 빨리 내려오면 여유가 늘어남 → 그 자리에서 AI에게 카페 묻기
+function isBusDownStart(current) {
+  const setup = scenario.value
+  return !!setup && !!setup.busDownFrom && current.name === setup.busDownFrom && !isIncidentDone('busdown-' + current.id)
+}
+
+async function busDown(current, from) {
+  const setup = scenario.value
+  markIncidentDone('busdown-' + current.id)
+  const date = dateText(appNow())
+  const departMin = Math.max(minutesOf(appNow()), stayEndOf(current))
+  if (departMin > minutesOf(appNow())) await setClock(date, departMin)
+  showLiveNotice({ key: 'busdown-' + current.id, at: hhmm(appNow()), title: '순환버스로 내려가요', body: '걸어서 내려가는 대신 버스 · 약 ' + setup.busDownMin + '분', warn: false })
+  await wait(NOTICE_MS)
+  const path = [[from.lat, from.lng], [setup.busDownLat, setup.busDownLng]]
+  demoRoute.value = path
+  await wait(FOLLOW_START_MS)
+  for (let step = 1; step <= LEFT_STEP; step++) { // 처음 몇 걸음은 서버에도 보내 "팔각정에서 떠났다"를 알림 (일반 이동과 같음)
+    const [lat, lng] = pointAlong(path, step / MOVE_STEPS)
+    if (step >= LEFT_STEP - 1) await props.live.placeAt(lat, lng, false)
+    else props.live.showAt(lat, lng)
+    await wait(MOVE_MS / MOVE_STEPS)
+  }
+  await setSpeed(Math.max(1, Math.round((setup.busDownMin * 60 * 1000) / MOVE_MS)))
+  for (let step = LEFT_STEP + 1; step <= MOVE_STEPS; step++) {
+    const [lat, lng] = pointAlong(path, step / MOVE_STEPS)
+    props.live.showAt(lat, lng)
+    await wait(MOVE_MS / MOVE_STEPS)
+  }
+  demoRoute.value = null
+  await setSpeed(STAY_SPEED)
+  await setClock(date, departMin + setup.busDownMin)
+  await props.live.placeAt(setup.busDownLat, setup.busDownLng, true) // 장소 칸은 아니고 버스에서 내린 자리 (다음 [다음 장소로]는 여기서 출발)
+  await props.live.refresh()
+}
+
+// ---- 11/16 장면 3 뒤: 한강버스 카드 [배 타고 갈게요] (시연 계정만) ----
+// 숙소 → 탈 선착장(대중교통) → 강을 따라 배(선착장 순서대로) → 내린 선착장에서 쉬기 → 버스로 예약한 가게. 시계도 카드 시각대로
+//   선착장 좌표는 db/24_hangang_bus.sql과 같아요 (동부 노선 순서). 시연에서 쓰는 옥수 → 잠실 말고도 동부 노선 안이면 그대로 돼요
+const EAST_PIERS = [
+  { name: '여의도', lat: 37.528882169655944, lng: 126.93439744866133 },
+  { name: '압구정', lat: 37.526686379656766, lng: 127.01647963172924 },
+  { name: '옥수', lat: 37.538855999436464, lng: 127.01786950750945 },
+  { name: '서울숲', lat: 37.53776088589692, lng: 127.04111182474081 },
+  { name: '뚝섬', lat: 37.52880508535853, lng: 127.0664951037918 },
+  { name: '잠실', lat: 37.51871205060492, lng: 127.08479426715436 },
+]
+const BOARD_EARLY_MIN = 5 // 배 떠나기 이만큼 전에 선착장 도착 (서버 규칙과 같음)
+
+// 한 구간을 화면에서 움직이며 시계도 그만큼 흐르게. 마지막 점은 서버에도 보냄 (다녀온 길이 회고에 남게)
+async function moveAlong(path, minutes) {
+  await setSpeed(Math.max(1, Math.round((minutes * 60 * 1000) / MOVE_MS)))
+  for (let step = 1; step <= MOVE_STEPS; step++) {
+    const [lat, lng] = pointAlong(path, step / MOVE_STEPS)
+    if (step % 4 === 0) await props.live.placeAt(lat, lng, false)
+    else props.live.showAt(lat, lng)
+    await wait(MOVE_MS / MOVE_STEPS)
+  }
+}
+
+async function rideHangang(option) {
+  const current = currentStop()
+  const next = orderedStops()[current ? orderedStops().indexOf(current) + 1 : 0]
+  const board = EAST_PIERS.findIndex((pier) => pier.name === option.boardPier)
+  const alight = EAST_PIERS.findIndex((pier) => pier.name === option.alightPier)
+  if (!current || !next || board < 0 || alight <= board) return showToast('한강버스 길을 만들지 못했어요')
+  const date = dateText(appNow())
+  const boardMin = toMinutes(option.boardAt)
+  const leaveMin = boardMin - BOARD_EARLY_MIN - option.toBoardMin
+  if (leaveMin > minutesOf(appNow())) await setClock(date, leaveMin)
+  clearLiveNotices() // 숙소에서 "나갈 시간이에요" 같은 지난 알림이 배 타는 동안 위를 덮지 않게
+  showLiveNotice({ key: 'hangang-' + next.id, at: hhmm(appNow()), title: '한강버스로 가요', body: option.boardPier + ' 선착장 ' + option.boardAt + ' 배 · ' + option.alightPier + ' ' + option.alightAt + ' 도착', warn: false })
+  await wait(NOTICE_MS)
+  const from = props.live.position.value || { lat: current.lat, lng: current.lng }
+  const piers = EAST_PIERS.slice(board, alight + 1)
+  // ① 숙소 → 탈 선착장 (대중교통)
+  await moveAlong([[from.lat, from.lng], [piers[0].lat, piers[0].lng]], option.toBoardMin)
+  await setSpeed(STAY_SPEED)
+  await setClock(date, boardMin) // 선착장에서 배 기다림 → 배 떠나는 시각
+  // ② 배: 선착장 순서대로 강을 따라 (육지를 가로지르지 않게)
+  demoRoute.value = piers.map((pier) => [pier.lat, pier.lng])
+  await moveAlong(demoRoute.value, toMinutes(option.alightAt) - boardMin)
+  demoRoute.value = null
+  await setSpeed(STAY_SPEED)
+  await setClock(date, toMinutes(option.leaveAt)) // ③ 내린 선착장 근처 한강공원에서 쉬기 (restMin)
+  // ④ 버스로 예약한 가게
+  const last = piers[piers.length - 1]
+  await moveAlong([[last.lat, last.lng], [next.lat, next.lng]], option.afterAlightMin)
+  await arrive(next, date, toMinutes(option.leaveAt) + option.afterAlightMin)
+}
+
+watch(() => devMode.command, async (command) => {
+  if (!command || command.type !== 'hangang' || isBusy.value) return
+  clearCommand()
+  for (let i = 0; i < 20 && !(props.live.trip.value && props.live.trip.value.stops); i++) await wait(500) // 길 안내에서 막 넘어왔으면 여행을 읽을 때까지
+  isBusy.value = true
+  try {
+    await rideHangang(command.option)
+  } catch (e) {
+    showToast(e.message)
+  } finally {
+    isBusy.value = false
+  }
+}, { immediate: true })
+
 // 도착: 시계를 정확히 도착 시각으로, 다시 실제 시간으로
 async function arrive(next, date, minutes) {
   demoRoute.value = null // 도착하면 고정한 길을 풀어요
+  clearLiveNotices() // 11/16 리허설: 도착한 뒤에도 "지금 출발해야 해요" 같은 지난 알림이 화면 위를 덮지 않게
   await setSpeed(STAY_SPEED)
   await setClock(date, minutes)
   await props.live.placeAt(next.lat, next.lng, true)
@@ -319,9 +428,10 @@ watch(() => props.live.status.value, async (status) => {
 // 2일차 KTX 돌발 시각 (11/09 ① 상재: 대본 숫자). 택시 23분이면 18:45 도착·여유 15분, 지하철 40분이면 19:02 도착·KTX 놓침
 //   이동 분은 서버 DemoRoutes(타임스퀘어 → 서울역)와 같은 값이에요
 const TRAIN_INCIDENT_CLOCK = '18:22'
-async function makeLate(status, current) {
+async function makeLate(status, current, lateMin = null) {
   const base = Math.max(minutesOf(appNow()), stayEndOf(current))
-  const clock = isBoardingPlace(status.fixed.name) ? toMinutes(TRAIN_INCIDENT_CLOCK) : incidentClockMin(base, status.fixed.slackMin, lateMinutesFor(status.fixed.name))
+  const late = lateMin == null ? lateMinutesFor(status.fixed.name) : lateMin
+  const clock = isBoardingPlace(status.fixed.name) && lateMin == null ? toMinutes(TRAIN_INCIDENT_CLOCK) : incidentClockMin(base, status.fixed.slackMin, late)
   await setClock(dateText(appNow()), clock)
   await props.live.refresh()
 }
@@ -352,11 +462,20 @@ function markIncidentDone(stopId) {
   if (!list.includes(stopId)) list.push(stopId)
   try { sessionStorage.setItem(INCIDENT_STORE_KEY, JSON.stringify(list)) } catch (e) { /* 저장 못 해도 진행 */ }
 }
+// 11/16 대본: 돌발은 시나리오가 정한 곳 하나뿐 (2일차 숙소 늦잠 → 스시도 35분 늦음). 1일차 회식·2일차 동서울 버스 앞에서는 일부러 늦게 안 함
+function isScenarioIncident(current) {
+  const setup = scenario.value
+  return !!setup && !!setup.overstayName && current.day === setup.overstayDay && current.name === setup.overstayName
+}
+
 async function startIncident(current, next, status) {
-  if (!current || !next.fixed || next.day !== current.day || isIncidentDone(next.id)) return false
-  markIncidentDone(next.id)
+  // 11/16 리허설: 돌발은 하루에 한 번 (늦잠 뒤 스시이세이로 바꿔 넣어도 다시 늦게 만들지 않게). 예전엔 다음 칸 id마다 한 번이라 새 칸에서 또 늦었어요
+  if (!current) return false
+  const doneKey = 'overstay-' + current.day
+  if (!next.fixed || next.day !== current.day || isIncidentDone(doneKey) || !isScenarioIncident(current)) return false
+  markIncidentDone(doneKey)
   if (!status || !status.fixed || status.fixed.id !== next.id || status.fixed.slackMin <= 0) return false // 이미 늦었으면 카드가 이미 떠 있음
-  await makeLate(status, current)
+  await makeLate(status, current, scenario.value.overstayLateMin)
   return true
 }
 

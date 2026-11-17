@@ -55,13 +55,20 @@ public class DemoScenario {
     private static final int OVERSTAY_DAY = 2;          // 돌발: 2일차에
     private static final String OVERSTAY_NAME = STAY_NAME; // 11/12 돌발: 늦잠 → 숙소에서 나갈 시각이 지나도 그대로 → 스시도 지각 (앱은 이유를 모름)
     private static final int OVERSTAY_MIN = 0;          // 0 = 다음 예약(스시도) 도착 목표보다 늦어지는 순간까지 머묾 (그때 시계 멈춤)
+    // 11/16 장면 2(주형 A안): 팔각정 → 회식은 걸어서 내려갈 계획(여유가 적게 보임) → [다음 장소로]를 누르면 순환버스로 빨리 내려와 여유가 늘어남
+    private static final String BUS_DOWN_FROM = "남산 팔각정";
+    private static final String WALK_DOWN_TO = "산청숯불가든 을지로"; // 이 칸까지는 걸어서 가는 계획 (move_mode walk)
+    private static final double BUS_DOWN_LAT = 37.5605217984; // 버스에서 내리는 곳: 남산 아래 퇴계로(예전 예장공원 자리)
+    private static final double BUS_DOWN_LNG = 126.9888869118;
+    private static final int BUS_DOWN_MIN = 13;         // 순환버스로 내려오는 분
+    private static final int OVERSTAY_LATE_MIN = 35;    // 11/16 대본: 늦잠 → 12:00 출발 → 스시도 13:05 도착 = 35분 늦음 (돌발은 이것 하나뿐)
     private static final String START_TIME = "11:30"; // 시연 계정은 1일차 이 시각부터 (종로3가역 모임, 11/12)
 
     // 일차, 시각, 이름, 장소 번호(retrip_place.id, 없으면 null), 종류, 위도, 경도, 머무는 분, 고정, 메모
     // 일차, 시각, 이름, 장소 번호, 종류, 위도, 경도, 머무는 분, 고정, 메모, 중요도(must면 줄이기·빼기 대상 아님)
     // 11/12 촬영 시나리오(아카데미 동기 5명 서울 1박 2일) 시간표 그대로 (주형: "촬영 시나리오에 맞춰서")
     //   1일차: 11:30 종로3가역 모임 → 남도분식 → 동백양과점 → 15:00 숙소 체크인 → 남산순환나들길 → 팔각정(17:30까지)
-    //          → 17:30 팔각정에서 걸어서 내려와 남산예장공원(계획) → 19:00 회식 → 숙소
+    //          → 17:30 팔각정에서 걸어서 내려올 계획(약 50분) → 19:00 회식 → 숙소 (11/16: 예장공원 칸은 뺌)
     //          (11/13 장면 2: 실제로는 순환버스를 타서 일찍 내려옴 → 여유가 늘어나 AI로 가는 길 카페 찾기. 계획에 걷기 칸이 있어야 "왜 시간이 남았나"가 설명됨)
     //          (21:00 편의점은 DB에 편의점이 없어 안 넣음, 지도 "근처 찾기"로 보여 줄 장면)
     //   2일차: 11:00 체크아웃 예정 → 늦잠·레이트 체크아웃 12:00 → 12:30 스시도 지각 (B안 스시이세이 14:30은 여행 중 대안 화면에서). 점심 뒤 해산
@@ -73,8 +80,7 @@ public class DemoScenario {
         { 1, "13:30", "동백양과점 익선점", "naver-1387480043", "카페,디저트", 37.5734323, 126.9895996, 60, false, "같은 익선동 골목 · 걸어서 5분", null },
         { 1, "15:00", STAY_NAME, null, "숙소", STAY_LAT, STAY_LNG, 45, false, "체크인 15:00 · 짐 풀고 쉬기", null },
         { 1, "16:00", "남산순환나들길", "tour-2783557", "관광지", 37.5549112997, 126.9866844934, 50, false, "숙소에서 15분 · 걸어서 팔각정까지", null },
-        { 1, "17:00", "남산 팔각정", "tour-1603336", "관광지", 37.5516394747, 126.9876206116, 30, false, "내려올 때는 걸어서 내려올 계획", "must" },
-        { 1, "17:50", "남산예장공원", "tour-3067314", "공원", 37.5605217984, 126.9888869118, 40, false, "팔각정에서 걸어서 내려오기 약 20분 · 야경 보며 쉬기 · 을지로까지 걸어서 11분", null },
+        { 1, "17:00", "남산 팔각정", "tour-1603336", "관광지", 37.5516394747, 126.9876206116, 30, false, "내려올 때는 걸어서 내려올 계획 (약 50분)", "must" }, // 11/16 리허설(주형 B안): 예장공원 칸을 빼서, 순환버스로 빨리 내려오면 회식까지 여유가 1시간 넘게 보이게
         { 1, "19:00", "산청숯불가든 을지로", "naver-1850187827", "육류,고기요리", 37.5658389, 126.9906186, 120, true, "회식 예약 5명", null },
         { 1, "21:30", STAY_NAME, null, "숙소", STAY_LAT, STAY_LNG, 30, false, "숙소 · 다음 날 여기서 출발", null },
         { 2, "10:00", STAY_NAME, null, "숙소", STAY_LAT, STAY_LNG, 60, false, "체크아웃 11:00 · 지하철로 강남", null },
@@ -106,10 +112,14 @@ public class DemoScenario {
         response.setTitle(TITLE);
         response.setStartDate(startDate);
         response.setEndDate(LocalDate.parse(startDate).plusDays(NIGHTS).toString());
-        response.setPeople(conditions.getPeople() == null ? DEFAULT_PEOPLE : conditions.getPeople());
+        response.setPeople(DEFAULT_PEOPLE); // 11/16 리허설: 대본은 다섯 명. 단계에서 인원을 안 바꿔도(기본 2명) 시연 일정은 늘 5명
         response.setTransports(new ArrayList<>(List.of("subway", "walk", "bus")));
         for (Object[] row : STOPS) {
-            response.getStops().add(toStop(row));
+            Stop stop = toStop(row);
+            if (WALK_DOWN_TO.equals(stop.getName())) {
+                stop.setMode("walk"); // 장면 2: 팔각정에서 걸어서 내려갈 계획 → 여유가 적게 보였다가 버스를 타면 늘어남
+            }
+            response.getStops().add(stop);
         }
         response.getNotes().add(makeNote("1일차 19:00 산청숯불가든 을지로 회식은 예약 시각 그대로 고정했어요"));
         response.getNotes().add(makeNote("2일차 12:30 스시도 점심 예약 시각을 고정했어요"));
@@ -157,6 +167,11 @@ public class DemoScenario {
         setup.setOverstayDay(OVERSTAY_DAY);
         setup.setOverstayName(OVERSTAY_NAME);
         setup.setOverstayMin(OVERSTAY_MIN);
+        setup.setOverstayLateMin(OVERSTAY_LATE_MIN);
+        setup.setBusDownFrom(BUS_DOWN_FROM);
+        setup.setBusDownLat(BUS_DOWN_LAT);
+        setup.setBusDownLng(BUS_DOWN_LNG);
+        setup.setBusDownMin(BUS_DOWN_MIN);
         setup.setRainDay(IS_RAIN_NOTICE_ON ? RAIN_DAY : null);
         setup.setRainFrom(RAIN_FROM);
         for (Object[] row : RAIN_DAY_STOPS) {

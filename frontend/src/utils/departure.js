@@ -47,17 +47,26 @@ export function incidentClockMin(baseMin, slackMin, lateMin) {
   return baseMin + slackMin + lateMin
 }
 
+// 타는 것 이름: 터미널은 버스, 공항은 비행기, 역은 KTX (11/16 리허설: 동서울터미널인데 "KTX"로 나오던 문제)
+export function rideNameFor(placeName) {
+  const name = placeName || ''
+  if (/터미널/.test(name)) return '버스'
+  if (/공항/.test(name)) return '비행기'
+  return 'KTX'
+}
+
 // 타는 곳 늦음 카드 제목: "지금대로 가면 서울역 19:02 도착 · 19:00 KTX를 놓쳐요"
 export function missTrainTitle(name, eta, departTime) {
-  return '지금대로 가면 ' + name + ' ' + eta + ' 도착 · ' + departTime + ' KTX를 놓쳐요'
+  return '지금대로 가면 ' + name + ' ' + eta + ' 도착 · ' + departTime + ' ' + rideNameFor(name) + '를 놓쳐요'
 }
 
 // 여행 끝 시트 한 줄: 타는 곳이면 출발 시각 기준, 그 밖은 목표 시각 기준
 export function arrivalGapText(placeName, arrivedMin, plannedMin, plannedText) {
   const gap = arrivedMin - plannedMin
   if (isBoardingPlace(placeName)) {
-    if (gap > 0) return 'KTX ' + plannedText + ' 출발 ' + gap + '분 뒤 도착 · 놓침'
-    return 'KTX ' + plannedText + ' 출발 ' + -gap + '분 전 도착'
+    const ride = rideNameFor(placeName)
+    if (gap > 0) return ride + ' ' + plannedText + ' 출발 ' + gap + '분 뒤 도착 · 놓침'
+    return ride + ' ' + plannedText + ' 출발 ' + -gap + '분 전 도착'
   }
   if (gap > 0) return '목표 ' + plannedText + '보다 ' + gap + '분 늦게 도착'
   if (gap < 0) return '목표 ' + plannedText + '보다 ' + -gap + '분 일찍 도착'
