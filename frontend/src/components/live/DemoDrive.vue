@@ -7,10 +7,10 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { clearLiveNotices, showLiveNotice } from '@/utils/liveBanner'
 import { getDevScenario, setDevClock, setDevSpeed } from '@/api/dev'
-import { getTrip } from '@/api/trips'
+import { getRouteGuide, getTrip } from '@/api/trips'
 import { useReplanStore } from '@/stores/replan'
 import { addDays } from '@/utils/dates'
-import { appNow, clearCommand, devMode, ensureDemoFlow, syncClock } from '@/utils/devMode'
+import { appNow, clearCommand, devMode, ensureDemoFlow, INCIDENT_STORE_KEY, syncClock } from '@/utils/devMode'
 import { toMinutes, toTime } from '@/utils/time'
 import { showToast } from '@/utils/toast'
 import { demoRide, demoRoute } from '@/utils/demoRoute'
@@ -245,6 +245,17 @@ function isBusDownStart(current) {
   return !!setup && !!setup.busDownFrom && current.name === setup.busDownFrom && !isIncidentDone('busdown-' + current.id)
 }
 
+// 차 길(TMAP 자동차 길찾기)을 따라가는 점들. 길찾기가 안 되면 두 점 직선 (11/17 주형: 순환버스가 일직선으로 내려가던 문제)
+async function roadPath(from, to) {
+  try {
+    const guide = await getRouteGuide(from.lat, from.lng, to.lat, to.lng, 'car')
+    if (guide.available && guide.coords && guide.coords.length > 1) return [[from.lat, from.lng], ...guide.coords, [to.lat, to.lng]]
+  } catch (e) {
+    // 길찾기 실패면 직선으로
+  }
+  return [[from.lat, from.lng], [to.lat, to.lng]]
+}
+
 async function busDown(current, from) {
   const setup = scenario.value
   markIncidentDone('busdown-' + current.id)
@@ -253,7 +264,7 @@ async function busDown(current, from) {
   if (departMin > minutesOf(appNow())) await setClock(date, departMin)
   showLiveNotice({ key: 'busdown-' + current.id, at: hhmm(appNow()), title: '순환버스로 내려가요', body: '걸어서 내려가는 대신 버스 · 약 ' + setup.busDownMin + '분', warn: false })
   await wait(NOTICE_MS)
-  const path = [[from.lat, from.lng], [setup.busDownLat, setup.busDownLng]]
+  const path = await roadPath(from, { lat: setup.busDownLat, lng: setup.busDownLng }) // 11/17: 직선 대신 남산 찻길을 따라 내려가게
   demoRoute.value = path
   await wait(FOLLOW_START_MS)
   for (let step = 1; step <= LEFT_STEP; step++) { // 처음 몇 걸음은 서버에도 보내 "팔각정에서 떠났다"를 알림 (일반 이동과 같음)
@@ -496,7 +507,6 @@ watch(() => devMode.command, async (command) => {
 //   예약(회식·서울역) 바로 앞 장소에서 [다음 장소로]를 처음 누르면, 그 자리에서 더 머문 걸로 LATE_TARGET_MIN분 늦는 시각까지 시계를 옮김
 //   → 가운데 늦음 카드가 뜨고 시계가 멈춤. 대안을 고르면 그 수단으로, "그냥 갈게요"면 원래 수단으로 늦게 도착
 //   예약마다 한 번만 (이미 [늦게 만들기]를 눌렀거나 이미 늦었으면 그대로)
-const INCIDENT_STORE_KEY = 'demo-incident-done'
 function readIncidents() {
   try { return JSON.parse(sessionStorage.getItem(INCIDENT_STORE_KEY) || '[]') } catch (e) { return [] }
 }
