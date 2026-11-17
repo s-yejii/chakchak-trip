@@ -18,6 +18,7 @@ public class RecommendPlace {
     private Integer reviewCount;
     private String naverUrl;
     private Integer distance;     // m
+    private Integer detour;       // 가는 길 모드만: 놓친 가게 → 여기 → 다음 고정 일정이 바로 가는 것보다 더 도는 거리(m, 직선). 아니면 null (11/17)
     private Boolean open;
     private String closeAt;
     private Integer minutesLeft;

@@ -1,6 +1,7 @@
 package com.tripbiseo.live.service;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -56,7 +57,8 @@ public class TrackServiceImpl implements TrackService {
         Trip trip = liveTripReader.getOngoingTrip(memberId, tripId, request.getLat(), request.getLng());
 
         // 2. 지금 점 저장
-        trackMapper.insertTrack(tripId, request.getLat(), request.getLng(), request.getAccuracy());
+        LocalDateTime now = Geo.now().toLocalDateTime(); // 시연 계정은 시연 시계 (회고 다시 보기, 11/17)
+        trackMapper.insertTrack(tripId, request.getLat(), request.getLng(), request.getAccuracy(), now);
 
         // 3. 판정할 수 없는 점이면 여기서 끝
         if (isInaccurate(request.getAccuracy())) {
@@ -64,7 +66,7 @@ public class TrackServiceImpl implements TrackService {
         }
 
         // 4. 최근 점 (새 것부터, 방금 넣은 점이 0번). 2점이 안 되면 판정 안 함
-        List<TrackPoint> recent = trackMapper.selectRecentTrackList(tripId, STAY_POINTS, STAY_SECONDS, MAX_ACCURACY_M);
+        List<TrackPoint> recent = trackMapper.selectRecentTrackList(tripId, STAY_POINTS, STAY_SECONDS, MAX_ACCURACY_M, now);
         if (recent.size() < 2) {
             return;
         }

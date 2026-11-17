@@ -121,7 +121,8 @@ public class HangangBusServiceImpl implements HangangBusService {
         for (String ride : detail.split(" · ")) {
             String[] words = ride.split(" ");
             if (words.length > 1 && words[0].equals("버스")) {
-                return words[1];
+                String busNo = words[1];
+                return busNo.contains(":") ? busNo.substring(busNo.indexOf(':') + 1) : busNo; // TMAP은 "지선:3317"처럼 버스 종류를 앞에 붙여요 → 번호만 (11/17)
             }
         }
         return null;

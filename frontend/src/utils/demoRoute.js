@@ -5,3 +5,7 @@
 import { ref } from 'vue'
 
 export const demoRoute = ref(null)
+
+// 시연 한강버스 타는 동안 여행 중 화면 맨 위 줄 (11/17 주형, ④ 예지 OK)
+// 서버 계산 "다음 OO까지 대중교통 45분" 대신 "한강버스 타는 중 · 잠실 14:03 도착"을 보여 줘요. 값: { cap, big, strong } 또는 null
+export const demoRide = ref(null)

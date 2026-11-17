@@ -121,5 +121,6 @@ class HangangBusPickerTest {
         assertEquals("3323", HangangBusServiceImpl.findBusNo("2호선 잠실새내→잠실 1정거장 · 버스 3323 한강버스잠실선착장→잠실역 13정거장"));
         assertNull(HangangBusServiceImpl.findBusNo("2호선 잠실새내→잠실 1정거장"));
         assertNull(HangangBusServiceImpl.findBusNo(null));
+        assertEquals("3317", HangangBusServiceImpl.findBusNo("버스 지선:3317 잠일고등학교→잠실역.롯데월드 6정거장")); // TMAP 실제 모양 (11/17)
     }
 }

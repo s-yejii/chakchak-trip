@@ -50,6 +50,9 @@ public class LiveServiceImpl implements LiveService {
     private static final int MIN_RADIUS_M = 100;
     private static final int MAX_RADIUS_M = 3000;
     private static final int RECOMMEND_COUNT = 3;
+    private static final int ON_ROUTE_COUNT = 5;          // 비슷한 가게 [다음 고정 일정 가는 길]: 5곳까지 (11/17 ③, ④ 예지 OK)
+    private static final double TRUSTED_RATING = 4.9;     // 가는 길: 평점 이 이상 + 리뷰 이 개수 이상이면 "검증된 가게" → 덜 돌아가는 순으로 맨 앞
+    private static final int TRUSTED_REVIEWS = 1000;
     private static final String HHMM = "([01]\\d|2[0-3]):[0-5]\\d"; // 예약 시각 15:00 (11/16 ③)
     private static final int CAFE_STAY_MIN = 40;          // 일정에 넣기: 카페·디저트면 40분, 아니면 60분 (API.md)
     private static final int OTHER_STAY_MIN = 60;
@@ -121,6 +124,9 @@ public class LiveServiceImpl implements LiveService {
         if (request.getSimilarTo() != null) {
             // 11/12: 놓친 예약과 비슷한 가게 (업종이 겹치는 곳만, 머무는 시간은 놓친 칸 그대로)
             missed = placeService.getPlace(request.getSimilarTo()); // 없으면 404
+            if (Boolean.TRUE.equals(request.getOnRoute())) {
+                candidates = findSameTypePlaces(request, missed); // 가는 길은 반경이 넓어서 가까운 200곳에 안 들어가는 가게가 생김 (11/17)
+            }
             candidates = keepSimilarPlaces(candidates, missed, trip);
             stay = getMissedStay(trip, missed, stay);
         }
@@ -130,7 +136,17 @@ public class LiveServiceImpl implements LiveService {
         if (missed != null) {
             moveSameBrandFirst(candidates, missed);
         }
-        return pickOpenPlaces(candidates, tagMap, wantedTags, stay);
+        boolean isOnRoute = missed != null && Boolean.TRUE.equals(request.getOnRoute()) && request.getToLat() != null && request.getToLng() != null;
+        if (!isOnRoute) {
+            return pickOpenPlaces(candidates, tagMap, wantedTags, stay, RECOMMEND_COUNT);
+        }
+        Map<String, Integer> detours = getDetours(candidates, missed, request.getToLat(), request.getToLng());
+        sortOnRoute(candidates, detours);
+        RecommendResponse response = pickOpenPlaces(candidates, tagMap, wantedTags, stay, ON_ROUTE_COUNT);
+        for (RecommendPlace place : response.getPlaces()) {
+            place.setDetour(detours.get(place.getId()));
+        }
+        return response;
     }
 
     /**
@@ -272,8 +288,73 @@ public class LiveServiceImpl implements LiveService {
         places.sort((first, second) -> Double.compare(scoreMap.get(second.getId()), scoreMap.get(first.getId())));
     }
 
-    /** 점수 순으로 보면서 도착할 때 열려 있는 곳 3개. 닫힌 곳은 세서 closedSkipped */
-    private RecommendResponse pickOpenPlaces(List<Place> places, Map<String, PlaceTagCount> tagMap, List<String> wantedTags, int stay) {
+    /** 놓친 가게와 같은 업종 낱말로 반경 안을 찾기 (가는 길 모드, 11/17). 평점 없는 곳은 빼고 같은 곳은 한 번만 */
+    private List<Place> findSameTypePlaces(RecommendRequest request, Place missed) {
+        Set<String> words = new HashSet<>();
+        for (String word : (missed.getCategory() == null ? "" : missed.getCategory()).split(",")) {
+            if (!word.isBlank()) {
+                words.add(word.trim());
+            }
+        }
+        for (String word : new ArrayList<>(words)) {
+            if (JAPANESE_TYPES.contains(word)) {
+                words.addAll(JAPANESE_TYPES); // 일식당·초밥 등은 한 무리로 봐요 (splitTypes와 같음)
+            }
+        }
+        Map<String, Place> found = new HashMap<>();
+        for (String word : words) {
+            for (Place place : placeService.getNearbyPlaceList(request.getLat(), request.getLng(), request.getRadius(), word)) {
+                if (place.getRating() != null) {
+                    found.put(place.getId(), place);
+                }
+            }
+        }
+        return new ArrayList<>(found.values());
+    }
+
+    /** 가게마다 더 도는 거리(m): 놓친 가게 → 가게 → 다음 고정 일정 − 놓친 가게 → 다음 고정 일정 (손에 있는 점이라 Geo로) */
+    private Map<String, Integer> getDetours(List<Place> places, Place missed, double toLat, double toLng) {
+        double direct = Geo.distanceMeters(missed.getLat(), missed.getLng(), toLat, toLng);
+        Map<String, Integer> detours = new HashMap<>();
+        for (Place place : places) {
+            double via = Geo.distanceMeters(missed.getLat(), missed.getLng(), place.getLat(), place.getLng())
+                    + Geo.distanceMeters(place.getLat(), place.getLng(), toLat, toLng);
+            detours.put(place.getId(), (int) Math.round(via - direct));
+        }
+        return detours;
+    }
+
+    /**
+     * 가는 길 정렬 (11/17 주형): 1) 검증된 가게(평점 4.9 이상 + 리뷰 1000개 이상)를 덜 돌아가는 순으로 맨 앞
+     * 2) 나머지는 평점 × log(리뷰 수) 큰 순 (평점이 같으면 리뷰 많은 곳, 리뷰가 몇 개뿐인 5점은 뒤로)
+     */
+    static void sortOnRoute(List<Place> places, Map<String, Integer> detours) {
+        places.sort((first, second) -> {
+            boolean isFirstTrusted = isTrusted(first);
+            if (isFirstTrusted != isTrusted(second)) {
+                return isFirstTrusted ? -1 : 1;
+            }
+            if (isFirstTrusted) {
+                return Integer.compare(detours.get(first.getId()), detours.get(second.getId()));
+            }
+            return Double.compare(popularScore(second), popularScore(first));
+        });
+    }
+
+    private static boolean isTrusted(Place place) {
+        return place.getRating() != null && place.getRating() >= TRUSTED_RATING
+                && place.getReviewCount() != null && place.getReviewCount() >= TRUSTED_REVIEWS;
+    }
+
+    // log(리뷰 수): 리뷰가 10개 → 100개 → 1000개로 늘 때 점수가 같은 만큼씩 올라요 (리뷰 많은 곳이 너무 앞서지 않게)
+    private static double popularScore(Place place) {
+        double rating = place.getRating() == null ? 0 : place.getRating();
+        int reviews = place.getReviewCount() == null ? 0 : place.getReviewCount();
+        return rating * Math.log(reviews + 1);
+    }
+
+    /** 앞에서부터 보면서 도착할 때 열려 있는 곳 count개. 닫힌 곳은 세서 closedSkipped */
+    private RecommendResponse pickOpenPlaces(List<Place> places, Map<String, PlaceTagCount> tagMap, List<String> wantedTags, int stay, int count) {
         RecommendResponse response = new RecommendResponse();
         LocalDate today = Geo.now().toLocalDate();
         int closedSkipped = 0;
@@ -285,7 +366,7 @@ public class LiveServiceImpl implements LiveService {
                 continue;
             }
             response.getPlaces().add(toRecommendPlace(place, open, placeTagReader.getReasons(tagMap.get(place.getId()), wantedTags)));
-            if (response.getPlaces().size() == RECOMMEND_COUNT) {
+            if (response.getPlaces().size() == count) {
                 break;
             }
         }

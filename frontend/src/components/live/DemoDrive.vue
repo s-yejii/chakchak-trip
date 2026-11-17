@@ -13,7 +13,7 @@ import { addDays } from '@/utils/dates'
 import { appNow, clearCommand, devMode, ensureDemoFlow, syncClock } from '@/utils/devMode'
 import { toMinutes, toTime } from '@/utils/time'
 import { showToast } from '@/utils/toast'
-import { demoRoute } from '@/utils/demoRoute'
+import { demoRide, demoRoute } from '@/utils/demoRoute'
 import { incidentClockMin, isBoardingPlace, lateMinutesFor, planDeparture } from '@/utils/departure'
 
 const props = defineProps({
@@ -24,6 +24,7 @@ const STAY_SPEED = 1 // 머무는 동안 시계는 실제 시간대로 (11/08 �
 const ALERT_SHOW_MS = 2500 // 다음 날 아침 안내를 보여 줄 시간
 const MOVE_MS = 6000 // 이동하는 모습을 보여 주는 실제 시간 (시계는 이 동안 이동 시간만큼 흐름)
 const MOVE_STEPS = 12
+const SEND_EVERY = 2 // 이동 중 이 걸음마다 한 점을 서버 위치 기록에도 (회고 다시 보기, 11/17)
 const FOLLOW_START_MS = 1000 // 출발 전 지도 전환(내 위치로 다가가며 확대)을 기다리는 시간 (11/09 ①)
 const LEFT_STEP = 5 // 경로의 4/12·5/12 자리를 서버에 보내 "떠났다"를 알림 (출발 판정은 장소에서 200m 밖 점 두 개)
 const WANDER_MS = 4000 // 머무는 동안 위치가 조금씩 흔들리는 간격 (화면만, 서버에는 안 보냄)
@@ -105,6 +106,7 @@ async function goNext() {
   } catch (e) {
     showToast(e.message)
   } finally {
+    demoRide.value = null
     isBusy.value = false
   }
 }
@@ -155,9 +157,13 @@ async function moveToNext() {
   demoRoute.value = path // 이동하는 동안 지도의 남색 점선도 이 길로 고정 (11/09 ①: 중간에 다시 받은 길과 어긋나지 않게)
   await wait(FOLLOW_START_MS) // 지도가 내 위치로 다가가며 확대하는 동안 점은 출발점에서 기다림 (11/09 ①)
   // 떠나는 그 시각에 서버에 "떠났다"를 먼저 알림 (점 두 개가 칸 밖이어야 출발로 봄) → 늦게 떠났으면 서버가 뒤 일정을 밀거나 줄임
-  for (let step = 1; step <= LEFT_STEP; step++) {
+  // 11/17 리허설: 실제 길(구불구불)이면 4/12·5/12 자리가 아직 장소 200m 안일 수 있어서, 장소에서 충분히 먼 두 점을 골라 서버에 보냄
+  //   (안 그러면 같은 좌표의 다른 칸, 예: 밤 숙소 칸에 있는 걸로 봐서 "5시간 늦음"이 떴어요)
+  const leftSteps = farStepsFrom(path, current || from)
+  const leftEnd = Math.max(LEFT_STEP, leftSteps[1])
+  for (let step = 1; step <= leftEnd; step++) {
     const [lat, lng] = pointAlong(path, step / MOVE_STEPS)
-    if (step >= LEFT_STEP - 1) await props.live.placeAt(lat, lng, false) // 마지막 두 걸음은 서버에도 (장소에서 200m 밖)
+    if (leftSteps.includes(step)) await props.live.placeAt(lat, lng, false) // 장소에서 200m 밖 두 점은 서버에도
     else props.live.showAt(lat, lng)
     await wait(MOVE_MS / MOVE_STEPS) // 첫 걸음들도 같은 간격으로 (기다림 없이 찍혀 점이 순간이동하던 문제, 11/09 ①)
   }
@@ -171,9 +177,11 @@ async function moveToNext() {
     return
   }
   await setSpeed(Math.max(1, Math.round((travelMin * 60 * 1000) / MOVE_MS)))
-  for (let step = LEFT_STEP + 1; step < MOVE_STEPS; step++) {
+  for (let step = leftEnd + 1; step < MOVE_STEPS; step++) {
     const [lat, lng] = pointAlong(path, step / MOVE_STEPS)
-    props.live.showAt(lat, lng)
+    // 11/17: 이동 중에도 몇 점은 서버에 (위치 기록이 비면 회고가 "한 자리에 15분 넘게 머묾 = 계획 밖"으로 봐요). 다음 장소 근처 점은 안 보냄 (일찍 도착 판정 안 되게)
+    if (step % SEND_EVERY === 0 && distanceMeters({ lat, lng }, next) > LEFT_FAR_M) await props.live.placeAt(lat, lng, false)
+    else props.live.showAt(lat, lng)
     await wait(MOVE_MS / MOVE_STEPS)
   }
   await arrive(next, departDate, departMin + travelMin)
@@ -279,6 +287,16 @@ const EAST_PIERS = [
   { name: '잠실', lat: 37.51871205060492, lng: 127.08479426715436 },
 ]
 const BOARD_EARLY_MIN = 5 // 배 떠나기 이만큼 전에 선착장 도착 (서버 규칙과 같음)
+// 숙소(명동) → 옥수 선착장: 지하철 4호선 명동 → 충무로 갈아타고 3호선 → 옥수역 → 걸어서 선착장 (11/17 주형: 택시 아니고 대중교통)
+// 길찾기 한도가 차도 지도 선·가짜 GPS가 지하철 길을 따라가게 역 좌표로 그려요
+const OKSU_SUBWAY = [
+  [37.5609, 126.9863], // 명동역
+  [37.5612, 126.9942], // 충무로역 (3호선으로)
+  [37.5590, 127.0056], // 동대입구역
+  [37.5543, 127.0107], // 약수역
+  [37.5480, 127.0157], // 금호역
+  [37.5404, 127.0185], // 옥수역
+]
 
 // 한 구간을 화면에서 움직이며 시계도 그만큼 흐르게. 마지막 점은 서버에도 보냄 (다녀온 길이 회고에 남게)
 async function moveAlong(path, minutes) {
@@ -306,14 +324,28 @@ async function rideHangang(option) {
   await wait(NOTICE_MS)
   const from = props.live.position.value || { lat: current.lat, lng: current.lng }
   const piers = EAST_PIERS.slice(board, alight + 1)
-  // ① 숙소 → 탈 선착장 (대중교통)
-  await moveAlong([[from.lat, from.lng], [piers[0].lat, piers[0].lng]], option.toBoardMin)
+  // ① 숙소 → 탈 선착장 (지하철). 옥수가 아니면 바로 잇기
+  const subway = option.boardPier === '옥수' ? OKSU_SUBWAY : []
+  const toPier = [[from.lat, from.lng], ...subway, [piers[0].lat, piers[0].lng]]
+  demoRide.value = { cap: '지하철로 ' + option.boardPier + ' 선착장', big: option.boardAt, strong: '배' }
+  demoRoute.value = toPier
+  // 떠났다는 점 두 개는 시계를 빠르게 하기 전에 보냄 (위치 기록이 시연 시각이라 빨리 감으면 두 점 사이가 2분을 넘어 출발 판정이 안 돼요, 11/17)
+  for (const step of farStepsFrom(toPier, current)) {
+    const [lat, lng] = pointAlong(toPier, step / MOVE_STEPS)
+    await props.live.placeAt(lat, lng, false)
+  }
+  await moveAlong(toPier, option.toBoardMin)
+  demoRoute.value = null
   await setSpeed(STAY_SPEED)
   await setClock(date, boardMin) // 선착장에서 배 기다림 → 배 떠나는 시각
   // ② 배: 선착장 순서대로 강을 따라 (육지를 가로지르지 않게)
   demoRoute.value = piers.map((pier) => [pier.lat, pier.lng])
+  demoRide.value = { cap: '한강버스 타는 중', big: option.alightAt, strong: option.alightPier }
   await moveAlong(demoRoute.value, toMinutes(option.alightAt) - boardMin)
   demoRoute.value = null
+  const busName = option.busNo ? option.busNo + '번 버스' : '버스'
+  const doorAt = toTime(toMinutes(option.leaveAt) + option.afterAlightMin)
+  demoRide.value = { cap: busName + ' 타는 중', big: doorAt, strong: '도착' }
   await setSpeed(STAY_SPEED)
   await setClock(date, toMinutes(option.leaveAt)) // ③ 내린 선착장 근처 한강공원에서 쉬기 (restMin)
   // ④ 버스로 예약한 가게
@@ -336,9 +368,22 @@ watch(() => devMode.command, async (command) => {
   }
 }, { immediate: true })
 
+// 경로에서 장소와 LEFT_FAR_M 넘게 떨어진 첫 두 걸음 번호 (없으면 끝 쪽 두 걸음)
+const LEFT_FAR_M = 260 // 서버 출발 판정 200m보다 넉넉히
+function farStepsFrom(path, place) {
+  const steps = []
+  for (let step = 1; step < MOVE_STEPS && steps.length < 2; step++) {
+    const [lat, lng] = pointAlong(path, step / MOVE_STEPS)
+    if (distanceMeters({ lat, lng }, place) > LEFT_FAR_M) steps.push(step)
+  }
+  while (steps.length < 2) steps.push(MOVE_STEPS - 2 + steps.length)
+  return steps
+}
+
 // 도착: 시계를 정확히 도착 시각으로, 다시 실제 시간으로
 async function arrive(next, date, minutes) {
   demoRoute.value = null // 도착하면 고정한 길을 풀어요
+  demoRide.value = null // 한강버스·버스 줄도 도착하면 원래 줄로 (11/17)
   clearLiveNotices() // 11/16 리허설: 도착한 뒤에도 "지금 출발해야 해요" 같은 지난 알림이 화면 위를 덮지 않게
   await setSpeed(STAY_SPEED)
   await setClock(date, minutes)
@@ -375,6 +420,7 @@ async function startNextMorning(current, next) {
 function wander() {
   if (!isShown.value || isBusy.value) return
   const stop = currentStop()
+  if (stop && stop.departedAt) return // 이미 떠난 칸이면 그 자리로 돌려놓지 않음 (11/17: 순환버스로 내려온 뒤 점이 팔각정으로 돌아가 하산을 한 번 더 보여 줬어요)
   const center = stop || origin.value
   if (!center) return
   const isWide = stop && /한강|공원|숲|산책/.test(stop.name + ' ' + (stop.category || ''))
