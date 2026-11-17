@@ -58,6 +58,9 @@ public class DemoScenario {
     // 11/16 장면 2(주형 A안): 팔각정 → 회식은 걸어서 내려갈 계획(여유가 적게 보임) → [다음 장소로]를 누르면 순환버스로 빨리 내려와 여유가 늘어남
     private static final String BUS_DOWN_FROM = "남산 팔각정";
     private static final String WALK_DOWN_TO = "산청숯불가든 을지로"; // 이 칸까지는 걸어서 가는 계획 (move_mode walk)
+    // 11/17 리허설: 나들길 → 팔각정도 걷기로 (산책로를 걸어 올라가는 장면). 수단을 비워 두면 서버 길찾기가 판마다 걷기 19분 / 대중교통 섞인 21분을 골라
+    //   팔각정 도착이 17:22 ↔ 17:24로 흔들렸어요 → 대본 숫자(17:22 · 여유 30분 · 17:52 · 18:05 · 43분)가 매번 같게
+    private static final String WALK_UP_TO = "남산 팔각정";
     private static final double BUS_DOWN_LAT = 37.5605217984; // 버스에서 내리는 곳: 남산 아래 퇴계로(예전 예장공원 자리)
     private static final double BUS_DOWN_LNG = 126.9888869118;
     private static final int BUS_DOWN_MIN = 13;         // 순환버스로 내려오는 분
@@ -116,8 +119,8 @@ public class DemoScenario {
         response.setTransports(new ArrayList<>(List.of("subway", "walk", "bus")));
         for (Object[] row : STOPS) {
             Stop stop = toStop(row);
-            if (WALK_DOWN_TO.equals(stop.getName())) {
-                stop.setMode("walk"); // 장면 2: 팔각정에서 걸어서 내려갈 계획 → 여유가 적게 보였다가 버스를 타면 늘어남
+            if (WALK_DOWN_TO.equals(stop.getName()) || WALK_UP_TO.equals(stop.getName())) {
+                stop.setMode("walk"); // 장면 2: 나들길 → 팔각정 걸어 올라가고, 팔각정에서 걸어서 내려갈 계획 → 여유가 적게 보였다가 버스를 타면 늘어남
             }
             response.getStops().add(stop);
         }
