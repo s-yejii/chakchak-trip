@@ -672,6 +672,10 @@ public class AlternativeServiceImpl implements AlternativeService {
 
         // 3. 계산 + 영업 정보 + 바뀐 곳 표시
         Alternative alternative = alternativeCalculator.calculate(trip, current, chosenStops, request.getLat(), request.getLng(), PREVIEW_PRECISE_COUNT);
+        if (CafeStay.fitNewCafe(chosenStops, liveStopFinder.findFixedStop(chosenStops, null), alternative.getSlackMin())) {
+            // 11/17: 새로 넣는 카페는 다음 예약 5분 전 도착에 맞춰 머묾 → 미리보기에 "N분 늦어요"가 안 뜨게 ([일정에 넣기]와 같은 계산)
+            alternative = alternativeCalculator.calculate(trip, current, chosenStops, request.getLat(), request.getLng(), PREVIEW_PRECISE_COUNT);
+        }
         fillOpenInfo(alternative);
         alternative.setChanges(markPreviewChanges(alternative, remainingStops, chosenStops));
         alternative.setShortName("직접 고르기");

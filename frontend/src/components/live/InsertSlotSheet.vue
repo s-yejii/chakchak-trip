@@ -11,7 +11,7 @@ import { insertPlace, previewPlan } from '@/api/trips'
 import { showToast } from '@/utils/toast'
 import '@/assets/css/live-panel.css'
 
-const CAFE_STAY_MIN = 40 // 새 칸 머무는 시간: 서버 일정에 넣기(LiveServiceImpl.getStay)와 같은 규칙
+const CAFE_STAY_MIN = 30 // 새 칸 머무는 시간: 서버 일정에 넣기(LiveServiceImpl.getStay)와 같은 규칙. 카페는 서버가 다음 예약 5분 전 도착에 맞춰 바꿔요 (11/17 CafeStay)
 const OTHER_STAY_MIN = 60
 
 const props = defineProps({
