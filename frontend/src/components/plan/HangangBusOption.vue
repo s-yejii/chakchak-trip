@@ -42,45 +42,35 @@ onMounted(load)
 // 목적지·예약이 바뀔 때만 다시 물어봄 (걸을 때마다 바뀌는 위치로는 안 부름)
 watch(() => [props.toLat, props.toLng, props.arriveBy], load)
 
-// 여유가 10분 넘게 남으면 "한강공원에서 15분 둘러보고 14:18 버스 3317 · 14:43 도착 (예약 17분 전)", 아니면 바로 가는 문구
-function restText(item) {
-  if (item.restMin < REST_SHOW_MIN) {
-    return afterAlightText(item) + ' · ' + item.doorArriveAt + ' 도착 · 여유 ' + item.slackMin + '분'
-  }
-  const leave = item.afterAlightMode === 'walk' ? '출발' : item.busNo ? '버스 ' + item.busNo : '버스·지하철'
-  const early = toMinutes(item.arriveBy) - toMinutes(item.relaxedArriveAt)
-  return '한강공원에서 ' + item.restMin + '분 둘러보고 ' + item.leaveAt + ' ' + leave + ' · ' + item.relaxedArriveAt + ' 도착 (예약 ' + early + '분 전)'
+// 11/17 주형: 카드 글은 꼭 필요한 것만 (출발 시각 · 배 · 도착 · 예약 몇 분 전 · 지하철과 비교 한 줄)
+// 몇 시에 나가야 하는지: 배 시각 − 5분 − 선착장까지 이동
+function leaveTime(item) {
+  return toTime(toMinutes(item.boardAt) - BOARD_EARLY_MIN - item.toBoardMin)
 }
 
-// 몇 시에 나가야 하는지: 배 시각 − 5분 − 선착장까지 이동 (11/16 사용성 평가: 옥수역과 헷갈리지 않게 "선착장"까지)
-function leaveText(item) {
-  const by = toMinutes(item.boardAt) - BOARD_EARLY_MIN - item.toBoardMin
-  return toTime(by) + ' 출발 · ' + item.boardPier + ' 선착장까지 ' + item.toBoardMin + '분'
+// 도착 시각: 여유가 많으면 선착장 근처에서 쉬었다 가는 시각(예약 15분 전쯤), 아니면 바로 가는 시각
+function arriveTime(item) {
+  return item.restMin >= REST_SHOW_MIN ? item.relaxedArriveAt : item.doorArriveAt
 }
 
-// 내려서 가는 방법 한 마디: 버스 번호가 있으면 "버스 3317", 걷기면 "걸어서 8분"
-function afterAlightText(item) {
-  if (item.afterAlightMode === 'walk') return '걸어서 ' + item.afterAlightMin + '분'
-  return item.busNo ? '버스 ' + item.busNo : '대중교통 ' + item.afterAlightMin + '분'
+// 예약 몇 분 전 도착
+function earlyMin(item) {
+  return toMinutes(item.arriveBy) - toMinutes(arriveTime(item))
 }
 </script>
 
 <template>
   <section v-if="option" class="hb-option" aria-label="한강버스로 가는 방법">
-    <p class="hb-option__main">
-      <span aria-hidden="true">⛴</span>
-      <b>한강버스로도 가요</b>
-      <span class="tn">{{ leaveText(option) }} · 배 {{ option.boardAt }} → {{ option.alightPier }} {{ option.alightAt }} · {{ restText(option) }}</span>
-    </p>
+    <b class="hb-option__title"><span aria-hidden="true">⛴</span> 한강버스로 가요</b>
+    <span class="tn">{{ leaveTime(option) }} 출발 · 배 {{ option.boardAt }} → {{ option.alightPier }} {{ option.alightAt }}</span>
+    <span class="tn">{{ arriveTime(option) }} 도착 · 예약 {{ earlyMin(option) }}분 전</span>
     <button v-if="isFakeGps()" type="button" class="btn btn--secondary btn--sm" @click="rideDemo">⛴ 배 타고 갈게요</button>
-    <p class="t-cap tn hb-option__sub">
-      가장 빠른 길로 바로 가면 {{ option.directArriveAt }} 도착, 예약 전 {{ toDuration(option.directWaitMin) }} 기다려요 · 한강버스도 교통카드로 타요
-    </p>
+    <p class="t-cap tn hb-option__sub">지하철은 {{ option.directArriveAt }} 도착, {{ toDuration(option.directWaitMin) }} 기다려요</p>
   </section>
 </template>
 
 <style>
 .hb-option{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--radius-md);background:var(--surface-raised)}
-.hb-option__main{margin:0;display:flex;flex-wrap:wrap;gap:4px 6px;align-items:baseline}
+.hb-option__title{font-weight:700}
 .hb-option__sub{margin:0}
 </style>
