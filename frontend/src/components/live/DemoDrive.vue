@@ -327,7 +327,7 @@ async function rideHangang(option) {
   // ① 숙소 → 탈 선착장 (지하철). 옥수가 아니면 바로 잇기
   const subway = option.boardPier === '옥수' ? OKSU_SUBWAY : []
   const toPier = [[from.lat, from.lng], ...subway, [piers[0].lat, piers[0].lng]]
-  demoRide.value = { cap: '지하철로 ' + option.boardPier + ' 선착장 가는 중', big: option.boardAt, strong: '배 출발' }
+  demoRide.value = { cap: '지하철로 ' + option.boardPier + ' 선착장', big: option.boardAt, strong: '배' }
   demoRoute.value = toPier
   // 떠났다는 점 두 개는 시계를 빠르게 하기 전에 보냄 (위치 기록이 시연 시각이라 빨리 감으면 두 점 사이가 2분을 넘어 출발 판정이 안 돼요, 11/17)
   for (const step of farStepsFrom(toPier, current)) {
@@ -340,12 +340,12 @@ async function rideHangang(option) {
   await setClock(date, boardMin) // 선착장에서 배 기다림 → 배 떠나는 시각
   // ② 배: 선착장 순서대로 강을 따라 (육지를 가로지르지 않게)
   demoRoute.value = piers.map((pier) => [pier.lat, pier.lng])
-  demoRide.value = { cap: '한강버스 타는 중 · ' + option.alightPier, big: option.alightAt, strong: '도착' }
+  demoRide.value = { cap: '한강버스 타는 중', big: option.alightAt, strong: option.alightPier }
   await moveAlong(demoRoute.value, toMinutes(option.alightAt) - boardMin)
   demoRoute.value = null
   const busName = option.busNo ? option.busNo + '번 버스' : '버스'
   const doorAt = toTime(toMinutes(option.leaveAt) + option.afterAlightMin)
-  demoRide.value = { cap: busName + '로 가는 중', big: doorAt, strong: '도착' }
+  demoRide.value = { cap: busName + ' 타는 중', big: doorAt, strong: '도착' }
   await setSpeed(STAY_SPEED)
   await setClock(date, toMinutes(option.leaveAt)) // ③ 내린 선착장 근처 한강공원에서 쉬기 (restMin)
   // ④ 버스로 예약한 가게
@@ -420,6 +420,7 @@ async function startNextMorning(current, next) {
 function wander() {
   if (!isShown.value || isBusy.value) return
   const stop = currentStop()
+  if (stop && stop.departedAt) return // 이미 떠난 칸이면 그 자리로 돌려놓지 않음 (11/17: 순환버스로 내려온 뒤 점이 팔각정으로 돌아가 하산을 한 번 더 보여 줬어요)
   const center = stop || origin.value
   if (!center) return
   const isWide = stop && /한강|공원|숲|산책/.test(stop.name + ' ' + (stop.category || ''))
