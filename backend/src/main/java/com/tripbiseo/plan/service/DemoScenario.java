@@ -48,6 +48,7 @@ public class DemoScenario {
     private static final double BUS_LNG = 127.0940622;
     private static final String STAY_NAME = "르메르디앙 서울 명동";
     private static final String STAY_ADDRESS = "서울 중구 명동8나길 38";
+    private static final String STAY_PLACE_ID = "tour-3341540"; // 11/17: 관광공사(TourAPI) "르메르디앙 서울 명동" → 카드에 공식 사진 (좌표는 아래 STAY_LAT·LNG 그대로)
     private static final double STAY_LAT = 37.5616;   // DB에 숙소가 없어 같은 건물 식당 좌표 (11/12)
     private static final double STAY_LNG = 126.9827;
     private static final String STAY_CHECK_IN = "15:00";
@@ -81,12 +82,12 @@ public class DemoScenario {
     private static final Object[][] STOPS = {
         { 1, "12:00", "남도분식 익선점", "naver-1129603411", "분식", 37.5731697, 126.9901014, 80, false, "점심 · 종로3가역에서 걸어서 7분", null },
         { 1, "13:30", "동백양과점 익선점", "naver-1387480043", "카페,디저트", 37.5734323, 126.9895996, 60, false, "같은 익선동 골목 · 걸어서 5분", null },
-        { 1, "15:00", STAY_NAME, null, "숙소", STAY_LAT, STAY_LNG, 45, false, "체크인 15:00 · 짐 풀고 쉬기", null },
+        { 1, "15:00", STAY_NAME, STAY_PLACE_ID, "숙소", STAY_LAT, STAY_LNG, 45, false, "체크인 15:00 · 짐 풀고 쉬기", null },
         { 1, "16:00", "남산순환나들길", "tour-2783557", "관광지", 37.5552151, 126.9865625, 50, false, "숙소에서 15분 · 걸어서 팔각정까지", null }, // 11/17: 장소 핀이 산책로 경계에서 35m 밖이라(도착은 경계 30m 안) 경계 위 가장 가까운 점으로
         { 1, "17:00", "남산 팔각정", "tour-1603336", "관광지", 37.5516394747, 126.9876206116, 30, false, "내려올 때는 걸어서 내려올 계획 (약 50분)", "must" }, // 11/16 리허설(주형 B안): 예장공원 칸을 빼서, 순환버스로 빨리 내려오면 회식까지 여유가 1시간 넘게 보이게
         { 1, "19:00", "산청숯불가든 을지로", "naver-1850187827", "육류,고기요리", 37.5658389, 126.9906186, 120, true, "회식 예약 5명", null },
-        { 1, "21:30", STAY_NAME, null, "숙소", STAY_LAT, STAY_LNG, 30, false, "숙소 · 다음 날 여기서 출발", null },
-        { 2, "10:00", STAY_NAME, null, "숙소", STAY_LAT, STAY_LNG, 60, false, "체크아웃 11:00 · 지하철로 강남", null },
+        { 1, "21:30", STAY_NAME, STAY_PLACE_ID, "숙소", STAY_LAT, STAY_LNG, 30, false, "숙소 · 다음 날 여기서 출발", null },
+        { 2, "10:00", STAY_NAME, STAY_PLACE_ID, "숙소", STAY_LAT, STAY_LNG, 60, false, "체크아웃 11:00 · 지하철로 강남", null },
         { 2, "12:30", "스시도", "naver-1008521969", "일식당", 37.4952278, 127.0850148, 90, true, "점심 예약 5명 · 숙소에서 대중교통 약 65분 · 점심 뒤 해산", null },
         { 2, BUS_TIME, BUS_NAME, null, "버스터미널", BUS_LAT, BUS_LNG, 30, true, "고속버스 16:40 출발 · 넘기면 놓침 · 스시도에서 대중교통 약 31분", null },
     };
