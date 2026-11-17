@@ -19,7 +19,7 @@ import com.tripbiseo.trip.dto.Stop;
 public class LiveAlertMaker {
 
     private static final int LEAVE_WINDOW_MIN = 10;  // 출발 시각 앞뒤 10분 안이면 출발 알림
-    private static final int TIGHT_SLACK_MIN = 10;   // 고정 일정 여유가 이 이하면 "여유가 얼마 없어요"
+    private static final int TIGHT_SLACK_MIN = 4;    // 고정 일정 여유가 이 이하면 "여유가 얼마 없어요" (11/17: 10 → 4. 카페를 예약 5분 전 도착에 맞춰 넣어서, 맞춰 넣은 뒤엔 안 뜨게)
     private static final int LEAVE_NOW_SLACK_MIN = 5; // 나갈 시간이 지났는데 고정 일정 여유가 이 이하면 "지금 안 나가면 늦어요" (늦기 전에 먼저)
 
     /**
