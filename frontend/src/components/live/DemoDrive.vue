@@ -13,7 +13,7 @@ import { addDays } from '@/utils/dates'
 import { appNow, clearCommand, devMode, ensureDemoFlow, INCIDENT_STORE_KEY, syncClock } from '@/utils/devMode'
 import { toMinutes, toTime } from '@/utils/time'
 import { showToast } from '@/utils/toast'
-import { demoRide, demoRoute } from '@/utils/demoRoute'
+import { boatPending, demoRide, demoRoute } from '@/utils/demoRoute'
 import { incidentClockMin, isBoardingPlace, lateMinutesFor, planDeparture } from '@/utils/departure'
 
 const props = defineProps({
@@ -101,6 +101,7 @@ function guessMinutes(from, to) {
 // "다음 장소로"
 async function goNext() {
   if (isBusy.value) return
+  if (boatPending.value) return showToast('배로 갈지 먼저 골라 주세요') // 11/17: 출발 전 한강버스 카드를 고르기 전엔 안 떠남
   isBusy.value = true
   try {
     await moveToNext()
