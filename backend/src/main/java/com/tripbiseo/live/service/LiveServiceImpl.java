@@ -50,6 +50,7 @@ public class LiveServiceImpl implements LiveService {
     private static final int MIN_RADIUS_M = 100;
     private static final int MAX_RADIUS_M = 3000;
     private static final int RECOMMEND_COUNT = 3;
+    private static final int ON_ROUTE_COUNT = 5;          // 비슷한 가게 [다음 고정 일정 가는 길]: 5곳까지, 평점 순 (11/17 ③, ④ 예지 OK)
     private static final String HHMM = "([01]\\d|2[0-3]):[0-5]\\d"; // 예약 시각 15:00 (11/16 ③)
     private static final int CAFE_STAY_MIN = 40;          // 일정에 넣기: 카페·디저트면 40분, 아니면 60분 (API.md)
     private static final int OTHER_STAY_MIN = 60;
@@ -130,7 +131,11 @@ public class LiveServiceImpl implements LiveService {
         if (missed != null) {
             moveSameBrandFirst(candidates, missed);
         }
-        return pickOpenPlaces(candidates, tagMap, wantedTags, stay);
+        boolean isOnRoute = missed != null && Boolean.TRUE.equals(request.getOnRoute());
+        if (isOnRoute) {
+            sortByRating(candidates);
+        }
+        return pickOpenPlaces(candidates, tagMap, wantedTags, stay, isOnRoute ? ON_ROUTE_COUNT : RECOMMEND_COUNT);
     }
 
     /**
@@ -272,8 +277,17 @@ public class LiveServiceImpl implements LiveService {
         places.sort((first, second) -> Double.compare(scoreMap.get(second.getId()), scoreMap.get(first.getId())));
     }
 
-    /** 점수 순으로 보면서 도착할 때 열려 있는 곳 3개. 닫힌 곳은 세서 closedSkipped */
-    private RecommendResponse pickOpenPlaces(List<Place> places, Map<String, PlaceTagCount> tagMap, List<String> wantedTags, int stay) {
+    /** 평점 높은 순 정렬 (평점 없는 곳은 뒤로). 가는 길 모드에서만 (11/17) */
+    static void sortByRating(List<Place> places) {
+        places.sort((first, second) -> Double.compare(ratingOf(second), ratingOf(first)));
+    }
+
+    private static double ratingOf(Place place) {
+        return place.getRating() == null ? -1 : place.getRating().doubleValue();
+    }
+
+    /** 앞에서부터 보면서 도착할 때 열려 있는 곳 count개. 닫힌 곳은 세서 closedSkipped */
+    private RecommendResponse pickOpenPlaces(List<Place> places, Map<String, PlaceTagCount> tagMap, List<String> wantedTags, int stay, int count) {
         RecommendResponse response = new RecommendResponse();
         LocalDate today = Geo.now().toLocalDate();
         int closedSkipped = 0;
@@ -285,7 +299,7 @@ public class LiveServiceImpl implements LiveService {
                 continue;
             }
             response.getPlaces().add(toRecommendPlace(place, open, placeTagReader.getReasons(tagMap.get(place.getId()), wantedTags)));
-            if (response.getPlaces().size() == RECOMMEND_COUNT) {
+            if (response.getPlaces().size() == count) {
                 break;
             }
         }

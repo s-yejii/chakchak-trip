@@ -95,7 +95,7 @@ async function search(meters, center = props.position) {
   isLoading.value = true
   error.value = ''
   try {
-    const res = await askRecommend(props.tripId, center.lat, center.lng, meters, null, [], props.stop.placeId)
+    const res = await askRecommend(props.tripId, center.lat, center.lng, meters, null, [], props.stop.placeId, isOnRoute.value)
     places.value = res.places
     closedSkipped.value = res.closedSkipped
   } catch (e) {
@@ -193,6 +193,14 @@ async function addPicked() {
           <template v-else-if="places.length"><i class="ic ic--s i-pin c-navy" aria-hidden="true"></i>{{ places.length }}곳 · 지도에서 핀을 눌러 보세요<template v-if="closedSkipped"> · 지금 문 닫은 {{ closedSkipped }}곳은 뺐어요</template></template>
           <template v-else><i class="ic ic--s i-info" aria-hidden="true"></i>이 반경엔 비슷한 가게가 없어요 · 더 넓게 찾아보세요</template>
         </p>
+        <!-- 11/17 ③: 가는 길이면 평점 순 이름 목록 (누르면 지도 핀을 누른 것과 같아요) -->
+        <ol v-if="isOnRoute && !isLoading && places.length" class="lp-names">
+          <li v-for="place in places" :key="place.id">
+            <button type="button" class="lp-names__item tn" @click="emit('update:pickedId', place.id)">
+              <span>{{ place.name }}</span><span v-if="place.rating != null" class="lp-names__rate"><i class="ic ic--s i-star c-warning" aria-hidden="true"></i>{{ place.rating }}</span>
+            </button>
+          </li>
+        </ol>
       </template>
     </section>
   </div>
@@ -202,4 +210,7 @@ async function addPicked() {
 .lp-reserve{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .lp-reserve__time{height:32px;padding:0 8px;border:1px solid var(--line-strong);border-radius:var(--radius-md);background:var(--surface-raised);color:inherit;font:inherit}
 .lp-reserve__help{font-size:13px;color:var(--ink-muted)}
+.lp-names{display:flex;flex-direction:column;gap:2px;margin:0;padding:0;list-style:none}
+.lp-names__item{display:flex;justify-content:space-between;gap:8px;width:100%;padding:6px 4px;border:0;border-bottom:1px solid var(--line);background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.lp-names__rate{display:inline-flex;align-items:center;gap:2px;white-space:nowrap}
 </style>

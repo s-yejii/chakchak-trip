@@ -99,7 +99,8 @@ export const getLiveStatus = (tripId, lat, lng) => post(`/trips/${tripId}/live/s
 export const askAssist = (tripId, message, lat, lng, prev) =>
   post(`/trips/${tripId}/live/assist`, { message, lat, lng, prevMessage: prev?.message, prevPlaceIds: prev?.ids })
 // similarTo: 놓친 장소 id (비슷한 가게 찾기, 11/12), replaceStopId: 이 칸 자리에 넣기 (놓친 예약 바꾸기). 둘 다 안 넣으면 예전과 같음
-export const askRecommend = (tripId, lat, lng, radius, category, tags, similarTo) => post(`/trips/${tripId}/live/recommend`, { lat, lng, radius, category, tags, similarTo })
+// onRoute: 비슷한 가게 [다음 고정 일정 가는 길]이면 true → 5곳까지 평점 순 (11/17 ③)
+export const askRecommend = (tripId, lat, lng, radius, category, tags, similarTo, onRoute = false) => post(`/trips/${tripId}/live/recommend`, { lat, lng, radius, category, tags, similarTo, onRoute })
 // afterStopId: 이 남은 칸 바로 뒤에 넣기 (11/13, 없으면 바로 다음)
 // reservedTime "15:00": 예약했으면 그 시각 고정 일정으로 (선택, 11/16 ③)
 export const insertPlace = (tripId, placeId, lat, lng, replaceStopId, afterStopId, reservedTime) => post(`/trips/${tripId}/live/insert`, { placeId, lat, lng, replaceStopId, afterStopId, reservedTime })
