@@ -51,7 +51,8 @@ public class LiveStopFinder {
                 return stop; // GPS로 도착 기록된 칸이 제일 확실함
             }
             double meters = Geo.distanceMeters(lat, lng, stop.getLat(), stop.getLng());
-            if (meters <= nearestMeters) {
+            // 거리가 같으면 앞 칸(먼저 갈 곳)을 그대로 둠 (11/17: 낮·밤 숙소 칸 좌표가 같아서 밤 숙소로 잡혀 '6시간 늦어요'가 떴어요)
+            if (meters <= nearestMeters && (nearest == null || meters < nearestMeters)) {
                 nearest = stop;
                 nearestMeters = meters;
             }
