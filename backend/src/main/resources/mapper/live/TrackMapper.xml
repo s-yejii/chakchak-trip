@@ -3,10 +3,10 @@
 <!-- ④ GPS 기록 (trip_track). TrackMapper.java에 메서드를 추가하면 같은 id로 여기에 SQL을 써요 -->
 <mapper namespace="com.tripbiseo.live.mapper.TrackMapper">
 
-  <!-- GPS 한 점 저장. recorded_at은 DB 기본값 NOW()가 채움 -->
+  <!-- GPS 한 점 저장. recorded_at = 서버 Geo.now() (일반 계정은 진짜 시각, 시연 계정은 시연 시계 → 회고 다시 보기가 시연 날짜·시각으로, 11/17) -->
   <insert id="insertTrack">
-    INSERT INTO trip_track (trip_id, lat, lng, accuracy)
-    VALUES (#{tripId}, #{lat}, #{lng}, #{accuracy})
+    INSERT INTO trip_track (trip_id, lat, lng, accuracy, recorded_at)
+    VALUES (#{tripId}, #{lat}, #{lng}, #{accuracy}, #{recordedAt})
   </insert>
 
   <!-- 최근 GPS 점, 새 것부터. 같은 시각이면 나중에 들어온 것(track_id 큰 것)이 먼저.
@@ -16,7 +16,8 @@
     FROM trip_track
     WHERE trip_id = #{tripId}
       AND (accuracy IS NULL OR accuracy &lt;= #{maxAccuracy})
-      AND recorded_at &gt;= NOW() - #{seconds} * INTERVAL '1 second'
+      AND recorded_at &gt;= #{now} - #{seconds} * INTERVAL '1 second'
+      AND recorded_at &lt;= #{now}  <!-- 시연 시계를 뒤로 돌렸을 때 예전 "미래" 점이 섞이지 않게 (11/17) -->
     ORDER BY recorded_at DESC, track_id DESC
     LIMIT #{count}
   </select>

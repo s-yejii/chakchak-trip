@@ -1,5 +1,6 @@
 package com.tripbiseo.live.mapper;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import org.apache.ibatis.annotations.Mapper;
@@ -15,13 +16,14 @@ import com.tripbiseo.live.dto.TrackPoint;
 @Mapper
 public interface TrackMapper {
 
-    /** GPS 한 점 저장. accuracy는 선택이라 null 가능 (그래서 Double) */
+    /** GPS 한 점 저장. accuracy는 선택이라 null 가능 (그래서 Double). recordedAt = Geo.now() (시연 계정은 시연 시계, 11/17) */
     int insertTrack(@Param("tripId") long tripId, @Param("lat") double lat, @Param("lng") double lng,
-                    @Param("accuracy") Double accuracy);
+                    @Param("accuracy") Double accuracy, @Param("recordedAt") LocalDateTime recordedAt);
 
-    /** 최근 GPS 점, 새 것부터 최대 count개 (도착·출발 판정용). 오차가 maxAccuracy보다 큰 점, seconds초보다 오래된 점은 뺌 */
+    /** 최근 GPS 점, 새 것부터 최대 count개 (도착·출발 판정용). 오차가 maxAccuracy보다 큰 점, now에서 seconds초보다 오래된 점은 뺌 */
     List<TrackPoint> selectRecentTrackList(@Param("tripId") long tripId, @Param("count") int count,
-                                           @Param("seconds") int seconds, @Param("maxAccuracy") int maxAccuracy);
+                                           @Param("seconds") int seconds, @Param("maxAccuracy") int maxAccuracy,
+                                           @Param("now") LocalDateTime now);
 
     /** 이 점에서 경계가 있는 칸(place_area와 이어진 칸)까지 거리. 경계 있는 칸만 나옴 */
     List<StopAreaMeters> selectAreaMetersList(@Param("tripId") long tripId, @Param("lat") double lat, @Param("lng") double lng);

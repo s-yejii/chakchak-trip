@@ -155,7 +155,7 @@ class TrackServiceImplTest {
             trackPoint.setLng(point[1]);
             recent.add(trackPoint);
         }
-        when(trackMapper.selectRecentTrackList(eq(TRIP_ID), anyInt(), anyInt(), anyInt())).thenReturn(recent);
+        when(trackMapper.selectRecentTrackList(eq(TRIP_ID), anyInt(), anyInt(), anyInt(), any())).thenReturn(recent);
 
         TrackRequest request = new TrackRequest();
         request.setLat(newestFirst[0][0]);
