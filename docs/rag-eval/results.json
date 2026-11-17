@@ -1,0 +1,2692 @@
+[
+ {
+  "question": {
+   "id": "1",
+   "place": "명동 숙소",
+   "kind": "cafe",
+   "mood": "조용한",
+   "moodWord": "조용",
+   "type": "same"
+  },
+  "answer": {
+   "candidateCount": 10,
+   "embeddedCount": 10,
+   "keyword": [],
+   "keywordMs": 6,
+   "rag": [
+    {
+     "id": "naver-1069707700",
+     "name": "오브옉트 레코드바",
+     "quote": "책을 읽거나 혼자 와도 좋겠네요",
+     "reason": "책을 읽거나 혼자 와도 좋은 곳"
+    },
+    {
+     "id": "naver-779058538",
+     "name": "명동양과",
+     "quote": "스벅, 투썸처럼 정신없지 않아서 이야기할 때 편했습니다",
+     "reason": "정신없지 않아 이야기하기 편함"
+    },
+    {
+     "id": "naver-1471317586",
+     "name": "넬보스코 남촌빵집",
+     "quote": "장소가 주는 의외의 호젓함은 이 집의 최대 강점이다.",
+     "reason": "장소가 주는 의외의 호젓함"
+    },
+    {
+     "id": "naver-181633326",
+     "name": "더 스팟 패뷸러스",
+     "quote": "조용하고 편안한 분위기라 여유롭게",
+     "reason": "조용하고 편안한 분위기임"
+    }
+   ],
+   "ragMs": 2097,
+   "vector": [
+    {
+     "id": "naver-1069707700",
+     "name": "오브옉트 레코드바",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-779058538",
+     "name": "명동양과",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-18020050",
+     "name": "융태행제과점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-11715731",
+     "name": "더그랜드롯데 서울 델리카한스",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1471317586",
+     "name": "넬보스코 남촌빵집",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "vectorMs": 722
+  }
+ },
+ {
+  "question": {
+   "id": "2",
+   "place": "명동 숙소",
+   "kind": "cafe",
+   "mood": "말소리 안 시끄러워서 대화하기 좋은",
+   "moodWord": "조용",
+   "type": "diff"
+  },
+  "answer": {
+   "candidateCount": 10,
+   "embeddedCount": 10,
+   "keyword": [],
+   "keywordMs": 2,
+   "rag": [
+    {
+     "id": "naver-1069707700",
+     "name": "오브옉트 레코드바",
+     "quote": "재즈음악도 들으면서 대화하기도 좋고",
+     "reason": "재즈 음악이 나오고 대화하기 좋은 곳"
+    },
+    {
+     "id": "naver-779058538",
+     "name": "명동양과",
+     "quote": "스벅, 투썸처럼 정신없지 않아서 이야기할 때 편했습니다",
+     "reason": "정신없지 않고 이야기하기 편함"
+    },
+    {
+     "id": "naver-181633326",
+     "name": "더 스팟 패뷸러스",
+     "quote": "조용하고 편안한 분위기라 여유롭게 커피 마시면서 쉬기 좋았고",
+     "reason": "조용하고 편안하여 쉬기 좋은 분위기"
+    }
+   ],
+   "ragMs": 1205,
+   "vector": [
+    {
+     "id": "naver-1069707700",
+     "name": "오브옉트 레코드바",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-779058538",
+     "name": "명동양과",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-181633326",
+     "name": "더 스팟 패뷸러스",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-11715731",
+     "name": "더그랜드롯데 서울 델리카한스",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-18020050",
+     "name": "융태행제과점",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "vectorMs": 498
+  }
+ },
+ {
+  "question": {
+   "id": "3",
+   "place": "명동 숙소",
+   "kind": "cafe",
+   "mood": "오래 앉아 있어도 눈치 안 보이는",
+   "moodWord": "오래",
+   "type": "diff"
+  },
+  "answer": {
+   "candidateCount": 10,
+   "embeddedCount": 10,
+   "keyword": [],
+   "keywordMs": 2,
+   "rag": [
+    {
+     "id": "naver-779058538",
+     "name": "명동양과",
+     "quote": "스벅, 투썸처럼 정신없지 않아서 이야기할 때 편했습니다",
+     "reason": "정신없지 않아 편안하게 대화할 수 있음"
+    },
+    {
+     "id": "naver-1471317586",
+     "name": "넬보스코 남촌빵집",
+     "quote": "넓은 면적 덕분에 좌석 배치가 여유롭고 의자도 편하다.",
+     "reason": "넓고 여유로워 두어 시간 편히 쉬기 좋음"
+    }
+   ],
+   "ragMs": 1017,
+   "vector": [
+    {
+     "id": "naver-1069707700",
+     "name": "오브옉트 레코드바",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-779058538",
+     "name": "명동양과",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-181633326",
+     "name": "더 스팟 패뷸러스",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-18020050",
+     "name": "융태행제과점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1803046329",
+     "name": "파인즈",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "vectorMs": 504
+  }
+ },
+ {
+  "question": {
+   "id": "4",
+   "place": "명동 숙소",
+   "kind": "food",
+   "mood": "혼밥하기 좋은",
+   "moodWord": "혼밥",
+   "type": "same"
+  },
+  "answer": {
+   "candidateCount": 82,
+   "embeddedCount": 82,
+   "keyword": [
+    {
+     "id": "naver-2070820952",
+     "name": "솜솜카츠 명동점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1525897513",
+     "name": "마파사천뚝배기",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2053206934",
+     "name": "싸다김밥 을지로입구역점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-18039088",
+     "name": "명동교자 1호점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-18038249",
+     "name": "맥도날드 명동점",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "keywordMs": 7,
+   "rag": [
+    {
+     "id": "naver-1546529826",
+     "name": "라밥 회현점",
+     "quote": "점심혼밥하기에는 참좋아요",
+     "reason": "점심 혼밥하기에 좋고 메뉴가 다양함"
+    },
+    {
+     "id": "naver-1278578897",
+     "name": "병아리김밥 명동점",
+     "quote": "1인석이 많아서 혼밥하기 좋고",
+     "reason": "1인석이 많아서 혼밥하기 좋음"
+    },
+    {
+     "id": "naver-1194565227",
+     "name": "낭만김밥",
+     "quote": "학새들 직장인 혼밥하기 좋아요.",
+     "reason": "학생들과 직장인이 혼밥하기 좋음"
+    }
+   ],
+   "ragMs": 1747,
+   "vector": [
+    {
+     "id": "naver-1546529826",
+     "name": "라밥 회현점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2053206934",
+     "name": "싸다김밥 을지로입구역점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1278578897",
+     "name": "병아리김밥 명동점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-18038249",
+     "name": "맥도날드 명동점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2026619835",
+     "name": "무월 서울시청점",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "vectorMs": 505
+  }
+ },
+ {
+  "question": {
+   "id": "5",
+   "place": "명동 숙소",
+   "kind": "food",
+   "mood": "부모님 모시고 가기 좋은",
+   "moodWord": "부모님",
+   "type": "same"
+  },
+  "answer": {
+   "candidateCount": 82,
+   "embeddedCount": 82,
+   "keyword": [
+    {
+     "id": "naver-2026619835",
+     "name": "무월 서울시청점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1070553322",
+     "name": "더펄 바이 그릴도하 명동점",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "keywordMs": 8,
+   "rag": [
+    {
+     "id": "naver-11679760",
+     "name": "더그랜드롯데 서울 도림",
+     "quote": "어른들이 좋아하셔서 다 좋았습니다.",
+     "reason": "소란스럽지 않고 깔끔한 음식으로 어른들이 좋아함"
+    },
+    {
+     "id": "naver-1048843101",
+     "name": "더퍼스트 서래향 시청점",
+     "quote": "조용한 분위기에서 편하게 식사할 수 있어 좋았습니다.",
+     "reason": "조용한 분위기에서 깔끔한 음식을 편하게 즐길 수 있음"
+    },
+    {
+     "id": "naver-1394059724",
+     "name": "참치공방 시청점",
+     "quote": "정갈한 분위기 덕분에 긴장이 좀 풀렸네요",
+     "reason": "정갈한 분위기와 맛있는 참치로 부모님 모시기 좋음"
+    },
+    {
+     "id": "naver-1070553322",
+     "name": "더펄 바이 그릴도하 명동점",
+     "quote": "북적이지않고 예약했더니 너무 좋은자리 배정해주셔서 부모님이 너무 좋아하셨어요.",
+     "reason": "북적이지 않고 부드러운 양갈비로 부모님이 만족함"
+    },
+    {
+     "id": "naver-2007838063",
+     "name": "윤슬 숯불구이 명동점",
+     "quote": "편안한 분위기라 부모님도 좋아하셨어요.",
+     "reason": "편안한 분위기에서 부모님과 함께 만족스러운 식사를 함"
+    }
+   ],
+   "ragMs": 3516,
+   "vector": [
+    {
+     "id": "naver-11679760",
+     "name": "더그랜드롯데 서울 도림",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1048843101",
+     "name": "더퍼스트 서래향 시청점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1394059724",
+     "name": "참치공방 시청점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1070553322",
+     "name": "더펄 바이 그릴도하 명동점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1525612888",
+     "name": "서울한우 남대문점",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "vectorMs": 461
+  }
+ },
+ {
+  "question": {
+   "id": "6",
+   "place": "명동 숙소",
+   "kind": "food",
+   "mood": "외국인 친구 데려가기 좋은 한식",
+   "moodWord": "외국인",
+   "type": "same"
+  },
+  "answer": {
+   "candidateCount": 82,
+   "embeddedCount": 82,
+   "keyword": [
+    {
+     "id": "naver-1054209629",
+     "name": "효담칼국수 닭한마리 명동본점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2026619835",
+     "name": "무월 서울시청점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1278578897",
+     "name": "병아리김밥 명동점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-11592650",
+     "name": "명동교자 본점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-38227464",
+     "name": "이삭토스트 서울명동점",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "keywordMs": 72,
+   "rag": [
+    {
+     "id": "naver-1525612888",
+     "name": "서울한우 남대문점",
+     "quote": "매장도 넓고 예약가능해서 외국인손님들 왔을때 오기도 좋을거같아요",
+     "reason": "매장이 넓고 예약이 가능해 외국인 손님과 오기 좋음"
+    },
+    {
+     "id": "naver-2026619835",
+     "name": "무월 서울시청점",
+     "quote": "외국인 분들께서 관광차 방문해도 너무 좋을 것 같더라구요!",
+     "reason": "음식이 정갈해 외국인 관광객이 방문하기 좋을 것 같음"
+    }
+   ],
+   "ragMs": 1660,
+   "vector": [
+    {
+     "id": "naver-1194565227",
+     "name": "낭만김밥",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2085768483",
+     "name": "그륵 명동",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1525612888",
+     "name": "서울한우 남대문점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1213744451",
+     "name": "숭례도담",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1704340605",
+     "name": "금성회관 서울시청직영점",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "vectorMs": 430
+  }
+ },
+ {
+  "question": {
+   "id": "7",
+   "place": "명동 숙소",
+   "kind": "food",
+   "mood": "혼자 가도 어색하지 않은",
+   "moodWord": "혼밥",
+   "type": "diff"
+  },
+  "answer": {
+   "candidateCount": 82,
+   "embeddedCount": 82,
+   "keyword": [
+    {
+     "id": "naver-2070820952",
+     "name": "솜솜카츠 명동점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1525897513",
+     "name": "마파사천뚝배기",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2053206934",
+     "name": "싸다김밥 을지로입구역점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-18039088",
+     "name": "명동교자 1호점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-18038249",
+     "name": "맥도날드 명동점",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "keywordMs": 7,
+   "rag": [
+    {
+     "id": "naver-1546529826",
+     "name": "라밥 회현점",
+     "quote": "점심혼밥하기에는 참좋아요",
+     "reason": "점심 혼밥하기에 좋고 혼자 먹기 딱 좋은 곳"
+    },
+    {
+     "id": "naver-2086351577",
+     "name": "카사데타코 북창점",
+     "quote": "바 자리도 있어 혼자 와도 전혀 불편함이 없어 보이더군요.",
+     "reason": "바 자리가 있어 혼자 와도 전혀 불편하지 않음"
+    },
+    {
+     "id": "naver-1278578897",
+     "name": "병아리김밥 명동점",
+     "quote": "1인석이 많아서 혼밥하기 좋고",
+     "reason": "1인석이 많아서 혼밥하기 좋음"
+    },
+    {
+     "id": "naver-2053206934",
+     "name": "싸다김밥 을지로입구역점",
+     "quote": "혼밥하기에도 좋고",
+     "reason": "혼밥하기에 좋은 매장"
+    }
+   ],
+   "ragMs": 1453,
+   "vector": [
+    {
+     "id": "naver-1546529826",
+     "name": "라밥 회현점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2086351577",
+     "name": "카사데타코 북창점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1278578897",
+     "name": "병아리김밥 명동점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1525612888",
+     "name": "서울한우 남대문점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2053206934",
+     "name": "싸다김밥 을지로입구역점",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "vectorMs": 474
+  }
+ },
+ {
+  "question": {
+   "id": "8",
+   "place": "명동 숙소",
+   "kind": "food",
+   "mood": "양 많고 든든한",
+   "moodWord": "든든",
+   "type": "diff"
+  },
+  "answer": {
+   "candidateCount": 82,
+   "embeddedCount": 82,
+   "keyword": [
+    {
+     "id": "naver-2007838063",
+     "name": "윤슬 숯불구이 명동점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1466590872",
+     "name": "등촌샤브칼국수 명동점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2070820952",
+     "name": "솜솜카츠 명동점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1604370045",
+     "name": "백옥 명동",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-38003244",
+     "name": "금성관 나주곰탕",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "keywordMs": 5,
+   "rag": [
+    {
+     "id": "naver-35948374",
+     "name": "꽁시면관 본점",
+     "quote": "건더기를 정말 후하게 주셔서 같이 떠먹었더니",
+     "reason": "건더기를 후하게 주어 양이 많음"
+    },
+    {
+     "id": "naver-38003244",
+     "name": "금성관 나주곰탕",
+     "quote": "고기 양도 넉넉하고 부드러워서 끝까지 든든하게 먹었어요.",
+     "reason": "고기 양이 넉넉하여 든든하게 먹음"
+    },
+    {
+     "id": "naver-1525612888",
+     "name": "서울한우 남대문점",
+     "quote": "깔끔하고 양도 많아요",
+     "reason": "국밥 양이 많고 든든함"
+    }
+   ],
+   "ragMs": 1135,
+   "vector": [
+    {
+     "id": "naver-35948374",
+     "name": "꽁시면관 본점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1225449916",
+     "name": "장인닭갈비 명동점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-38003244",
+     "name": "금성관 나주곰탕",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1363786011",
+     "name": "경성함바그 명동점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1525612888",
+     "name": "서울한우 남대문점",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "vectorMs": 501
+  }
+ },
+ {
+  "question": {
+   "id": "9",
+   "place": "종로3가/익선",
+   "kind": "cafe",
+   "mood": "노트북 펴고 작업하기 좋은",
+   "moodWord": "작업",
+   "type": "diff"
+  },
+  "answer": {
+   "candidateCount": 19,
+   "embeddedCount": 19,
+   "keyword": [],
+   "keywordMs": 3,
+   "rag": [],
+   "ragMs": 984,
+   "vector": [
+    {
+     "id": "naver-1576850592",
+     "name": "솔방울베이커리",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2094414526",
+     "name": "오티씨커피 익선",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2002076054",
+     "name": "카페 뷰",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1262377225",
+     "name": "청수당 베이커리",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2077529202",
+     "name": "레인리포트 레인보우",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "vectorMs": 440
+  }
+ },
+ {
+  "question": {
+   "id": "10",
+   "place": "종로3가/익선",
+   "kind": "cafe",
+   "mood": "사진 예쁘게 나오는",
+   "moodWord": "사진",
+   "type": "same"
+  },
+  "answer": {
+   "candidateCount": 19,
+   "embeddedCount": 19,
+   "keyword": [
+    {
+     "id": "naver-2077529202",
+     "name": "레인리포트 레인보우",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1910405811",
+     "name": "소하염전",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2094414526",
+     "name": "오티씨커피 익선",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-506996136",
+     "name": "서울커피 익선본점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1262377225",
+     "name": "청수당 베이커리",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "keywordMs": 4,
+   "rag": [
+    {
+     "id": "naver-2077529202",
+     "name": "레인리포트 레인보우",
+     "quote": "곳곳이 예쁘게 꾸며져 있어서 사진도 잘 나와요",
+     "reason": "곳곳이 예쁘게 꾸며져 사진이 잘 나옴"
+    },
+    {
+     "id": "naver-2094414526",
+     "name": "오티씨커피 익선",
+     "quote": "사진 찍기 좋은 익선동 감성 공간",
+     "reason": "한옥 감성이며 사진 찍기 좋은 곳"
+    },
+    {
+     "id": "naver-1387480043",
+     "name": "동백양과점 익선점",
+     "quote": "비주얼부터 몽글몽글 너무 예뻐서 먹기 전부터 사진을 몇 장이나 찍었는지",
+     "reason": "디저트 비주얼이 예뻐 사진을 많이 찍음"
+    },
+    {
+     "id": "naver-1262377225",
+     "name": "청수당 베이커리",
+     "quote": "인생샷도 찍고, 카페 내부/외부 분위기도 너무 좋고",
+     "reason": "인생샷을 찍을 수 있는 예쁜 인테리어"
+    },
+    {
+     "id": "naver-1220362883",
+     "name": "한옥랑솜 익선동카페",
+     "quote": "한옥 느낌 낭낭한데 인생샷 찍기도 딱 좋다.",
+     "reason": "한옥 스타일로 인생샷 찍기 좋은 곳"
+    }
+   ],
+   "ragMs": 1747,
+   "vector": [
+    {
+     "id": "naver-2077529202",
+     "name": "레인리포트 레인보우",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2094414526",
+     "name": "오티씨커피 익선",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1387480043",
+     "name": "동백양과점 익선점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1262377225",
+     "name": "청수당 베이커리",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1576850592",
+     "name": "솔방울베이커리",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "vectorMs": 454
+  }
+ },
+ {
+  "question": {
+   "id": "11",
+   "place": "종로3가/익선",
+   "kind": "cafe",
+   "mood": "한옥 감성 있는",
+   "moodWord": "한옥",
+   "type": "same"
+  },
+  "answer": {
+   "candidateCount": 19,
+   "embeddedCount": 19,
+   "keyword": [
+    {
+     "id": "naver-2077529202",
+     "name": "레인리포트 레인보우",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2039605875",
+     "name": "스탠다드브레드 익선",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2094414526",
+     "name": "오티씨커피 익선",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1576850592",
+     "name": "솔방울베이커리",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1323166650",
+     "name": "서순라길 한옥카페",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "keywordMs": 2,
+   "rag": [
+    {
+     "id": "naver-1576850592",
+     "name": "솔방울베이커리",
+     "quote": "한옥 감성이 잘 살아있는 카페예요.",
+     "reason": "한옥 감성이 잘 살아있고 조용히 쉬기 좋음"
+    },
+    {
+     "id": "naver-1220362883",
+     "name": "한옥랑솜 익선동카페",
+     "quote": "고즈넉하니 좋더라구요",
+     "reason": "고즈넉한 분위기의 한옥 카페"
+    },
+    {
+     "id": "naver-1903072529",
+     "name": "익선동 라인카페",
+     "quote": "한옥 분위기 낭낭하고 통창으로 보는 익선동 거리 기분 좋아요",
+     "reason": "한옥 분위기 낭낭하고 통창 뷰가 좋음"
+    },
+    {
+     "id": "naver-2094414526",
+     "name": "오티씨커피 익선",
+     "quote": "한옥의 분위기를 그대로 살린 공간이라",
+     "reason": "한옥의 분위기를 그대로 살린 공간임"
+    },
+    {
+     "id": "naver-1323166650",
+     "name": "서순라길 한옥카페",
+     "quote": "한옥 감성을 제대로 느낄 수 있었던 카페였어요",
+     "reason": "한옥 감성을 제대로 느낄 수 있는 곳"
+    }
+   ],
+   "ragMs": 1638,
+   "vector": [
+    {
+     "id": "naver-1576850592",
+     "name": "솔방울베이커리",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2077529202",
+     "name": "레인리포트 레인보우",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1220362883",
+     "name": "한옥랑솜 익선동카페",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1903072529",
+     "name": "익선동 라인카페",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2094414526",
+     "name": "오티씨커피 익선",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "vectorMs": 433
+  }
+ },
+ {
+  "question": {
+   "id": "12",
+   "place": "종로3가/익선",
+   "kind": "cafe",
+   "mood": "데이트하기 좋은",
+   "moodWord": "데이트",
+   "type": "same"
+  },
+  "answer": {
+   "candidateCount": 19,
+   "embeddedCount": 19,
+   "keyword": [
+    {
+     "id": "naver-1822592111",
+     "name": "더블유슬래시 서순라길점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2077529202",
+     "name": "레인리포트 레인보우",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2094414526",
+     "name": "오티씨커피 익선",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-506996136",
+     "name": "서울커피 익선본점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1323166650",
+     "name": "서순라길 한옥카페",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "keywordMs": 3,
+   "rag": [
+    {
+     "id": "naver-1323166650",
+     "name": "서순라길 한옥카페",
+     "quote": "고즈넉한 한옥에서 돌담길 바라보며 힐링 데이트 즐기기 딱 좋은 곳",
+     "reason": "돌담길 바라보며 힐링 데이트하기 좋은 곳"
+    },
+    {
+     "id": "naver-2094414526",
+     "name": "오티씨커피 익선",
+     "quote": "너무 감다살 익선 데이트 코스에요.",
+     "reason": "맛과 멋을 다 챙긴 익선 데이트 코스"
+    },
+    {
+     "id": "naver-506996136",
+     "name": "서울커피 익선본점",
+     "quote": "특색 있는 인테리어 속에서 색다른 디저트를 즐길 수 있어 익선동 데이트 코스로 완전 추천합니다!",
+     "reason": "특색 있는 인테리어 속 익선동 데이트 코스"
+    }
+   ],
+   "ragMs": 1533,
+   "vector": [
+    {
+     "id": "naver-1323166650",
+     "name": "서순라길 한옥카페",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1262377225",
+     "name": "청수당 베이커리",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2094414526",
+     "name": "오티씨커피 익선",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-506996136",
+     "name": "서울커피 익선본점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1827620160",
+     "name": "하이웨스트 익선",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "vectorMs": 449
+  }
+ },
+ {
+  "question": {
+   "id": "13",
+   "place": "종로3가/익선",
+   "kind": "cafe",
+   "mood": "창밖 보면서 멍때리기 좋은",
+   "moodWord": "창밖",
+   "type": "diff"
+  },
+  "answer": {
+   "candidateCount": 19,
+   "embeddedCount": 19,
+   "keyword": [],
+   "keywordMs": 2,
+   "rag": [
+    {
+     "id": "naver-2002076054",
+     "name": "카페 뷰",
+     "quote": "푸릇푸릇한 숲뷰와 종묘 보며 힐링하기 딱이네요.",
+     "reason": "푸릇한 숲뷰와 종묘를 보며 힐링하기 좋아요."
+    },
+    {
+     "id": "naver-1903072529",
+     "name": "익선동 라인카페",
+     "quote": "정원에서 안개뿜는 돌 멍하니 바라보다가",
+     "reason": "정원에서 돌을 바라보며 멍때리기 좋습니다."
+    },
+    {
+     "id": "naver-1869147927",
+     "name": "자연도소금빵&자연도가",
+     "quote": "빵부스러기 주워먹는 참새들 구경하며 멍때리다 왔어요.",
+     "reason": "참새들을 구경하며 멍때리기 좋은 곳입니다."
+    }
+   ],
+   "ragMs": 1244,
+   "vector": [
+    {
+     "id": "naver-2002076054",
+     "name": "카페 뷰",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1262377225",
+     "name": "청수당 베이커리",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1903072529",
+     "name": "익선동 라인카페",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2077529202",
+     "name": "레인리포트 레인보우",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1869147927",
+     "name": "자연도소금빵&자연도가",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "vectorMs": 433
+  }
+ },
+ {
+  "question": {
+   "id": "14",
+   "place": "종로3가/익선",
+   "kind": "food",
+   "mood": "주문하면 음식 빨리 나오는",
+   "moodWord": "빨리",
+   "type": "diff"
+  },
+  "answer": {
+   "candidateCount": 72,
+   "embeddedCount": 72,
+   "keyword": [
+    {
+     "id": "naver-1201458226",
+     "name": "라밥 종로점",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "keywordMs": 5,
+   "rag": [
+    {
+     "id": "naver-1201458226",
+     "name": "라밥 종로점",
+     "quote": "음식이 빨리 나와서 점심시간에도 빠르게 먹을 수 있었어요.",
+     "reason": "음식이 빨리 나와 빠르게 먹을 수 있음"
+    },
+    {
+     "id": "naver-17924726",
+     "name": "신라반점",
+     "quote": "빠르게나오고 맛있게 잘먹었습니다!",
+     "reason": "간짜장이 빠르게 나와 맛있게 먹음"
+    },
+    {
+     "id": "naver-1395094671",
+     "name": "또보겠지떡볶이집 몽글몽글청계점",
+     "quote": "직원분들도 친절하시고 음식도 빨리 나와서 좋습니다.",
+     "reason": "음식이 빨리 나와서 좋음"
+    }
+   ],
+   "ragMs": 2508,
+   "vector": [
+    {
+     "id": "naver-1201458226",
+     "name": "라밥 종로점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-11761114",
+     "name": "김가네 종로3가점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1906426107",
+     "name": "이삭토스트 종로3가점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1127729650",
+     "name": "익선취향",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-17924726",
+     "name": "신라반점",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "vectorMs": 482
+  }
+ },
+ {
+  "question": {
+   "id": "15",
+   "place": "종로3가/익선",
+   "kind": "food",
+   "mood": "친구랑 수다 떨기 좋은 넓은",
+   "moodWord": "넓",
+   "type": "diff"
+  },
+  "answer": {
+   "candidateCount": 72,
+   "embeddedCount": 72,
+   "keyword": [
+    {
+     "id": "naver-1774105337",
+     "name": "리향",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2084547496",
+     "name": "어담익선",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1368773774",
+     "name": "삼해집 종로점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2077556000",
+     "name": "다락솥 안국점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1543784908",
+     "name": "평양고깃집",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "keywordMs": 11,
+   "rag": [
+    {
+     "id": "naver-1004949650",
+     "name": "숙썽수산 종로본점",
+     "quote": "룸형식이라 조용히 수다떨기도 좋았고요",
+     "reason": "룸형식이라 조용히 수다떨기 좋음"
+    }
+   ],
+   "ragMs": 3482,
+   "vector": [
+    {
+     "id": "naver-1127729650",
+     "name": "익선취향",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-35708211",
+     "name": "순라길 비비",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1051747215",
+     "name": "서양면옥 서순라길점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1113085292",
+     "name": "온천집",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1536076658",
+     "name": "퍼블릭도원 서순라길점",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "vectorMs": 526
+  }
+ },
+ {
+  "question": {
+   "id": "16",
+   "place": "종로3가/익선",
+   "kind": "food",
+   "mood": "아이 데리고 가기 편한",
+   "moodWord": "아이랑",
+   "type": "same"
+  },
+  "answer": {
+   "candidateCount": 72,
+   "embeddedCount": 72,
+   "keyword": [],
+   "keywordMs": 10,
+   "rag": [
+    {
+     "id": "naver-2086785604",
+     "name": "키세카츠 안국역점",
+     "quote": "아기 의자도 잘 구비 되어 있고 인테리어도 깔끔하고 시원해요",
+     "reason": "아기 의자가 잘 구비되어 있고 매장이 깔끔함"
+    },
+    {
+     "id": "naver-11761114",
+     "name": "김가네 종로3가점",
+     "quote": "정말 깨끗하고 음식도 신선해요! 아가 데리고 오기에도 너무 좋아요!",
+     "reason": "매장이 정말 깨끗하고 아이 데리고 오기 좋음"
+    },
+    {
+     "id": "naver-1915561327",
+     "name": "솥내음 종로인사동점",
+     "quote": "아이 동반인 것 보시고 소스에 와사비 빼실거냐고 챙겨주셨고요",
+     "reason": "아이 동반인 것을 보고 세심하게 챙겨줌"
+    }
+   ],
+   "ragMs": 4728,
+   "vector": [
+    {
+     "id": "naver-2086785604",
+     "name": "키세카츠 안국역점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-11761114",
+     "name": "김가네 종로3가점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2019730269",
+     "name": "금촌국밥",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2084547496",
+     "name": "어담익선",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1201458226",
+     "name": "라밥 종로점",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "vectorMs": 443
+  }
+ },
+ {
+  "question": {
+   "id": "17",
+   "place": "을지로 회식",
+   "kind": "food",
+   "mood": "회식하기 좋은",
+   "moodWord": "회식",
+   "type": "same"
+  },
+  "answer": {
+   "candidateCount": 85,
+   "embeddedCount": 84,
+   "keyword": [
+    {
+     "id": "naver-1790378051",
+     "name": "도야집 을지로점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1542979503",
+     "name": "난로은회 을지로",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2055776822",
+     "name": "용삼식당 을지로",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2050664995",
+     "name": "이복희해장 종로직영점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2083592068",
+     "name": "이가네양꼬치 충무로직영점",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "keywordMs": 5,
+   "rag": [
+    {
+     "id": "naver-2055776822",
+     "name": "용삼식당 을지로",
+     "quote": "14인석 규모의 넓고 프라이빗한 룸을 예약할 수 있어서 우리끼리 주변 방해 없이",
+     "reason": "14인석 프라이빗 룸이 있어 회식하기 좋음"
+    },
+    {
+     "id": "naver-18034869",
+     "name": "일식성진",
+     "quote": "큼직하고 프라이빗한 룸이 구비되어있어 각종 모임 및 단체회식 하기 정말 좋았습니다.",
+     "reason": "큼직하고 프라이빗한 룸이 구비되어 있음"
+    },
+    {
+     "id": "naver-1353673506",
+     "name": "수월가 을지로본점",
+     "quote": "한 층을 통째로 빌려주셔서 편안한 분위기에서 회식할 수 있었습니다",
+     "reason": "한 층을 통째로 빌려주어 편안하게 회식함"
+    },
+    {
+     "id": "naver-1831135090",
+     "name": "홍반점 종각 본점",
+     "quote": "저희 외 다른 팀은 받지않아 주셔서 넓은 홀에서 프라이빗한 시간을 보낼 수 있었어요!",
+     "reason": "2층 홀을 단독으로 사용해 프라이빗함"
+    },
+    {
+     "id": "naver-2069798395",
+     "name": "을지백탄뼈구이",
+     "quote": "테이블을 붙여 앉기 좋아 단체 모임 장소로 딱이었습니다.",
+     "reason": "테이블을 붙여 앉기 좋아 단체 모임에 적합"
+    }
+   ],
+   "ragMs": 3812,
+   "vector": [
+    {
+     "id": "naver-2055776822",
+     "name": "용삼식당 을지로",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1194224244",
+     "name": "예맥관 종로본점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-18034869",
+     "name": "일식성진",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1790378051",
+     "name": "도야집 을지로점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1353673506",
+     "name": "수월가 을지로본점",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "vectorMs": 457
+  }
+ },
+ {
+  "question": {
+   "id": "18",
+   "place": "을지로 회식",
+   "kind": "food",
+   "mood": "여럿이 모임하기 좋은",
+   "moodWord": "단체",
+   "type": "diff"
+  },
+  "answer": {
+   "candidateCount": 85,
+   "embeddedCount": 84,
+   "keyword": [
+    {
+     "id": "naver-2055776822",
+     "name": "용삼식당 을지로",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-18034869",
+     "name": "일식성진",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-34744446",
+     "name": "바오차이",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "keywordMs": 7,
+   "rag": [
+    {
+     "id": "naver-2055776822",
+     "name": "용삼식당 을지로",
+     "quote": "14인석 규모의 넓고 프라이빗한 룸을 예약할 수 있어서",
+     "reason": "14인석 룸이 있어 회식하기 좋음"
+    },
+    {
+     "id": "naver-18034869",
+     "name": "일식성진",
+     "quote": "큼직하고 프라이빗한 룸이 구비되어있어 각종 모임 및 단체회식",
+     "reason": "프라이빗한 룸이 있어 단체 모임하기 좋음"
+    },
+    {
+     "id": "naver-2069798395",
+     "name": "을지백탄뼈구이",
+     "quote": "테이블을 붙여 앉기 좋아 단체 모임 장소로 딱이었습니다.",
+     "reason": "테이블을 붙여 앉기 좋아 단체 모임에 적합함"
+    },
+    {
+     "id": "naver-1887919685",
+     "name": "아따 중구 을지로",
+     "quote": "여러 명이 와서 이것저것 시켜놓고 먹기 딱 좋은 분위기예요.",
+     "reason": "매장이 넓고 여러 명이 와서 먹기 좋음"
+    }
+   ],
+   "ragMs": 19312,
+   "vector": [
+    {
+     "id": "naver-2055776822",
+     "name": "용삼식당 을지로",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-18034869",
+     "name": "일식성진",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1194224244",
+     "name": "예맥관 종로본점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2069798395",
+     "name": "을지백탄뼈구이",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1790378051",
+     "name": "도야집 을지로점",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "vectorMs": 483
+  }
+ },
+ {
+  "question": {
+   "id": "19",
+   "place": "을지로 회식",
+   "kind": "food",
+   "mood": "직원이 친절한",
+   "moodWord": "친절",
+   "type": "same"
+  },
+  "answer": {
+   "candidateCount": 85,
+   "embeddedCount": 84,
+   "keyword": [
+    {
+     "id": "naver-1455922396",
+     "name": "에이든",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2058545204",
+     "name": "막삼가 을지로",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2063118238",
+     "name": "라장양갈비.양꼬치 무한리필",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1790378051",
+     "name": "도야집 을지로점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2049164995",
+     "name": "보데가캣",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "keywordMs": 6,
+   "rag": [
+    {
+     "id": "naver-1577663900",
+     "name": "을지육점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2072161329",
+     "name": "삼형제김밥 을지로3가점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1273211996",
+     "name": "청기와타운 충무로점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1668794074",
+     "name": "빽돈 중구 을지로",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1323525758",
+     "name": "진작",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "ragMs": 1625,
+   "vector": [
+    {
+     "id": "naver-1577663900",
+     "name": "을지육점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2072161329",
+     "name": "삼형제김밥 을지로3가점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1273211996",
+     "name": "청기와타운 충무로점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1668794074",
+     "name": "빽돈 중구 을지로",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1323525758",
+     "name": "진작",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "vectorMs": 558
+  }
+ },
+ {
+  "question": {
+   "id": "20",
+   "place": "을지로 회식",
+   "kind": "food",
+   "mood": "노포 감성 있는",
+   "moodWord": "노포",
+   "type": "same"
+  },
+  "answer": {
+   "candidateCount": 85,
+   "embeddedCount": 84,
+   "keyword": [
+    {
+     "id": "naver-11720161",
+     "name": "사랑방칼국수",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-19873655",
+     "name": "필동분식",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-20936663",
+     "name": "서호장",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-11677524",
+     "name": "안동장",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-11728195",
+     "name": "오구반점",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "keywordMs": 5,
+   "rag": [
+    {
+     "id": "naver-19873655",
+     "name": "필동분식",
+     "quote": "노포분위기로 즐기는 집입니다.",
+     "reason": "노포분위기로 즐기는 집입니다."
+    },
+    {
+     "id": "naver-11720161",
+     "name": "사랑방칼국수",
+     "quote": "찐 서울 노포 맛집!",
+     "reason": "언제 방문해도 행복한 식사가 가능한 찐 서울 노포 맛집!"
+    },
+    {
+     "id": "naver-20936663",
+     "name": "서호장",
+     "quote": "을지로 노포답게 많은 이들이 찾는 중식 맛집이다.",
+     "reason": "을지로 노포답게 많은 이들이 찾는 중식 맛집이다."
+    },
+    {
+     "id": "naver-11728195",
+     "name": "오구반점",
+     "quote": "을지로 노포 중식당 맛집!!",
+     "reason": "을지로 노포 중식당 맛집!!"
+    }
+   ],
+   "ragMs": 2341,
+   "vector": [
+    {
+     "id": "naver-19873655",
+     "name": "필동분식",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1960104329",
+     "name": "와타루",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2068471285",
+     "name": "백염막창 을지로본점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-35781578",
+     "name": "세븐티포 명동성당본점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-11720161",
+     "name": "사랑방칼국수",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "vectorMs": 549
+  }
+ },
+ {
+  "question": {
+   "id": "21",
+   "place": "을지로 회식",
+   "kind": "food",
+   "mood": "오래된 동네 맛집 느낌 나는",
+   "moodWord": "노포",
+   "type": "diff"
+  },
+  "answer": {
+   "candidateCount": 85,
+   "embeddedCount": 84,
+   "keyword": [
+    {
+     "id": "naver-11720161",
+     "name": "사랑방칼국수",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-19873655",
+     "name": "필동분식",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-20936663",
+     "name": "서호장",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-11677524",
+     "name": "안동장",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-11728195",
+     "name": "오구반점",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "keywordMs": 6,
+   "rag": [
+    {
+     "id": "naver-19873655",
+     "name": "필동분식",
+     "quote": "노포분위기로 즐기는 집입니다.",
+     "reason": "노포 분위기에서 연탄불 닭꼬치를 즐길 수 있는 곳"
+    },
+    {
+     "id": "naver-11728195",
+     "name": "오구반점",
+     "quote": "신호등 하나에 여긴 시간이 그대로라 좋아요.",
+     "reason": "시간이 그대로 멈춘 듯한 노포 중국집"
+    },
+    {
+     "id": "naver-11720161",
+     "name": "사랑방칼국수",
+     "quote": "오랫동안 자주 가는 단골 노포라",
+     "reason": "오랫동안 사랑받아 온 백숙 백반 단골 노포"
+    },
+    {
+     "id": "naver-2068471285",
+     "name": "백염막창 을지로본점",
+     "quote": "백염막창은 정겨운 노포 감성에 레트로한 바이브가 더해져",
+     "reason": "정겨운 노포 감성과 레트로한 바이브의 막창집"
+    },
+    {
+     "id": "naver-20936663",
+     "name": "서호장",
+     "quote": "오래된 노포가 좋은게 이런게 아닐까 싶습니다.",
+     "reason": "가성비 좋고 착한 가격의 오래된 노포 중식당"
+    }
+   ],
+   "ragMs": 1648,
+   "vector": [
+    {
+     "id": "naver-19873655",
+     "name": "필동분식",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-11728195",
+     "name": "오구반점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-19347950",
+     "name": "을지로 전주옥",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-11720161",
+     "name": "사랑방칼국수",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-18006570",
+     "name": "가야성",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "vectorMs": 541
+  }
+ },
+ {
+  "question": {
+   "id": "22",
+   "place": "을지로 회식",
+   "kind": "bar",
+   "mood": "조용히 한잔하기 좋은",
+   "moodWord": "조용",
+   "type": "diff"
+  },
+  "answer": {
+   "candidateCount": 14,
+   "embeddedCount": 14,
+   "keyword": [],
+   "keywordMs": 3,
+   "rag": [
+    {
+     "id": "naver-1927413653",
+     "name": "을지로야장 봉봉바",
+     "quote": "조용히 혼술하기 딱 좋은 술집에 온거같아요ㅎㅎㅎ",
+     "reason": "조용히 혼술하기 좋은 곳"
+    }
+   ],
+   "ragMs": 1209,
+   "vector": [
+    {
+     "id": "naver-1927413653",
+     "name": "을지로야장 봉봉바",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1145767678",
+     "name": "뉴호프 을지로 본점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2028847029",
+     "name": "토리키조쿠 을지로3가점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2089133254",
+     "name": "을지도",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2083227216",
+     "name": "주도락 을지로점",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "vectorMs": 469
+  }
+ },
+ {
+  "question": {
+   "id": "23",
+   "place": "을지로 회식",
+   "kind": "bar",
+   "mood": "2차로 가기 좋은",
+   "moodWord": "2차",
+   "type": "same"
+  },
+  "answer": {
+   "candidateCount": 14,
+   "embeddedCount": 14,
+   "keyword": [
+    {
+     "id": "naver-2060144905",
+     "name": "삐딱 을지로점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2028847029",
+     "name": "토리키조쿠 을지로3가점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1927413653",
+     "name": "을지로야장 봉봉바",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "keywordMs": 2,
+   "rag": [
+    {
+     "id": "naver-2028847029",
+     "name": "토리키조쿠 을지로3가점",
+     "quote": "전체적으로 편하게 이야기하면서 술 한잔하기 좋은 분위기라 2차 장소로 만족스러웠습니다.",
+     "reason": "편하게 이야기하며 2차로 술 마시기 좋음"
+    },
+    {
+     "id": "naver-2007389417",
+     "name": "주마등2",
+     "quote": "분위기도 편해서 여럿이 2차로 오기 딱👍",
+     "reason": "분위기가 편해 여럿이 2차로 오기 좋음"
+    },
+    {
+     "id": "naver-1927413653",
+     "name": "을지로야장 봉봉바",
+     "quote": "을지로에서 2차로 가볍게 술 한잔하기 좋은 곳이었어요.",
+     "reason": "을지로에서 2차로 가볍게 술 한잔하기 좋음"
+    },
+    {
+     "id": "naver-1063104133",
+     "name": "을지로 황금마차",
+     "quote": "외국인 친구들 데리고 갈 힙지로 2차 술집을 찾다가 방문했는데 대성공입니다!",
+     "reason": "외국인 친구들과 2차로 방문하기 좋음"
+    }
+   ],
+   "ragMs": 1273,
+   "vector": [
+    {
+     "id": "naver-2028847029",
+     "name": "토리키조쿠 을지로3가점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2060144905",
+     "name": "삐딱 을지로점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2007389417",
+     "name": "주마등2",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1927413653",
+     "name": "을지로야장 봉봉바",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1063104133",
+     "name": "을지로 황금마차",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "vectorMs": 469
+  }
+ },
+ {
+  "question": {
+   "id": "24",
+   "place": "을지로 회식",
+   "kind": "bar",
+   "mood": "분위기 힙한",
+   "moodWord": "힙한",
+   "type": "same"
+  },
+  "answer": {
+   "candidateCount": 14,
+   "embeddedCount": 14,
+   "keyword": [
+    {
+     "id": "naver-1063104133",
+     "name": "을지로 황금마차",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "keywordMs": 2,
+   "rag": [
+    {
+     "id": "naver-2060144905",
+     "name": "삐딱 을지로점",
+     "quote": "분위기도 힙지로 갬성 그대로!",
+     "reason": "을지로 힙한 감성이 잘 느껴지는 분위기"
+    },
+    {
+     "id": "naver-1063104133",
+     "name": "을지로 황금마차",
+     "quote": "힙지로 감성 제대로 터지는 레트로 포차입니다!",
+     "reason": "을지로 특유의 힙한 분위기가 잘 드러남"
+    },
+    {
+     "id": "naver-1336860060",
+     "name": "모스",
+     "quote": "을지로 힙성에 딱 맞는 완벽한 분위기 맛집",
+     "reason": "을지로 힙한 감성과 감성적인 인테리어"
+    }
+   ],
+   "ragMs": 1496,
+   "vector": [
+    {
+     "id": "naver-1927413653",
+     "name": "을지로야장 봉봉바",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2060144905",
+     "name": "삐딱 을지로점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1145767678",
+     "name": "뉴호프 을지로 본점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1063104133",
+     "name": "을지로 황금마차",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1336860060",
+     "name": "모스",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "vectorMs": 486
+  }
+ },
+ {
+  "question": {
+   "id": "25",
+   "place": "을지로 회식",
+   "kind": "cafe",
+   "mood": "넓고 쾌적한",
+   "moodWord": "넓",
+   "type": "same"
+  },
+  "answer": {
+   "candidateCount": 20,
+   "embeddedCount": 20,
+   "keyword": [
+    {
+     "id": "naver-2036690983",
+     "name": "끄네들로 을지로본점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1020586646",
+     "name": "오뷔르베이커리",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1847636389",
+     "name": "캐시미어커피",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1226395177",
+     "name": "플랫슬리퍼 본점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1057167560",
+     "name": "해운대달맞이빵 을지로점",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "keywordMs": 3,
+   "rag": [
+    {
+     "id": "naver-1057167560",
+     "name": "해운대달맞이빵 을지로점",
+     "quote": "매장 내부가 넓고 탁 트여 있어서",
+     "reason": "매장이 넓고 탁 트여 여유 있게 시간을 보낼 수 있음"
+    },
+    {
+     "id": "naver-1020586646",
+     "name": "오뷔르베이커리",
+     "quote": "자리도 넓고 쾌적하고 좋으네요...!",
+     "reason": "자리가 넓고 쾌적하여 이용하기 좋음"
+    },
+    {
+     "id": "naver-1836179527",
+     "name": "콘웨이커피 을지로점",
+     "quote": "여기는 자리도 널널하구 간격도 넓어요!",
+     "reason": "자리도 널널하고 좌석 간격도 넓음"
+    },
+    {
+     "id": "naver-2042441038",
+     "name": "페이퍼크레인",
+     "quote": "마침 대형카페가 보여서 바로 들어왔어요!",
+     "reason": "대형카페여서 쾌적하고 친구와 오기 좋음"
+    }
+   ],
+   "ragMs": 1820,
+   "vector": [
+    {
+     "id": "naver-1057167560",
+     "name": "해운대달맞이빵 을지로점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1020586646",
+     "name": "오뷔르베이커리",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1069707700",
+     "name": "오브옉트 레코드바",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1053282197",
+     "name": "공간갑",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1038607282",
+     "name": "커피사",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "vectorMs": 393
+  }
+ },
+ {
+  "question": {
+   "id": "26",
+   "place": "예장공원",
+   "kind": "cafe",
+   "mood": "산책하고 쉬어 가기 좋은",
+   "moodWord": "산책",
+   "type": "diff"
+  },
+  "answer": {
+   "candidateCount": 12,
+   "embeddedCount": 12,
+   "keyword": [],
+   "keywordMs": 2,
+   "rag": [
+    {
+     "id": "naver-1836179527",
+     "name": "콘웨이커피 을지로점",
+     "quote": "여유롭고 빵도 맛있어서 자주 올 듯 합니다",
+     "reason": "여유롭게 시간을 보내기 좋음"
+    },
+    {
+     "id": "naver-1057167560",
+     "name": "해운대달맞이빵 을지로점",
+     "quote": "식사 후 디저트 즐기며 쉬어가기에 참 괜찮은 공간이에요.",
+     "reason": "쉬어가기에 괜찮은 공간임"
+    },
+    {
+     "id": "naver-1020586646",
+     "name": "오뷔르베이커리",
+     "quote": "바깥 풍걍보면서 사색즐기기너무 좋네요",
+     "reason": "바깥 풍경 보며 사색하기 좋음"
+    }
+   ],
+   "ragMs": 1317,
+   "vector": [
+    {
+     "id": "naver-1836179527",
+     "name": "콘웨이커피 을지로점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1069707700",
+     "name": "오브옉트 레코드바",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1057167560",
+     "name": "해운대달맞이빵 을지로점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1001964327",
+     "name": "콘티뉴이티 을지로",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1020586646",
+     "name": "오뷔르베이커리",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "vectorMs": 427
+  }
+ },
+ {
+  "question": {
+   "id": "27",
+   "place": "예장공원",
+   "kind": "cafe",
+   "mood": "아늑한",
+   "moodWord": "아늑",
+   "type": "same"
+  },
+  "answer": {
+   "candidateCount": 12,
+   "embeddedCount": 12,
+   "keyword": [],
+   "keywordMs": 2,
+   "rag": [
+    {
+     "id": "naver-1057167560",
+     "name": "해운대달맞이빵 을지로점",
+     "quote": "아늑하면서도 감성적인 분위기를 연출하더라고요.",
+     "reason": "따뜻한 우드 톤의 인테리어로 아늑한 분위기를 느낄 수 있음"
+    },
+    {
+     "id": "naver-1141254769",
+     "name": "아소토베이커리",
+     "quote": "가게는 아늑하고 감성적인 분위기라",
+     "reason": "아늑하고 감성적인 분위기 속에서 여유로운 시간을 보낼 수 있음"
+    }
+   ],
+   "ragMs": 2066,
+   "vector": [
+    {
+     "id": "naver-1057167560",
+     "name": "해운대달맞이빵 을지로점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1069707700",
+     "name": "오브옉트 레코드바",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1836179527",
+     "name": "콘웨이커피 을지로점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1001964327",
+     "name": "콘티뉴이티 을지로",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1020586646",
+     "name": "오뷔르베이커리",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "vectorMs": 410
+  }
+ },
+ {
+  "question": {
+   "id": "28",
+   "place": "예장공원",
+   "kind": "food",
+   "mood": "가성비 좋은",
+   "moodWord": "가성비",
+   "type": "same"
+  },
+  "answer": {
+   "candidateCount": 48,
+   "embeddedCount": 48,
+   "keyword": [
+    {
+     "id": "naver-1820829554",
+     "name": "밀피유",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-11720161",
+     "name": "사랑방칼국수",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-38227464",
+     "name": "이삭토스트 서울명동점",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "keywordMs": 6,
+   "rag": [
+    {
+     "id": "naver-1820829554",
+     "name": "밀피유",
+     "quote": "가성비와 맛 둘 다 잡은 경양식 돈가스 맛집 후기!",
+     "reason": "요즘 물가에 양과 퀄리티가 좋은 경양식 돈가스 맛집"
+    },
+    {
+     "id": "naver-1878658216",
+     "name": "샤오리앤 충무로본점",
+     "quote": "요새 서울에서 8000원짜리 짜장면 찾기 쉽지 않은데",
+     "reason": "서울에서 찾기 힘든 8000원 짜장면과 좋은 가성비"
+    }
+   ],
+   "ragMs": 1386,
+   "vector": [
+    {
+     "id": "naver-1820829554",
+     "name": "밀피유",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1545695294",
+     "name": "해든 충무로본점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-2083592068",
+     "name": "이가네양꼬치 충무로직영점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1746065215",
+     "name": "L7 명동 바이 롯데호텔 플로팅 루프탑바",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1388700298",
+     "name": "익선동목장 명동점",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "vectorMs": 415
+  }
+ },
+ {
+  "question": {
+   "id": "29",
+   "place": "예장공원",
+   "kind": "food",
+   "mood": "가격 부담 없이 배부르게 먹을 수 있는",
+   "moodWord": "가성비",
+   "type": "diff"
+  },
+  "answer": {
+   "candidateCount": 48,
+   "embeddedCount": 48,
+   "keyword": [
+    {
+     "id": "naver-1820829554",
+     "name": "밀피유",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-11720161",
+     "name": "사랑방칼국수",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-38227464",
+     "name": "이삭토스트 서울명동점",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "keywordMs": 3,
+   "rag": [
+    {
+     "id": "naver-1820829554",
+     "name": "밀피유",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1278578897",
+     "name": "병아리김밥 명동점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1545695294",
+     "name": "해든 충무로본점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1878658216",
+     "name": "샤오리앤 충무로본점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-11720161",
+     "name": "사랑방칼국수",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "ragMs": 1429,
+   "vector": [
+    {
+     "id": "naver-1820829554",
+     "name": "밀피유",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1278578897",
+     "name": "병아리김밥 명동점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1545695294",
+     "name": "해든 충무로본점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1878658216",
+     "name": "샤오리앤 충무로본점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-11720161",
+     "name": "사랑방칼국수",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "vectorMs": 435
+  }
+ },
+ {
+  "question": {
+   "id": "30",
+   "place": "예장공원",
+   "kind": "food",
+   "mood": "깔끔하고 위생적인",
+   "moodWord": "깔끔",
+   "type": "same"
+  },
+  "answer": {
+   "candidateCount": 48,
+   "embeddedCount": 48,
+   "keyword": [
+    {
+     "id": "naver-2041488467",
+     "name": "멘츠루 을지로점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1674068339",
+     "name": "진더미엔",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1736184681",
+     "name": "오코노미야끼 정화",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1466590872",
+     "name": "등촌샤브칼국수 명동점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1273211996",
+     "name": "청기와타운 충무로점",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "keywordMs": 4,
+   "rag": [
+    {
+     "id": "naver-1388700298",
+     "name": "익선동목장 명동점",
+     "quote": "매장이 전체적으로 깔끔하고 쾌적해서",
+     "reason": "매장이 전체적으로 깔끔하고 쾌적함"
+    },
+    {
+     "id": "naver-1545695294",
+     "name": "해든 충무로본점",
+     "quote": "매장이 깨끗하고 고기 질이 너무나",
+     "reason": "매장이 깨끗하고 깔끔하게 먹기 좋음"
+    },
+    {
+     "id": "naver-1273211996",
+     "name": "청기와타운 충무로점",
+     "quote": "진짜 깔끔하고 청결하고 직원분들도",
+     "reason": "진짜 깔끔하고 청결함"
+    }
+   ],
+   "ragMs": 1143,
+   "vector": [
+    {
+     "id": "naver-1388700298",
+     "name": "익선동목장 명동점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-13573290",
+     "name": "목멱산방",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1538911146",
+     "name": "보틀러",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1545695294",
+     "name": "해든 충무로본점",
+     "quote": null,
+     "reason": null
+    },
+    {
+     "id": "naver-1273211996",
+     "name": "청기와타운 충무로점",
+     "quote": null,
+     "reason": null
+    }
+   ],
+   "vectorMs": 427
+  }
+ }
+]

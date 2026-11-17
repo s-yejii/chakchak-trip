@@ -30,7 +30,7 @@ PASSWORD = os.environ.get("EVAL_PASSWORD")                    # 코드에 비밀
 DB_CONTAINER = "tripbiseo-db"
 HERE = os.path.dirname(os.path.abspath(__file__))
 REVIEWS_PER_PLACE = 6       # 정답 표시할 때 보여 줄 리뷰 수
-REVIEW_MAX_CHARS = 90
+REVIEW_MAX_CHARS = 500     # 리뷰 전체 (임베딩한 리뷰는 가장 긴 게 402자). 11/16: 90자로 자르니 근거가 뒤에 있는 가게가 0으로 채점돼서 늘림
 
 # 시연 장소 좌표 (plan/service/DemoScenario.java, 임베딩 범위 SQL과 같은 곳)
 PLACES = {
