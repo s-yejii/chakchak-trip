@@ -233,7 +233,9 @@ function distanceOf(place) {
 function infoText(place) {
   if (place.detourMinutes == null) return '지금 위치에서 ' + distText(distanceOf(place))
   let text = '가는 길 +' + toDuration(place.detourMinutes) + (place.isEstimate ? ' (어림)' : '')
-  if (place.slackAfter != null) text += place.slackAfter >= 0 ? ' · 들러도 여유 ' + toDuration(place.slackAfter) : ' · 들르면 늦어요'
+  // 11/17: 카페는 여유가 많으면 더 머물러요(CafeStay) → 늘었을 때만 머무는 시간을 같이 ("1시간 쉬어도 여유 54분")
+  const stayText = place.stayMinutes && place.stayMinutes > 30 ? toDuration(place.stayMinutes) + ' 쉬어도' : '들러도'
+  if (place.slackAfter != null) text += place.slackAfter >= 0 ? ' · ' + stayText + ' 여유 ' + toDuration(place.slackAfter) : ' · 들르면 늦어요'
   return text
 }
 function isLate(place) {
