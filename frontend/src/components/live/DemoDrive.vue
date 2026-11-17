@@ -465,6 +465,9 @@ async function setUp() {
   if (saved) {
     for (const stop of saved.stops) if (isVisited(stop) && stop.state !== 'skipped') place = stop
   }
+  // 11/17: 이미 떠난 칸이면(순환버스로 내려온 뒤 등) 그 칸 말고 마지막으로 있던 자리에 둠 (화면을 다시 열면 팔각정으로 돌아가 하산을 또 하던 문제)
+  const last = readLastPosition(props.live.tripId.value)
+  if (last && (!place || place.departedAt || place === origin.value)) place = last
   if (place && !props.live.position.value) await props.live.placeAt(place.lat, place.lng, false)
 }
 
@@ -542,6 +545,21 @@ async function startIncident(current, next, status) {
   await makeLate(status, current, scenario.value.overstayLateMin)
   return true
 }
+
+// 마지막 위치를 여행 번호와 함께 기억 (다시 열거나 새로고침해도 그 자리에서 이어지게, 11/17)
+const LAST_POSITION_KEY = 'demo-last-position'
+function readLastPosition(tripId) {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(LAST_POSITION_KEY) || 'null')
+    return saved && saved.tripId === tripId ? { lat: saved.lat, lng: saved.lng } : null
+  } catch (e) {
+    return null
+  }
+}
+watch(() => props.live.position.value, (position) => {
+  if (!devMode.isOn || !position || !props.live.tripId.value) return
+  try { sessionStorage.setItem(LAST_POSITION_KEY, JSON.stringify({ tripId: props.live.tripId.value, lat: position.lat, lng: position.lng })) } catch (e) { /* 저장 못 해도 진행 */ }
+})
 
 onMounted(() => {
   setUp()
