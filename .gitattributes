@@ -1,5 +1,11 @@
 /mvnw text eol=lf
 *.cmd text eol=crlf
-db/0[4-7]_*.sql linguist-generated=true
-db/95_demo_seed.sql linguist-generated=true
+
+# GitHub 언어 비율에서 데이터 SQL(크롤링한 장소·리뷰, 시연 시드)은 뺌. 테이블 만드는 SQL(01·02·11~20 등)은 그대로 셈
+# 11/17 ④: 21·21b(6개 구 크롤링, 약 58MB)·22·10b가 빠져 있어서 PLpgSQL이 94%로 나와 추가
+db/0[3-7]_*.sql linguist-generated=true
+db/09_*.sql linguist-generated=true
+db/10b_*.sql linguist-generated=true
+db/2[12]_*.sql linguist-generated=true
+db/21b_*.sql linguist-generated=true
 db/95_demo_seed.sql linguist-generated=true
