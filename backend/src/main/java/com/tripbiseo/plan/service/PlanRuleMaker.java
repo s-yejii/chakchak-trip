@@ -283,6 +283,7 @@ public class PlanRuleMaker {
             }
             int clock = stay.getCheckInTime() == null ? 0 : Geo.toMinutes(stay.getCheckInTime());
             double[] stayPoint = new double[] {stay.getLat(), stay.getLng()};
+            trimLastStopForStay(response.getStops(), day, stayPoint, dayEndOf(conditions, day, days, null));
             for (Stop stop : response.getStops()) {
                 if (stop.getDay() == day) {
                     int move = stop.getLat() == null ? STAY_AFTER_LAST_MIN : PlanTravelTime.minutesBetween(new double[] {stop.getLat(), stop.getLng()}, stayPoint);
@@ -291,6 +292,33 @@ public class PlanRuleMaker {
             }
             response.getStops().add(toStayStop(stay, day, Math.min(clock, LATEST_STAY_MIN)));
         }
+    }
+
+    /**
+     * 숙소 칸이 하루 끝 시각을 넘지 않게 (11/17): 그날 마지막 칸이 끝나고 숙소까지 가면 하루 끝을 넘을 때,
+     * 마지막 칸이 예약(고정)이 아니면 머무는 시간을 줄여요 (SHORTEST_STAY_MIN보다 짧게는 안 함).
+     * 예약이 늦게 끝나면(19:00 회식 120분) 숙소가 하루 끝보다 늦는 건 실제로 그렇게 가야 해서 그대로 둬요
+     */
+    void trimLastStopForStay(List<Stop> stops, int day, double[] stayPoint, int dayEnd) {
+        Stop last = null;
+        for (Stop stop : stops) {
+            if (stop.getDay() == day && stop.getTime() != null && (last == null || endOf(stop) > endOf(last))) {
+                last = stop;
+            }
+        }
+        if (last == null || Boolean.TRUE.equals(last.getFixed()) || last.getLat() == null || last.getStay() == null) {
+            return;
+        }
+        int move = PlanTravelTime.minutesBetween(new double[] {last.getLat(), last.getLng()}, stayPoint);
+        int over = roundUp(endOf(last) + move) - dayEnd;
+        if (over > 0) {
+            last.setStay(Math.min(last.getStay(), Math.max(SHORTEST_STAY_MIN, last.getStay() - over))); // 원래보다 길어지지는 않게
+        }
+    }
+
+    /** 칸이 끝나는 분 (시작 + 머무는 분) */
+    private int endOf(Stop stop) {
+        return Geo.toMinutes(stop.getTime()) + (stop.getStay() == null ? 0 : stop.getStay());
     }
 
     /**
