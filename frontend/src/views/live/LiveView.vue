@@ -32,6 +32,7 @@ import DevDot from '@/components/live/DevDot.vue'
 import DemoDrive from '@/components/live/DemoDrive.vue'
 import TripEndSheet from '@/components/live/TripEndSheet.vue'
 import LostFixedCard from '@/components/live/LostFixedCard.vue'
+import HangangBusOption from '@/components/plan/HangangBusOption.vue' // ③ 11/17: 출발 전 한강버스 제안
 import { closeLiveNotice, liveBanner, removeLiveNotices, showLiveNotice } from '@/utils/liveBanner'
 import { daysBetween, todayText } from '@/utils/dates'
 import { devMode, isFakeGps, setFakeGps } from '@/utils/devMode'
@@ -122,6 +123,14 @@ const stops = computed(() => {
 const currentStop = computed(() => stops.value.find((stop) => stop.reach === 'here') || null)
 const remainingStops = computed(() => stops.value.filter((stop) => stop.reach !== 'done' && stop.reach !== 'here'))
 const nextStop = computed(() => remainingStops.value[0] || null)
+// ③ 11/17: 지금 칸에 있고 다음이 예약(고정)이면 출발 전에 한강버스 카드 (카드가 서버에 물어서 '시간이 남을 때'만 보여요). [그냥 지하철]이면 그 예약엔 다시 안 보임
+const skippedBoatIds = ref([])
+const boatFor = computed(() => {
+  const next = nextStop.value
+  if (!currentStop.value || !next || !next.fixed || !next.time || !live.position.value || skippedBoatIds.value.includes(next.id)) return null
+  return next
+})
+const boatFrom = computed(() => live.position.value || { lat: 0, lng: 0 }) // 출발점 = 지금 위치 (boatFor가 있을 땐 늘 있음)
 // 지금 있는 곳·남은 일정의 장소 id: 검색 결과 카드에서 이미 일정에 있는 곳은 [일정에 넣기] 대신 '일정에 있어요' (11/13)
 const plannedPlaceIds = computed(() => {
   const ids = []
@@ -1090,6 +1099,7 @@ function finishTour() {
               <span v-if="fixedBadge" class="badge" :class="fixedBadge.cls"><i class="ic ic--s i-lock" aria-hidden="true"></i>{{ fixedBadge.text }}</span>
             </div>
 
+            <HangangBusOption v-if="boatFor" :key="boatFor.id" before-leave :from-lat="boatFrom.lat" :from-lng="boatFrom.lng" :to-lat="boatFor.lat" :to-lng="boatFor.lng" :arrive-by="boatFor.time" @skip="skippedBoatIds.push(boatFor.id)" />
             <button v-if="selectedMealFixed && !isLostOpen" type="button" class="btn btn--secondary btn--md" style="align-self: flex-start" @click="manualLostId = selectedMealFixed.id">못 가게 됐어요</button>
             <LiveCards :cards="cards" :selected="selected" :auto-focus="devMode.isOn" :focus="cardFocus" @pick="pickCard" @seg="segCard = $event" @scrolled="onCardScrolled" show-end @end="isAskingEnd = true" />
 
