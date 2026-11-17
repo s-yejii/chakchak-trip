@@ -24,7 +24,7 @@ const STAY_SPEED = 1 // 머무는 동안 시계는 실제 시간대로 (11/08 �
 const ALERT_SHOW_MS = 2500 // 다음 날 아침 안내를 보여 줄 시간
 const MOVE_MS = 6000 // 이동하는 모습을 보여 주는 실제 시간 (시계는 이 동안 이동 시간만큼 흐름)
 const MOVE_STEPS = 12
-const SEND_EVERY = 2 // 이동 중 이 걸음마다 한 점을 서버 위치 기록에도 (회고 다시 보기, 11/17)
+const NEAR_NEXT_M = 160 // 이동 중 점은 걸음마다 서버 위치 기록에도 보내되, 다음 장소 이 안은 빼요 (도착 판정 150m보다 조금 넓게, 11/17 회고 '계획 밖' 줄이기)
 const FOLLOW_START_MS = 1000 // 출발 전 지도 전환(내 위치로 다가가며 확대)을 기다리는 시간 (11/09 ①)
 const LEFT_STEP = 5 // 경로의 4/12·5/12 자리를 서버에 보내 "떠났다"를 알림 (출발 판정은 장소에서 200m 밖 점 두 개)
 const WANDER_MS = 4000 // 머무는 동안 위치가 조금씩 흔들리는 간격 (화면만, 서버에는 안 보냄)
@@ -180,7 +180,7 @@ async function moveToNext() {
   for (let step = leftEnd + 1; step < MOVE_STEPS; step++) {
     const [lat, lng] = pointAlong(path, step / MOVE_STEPS)
     // 11/17: 이동 중에도 몇 점은 서버에 (위치 기록이 비면 회고가 "한 자리에 15분 넘게 머묾 = 계획 밖"으로 봐요). 다음 장소 근처 점은 안 보냄 (일찍 도착 판정 안 되게)
-    if (step % SEND_EVERY === 0 && distanceMeters({ lat, lng }, next) > LEFT_FAR_M) await props.live.placeAt(lat, lng, false)
+    if (distanceMeters({ lat, lng }, next) > NEAR_NEXT_M) await props.live.placeAt(lat, lng, false)
     else props.live.showAt(lat, lng)
     await wait(MOVE_MS / MOVE_STEPS)
   }
@@ -327,7 +327,7 @@ async function rideHangang(option) {
   // ① 숙소 → 탈 선착장 (지하철). 옥수가 아니면 바로 잇기
   const subway = option.boardPier === '옥수' ? OKSU_SUBWAY : []
   const toPier = [[from.lat, from.lng], ...subway, [piers[0].lat, piers[0].lng]]
-  demoRide.value = { cap: '지하철로 ' + option.boardPier + ' 선착장', big: option.boardAt, strong: '배' }
+  demoRide.value = { cap: '🚇 ' + option.boardPier + '행', big: option.boardAt, strong: '배' }
   demoRoute.value = toPier
   // 떠났다는 점 두 개는 시계를 빠르게 하기 전에 보냄 (위치 기록이 시연 시각이라 빨리 감으면 두 점 사이가 2분을 넘어 출발 판정이 안 돼요, 11/17)
   for (const step of farStepsFrom(toPier, current)) {
@@ -340,12 +340,12 @@ async function rideHangang(option) {
   await setClock(date, boardMin) // 선착장에서 배 기다림 → 배 떠나는 시각
   // ② 배: 선착장 순서대로 강을 따라 (육지를 가로지르지 않게)
   demoRoute.value = piers.map((pier) => [pier.lat, pier.lng])
-  demoRide.value = { cap: '한강버스 타는 중', big: option.alightAt, strong: option.alightPier }
+  demoRide.value = { cap: '⛴ 한강버스', big: option.alightAt, strong: option.alightPier }
   await moveAlong(demoRoute.value, toMinutes(option.alightAt) - boardMin)
   demoRoute.value = null
-  const busName = option.busNo ? option.busNo + '번 버스' : '버스'
+  const busName = option.busNo ? option.busNo + '번' : '버스' // 위 줄은 오른쪽 배지 때문에 7글자쯤만 들어가서 짧게 (11/17)
   const doorAt = toTime(toMinutes(option.leaveAt) + option.afterAlightMin)
-  demoRide.value = { cap: busName + ' 타는 중', big: doorAt, strong: '도착' }
+  demoRide.value = { cap: '🚌 ' + busName, big: doorAt, strong: '도착' }
   await setSpeed(STAY_SPEED)
   await setClock(date, toMinutes(option.leaveAt)) // ③ 내린 선착장 근처 한강공원에서 쉬기 (restMin)
   // ④ 버스로 예약한 가게
