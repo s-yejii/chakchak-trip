@@ -155,9 +155,13 @@ async function moveToNext() {
   demoRoute.value = path // 이동하는 동안 지도의 남색 점선도 이 길로 고정 (11/09 ①: 중간에 다시 받은 길과 어긋나지 않게)
   await wait(FOLLOW_START_MS) // 지도가 내 위치로 다가가며 확대하는 동안 점은 출발점에서 기다림 (11/09 ①)
   // 떠나는 그 시각에 서버에 "떠났다"를 먼저 알림 (점 두 개가 칸 밖이어야 출발로 봄) → 늦게 떠났으면 서버가 뒤 일정을 밀거나 줄임
-  for (let step = 1; step <= LEFT_STEP; step++) {
+  // 11/17 리허설: 실제 길(구불구불)이면 4/12·5/12 자리가 아직 장소 200m 안일 수 있어서, 장소에서 충분히 먼 두 점을 골라 서버에 보냄
+  //   (안 그러면 같은 좌표의 다른 칸, 예: 밤 숙소 칸에 있는 걸로 봐서 "5시간 늦음"이 떴어요)
+  const leftSteps = farStepsFrom(path, current || from)
+  const leftEnd = Math.max(LEFT_STEP, leftSteps[1])
+  for (let step = 1; step <= leftEnd; step++) {
     const [lat, lng] = pointAlong(path, step / MOVE_STEPS)
-    if (step >= LEFT_STEP - 1) await props.live.placeAt(lat, lng, false) // 마지막 두 걸음은 서버에도 (장소에서 200m 밖)
+    if (leftSteps.includes(step)) await props.live.placeAt(lat, lng, false) // 장소에서 200m 밖 두 점은 서버에도
     else props.live.showAt(lat, lng)
     await wait(MOVE_MS / MOVE_STEPS) // 첫 걸음들도 같은 간격으로 (기다림 없이 찍혀 점이 순간이동하던 문제, 11/09 ①)
   }
@@ -171,7 +175,7 @@ async function moveToNext() {
     return
   }
   await setSpeed(Math.max(1, Math.round((travelMin * 60 * 1000) / MOVE_MS)))
-  for (let step = LEFT_STEP + 1; step < MOVE_STEPS; step++) {
+  for (let step = leftEnd + 1; step < MOVE_STEPS; step++) {
     const [lat, lng] = pointAlong(path, step / MOVE_STEPS)
     props.live.showAt(lat, lng)
     await wait(MOVE_MS / MOVE_STEPS)
@@ -335,6 +339,18 @@ watch(() => devMode.command, async (command) => {
     isBusy.value = false
   }
 }, { immediate: true })
+
+// 경로에서 장소와 LEFT_FAR_M 넘게 떨어진 첫 두 걸음 번호 (없으면 끝 쪽 두 걸음)
+const LEFT_FAR_M = 260 // 서버 출발 판정 200m보다 넉넉히
+function farStepsFrom(path, place) {
+  const steps = []
+  for (let step = 1; step < MOVE_STEPS && steps.length < 2; step++) {
+    const [lat, lng] = pointAlong(path, step / MOVE_STEPS)
+    if (distanceMeters({ lat, lng }, place) > LEFT_FAR_M) steps.push(step)
+  }
+  while (steps.length < 2) steps.push(MOVE_STEPS - 2 + steps.length)
+  return steps
+}
 
 // 도착: 시계를 정확히 도착 시각으로, 다시 실제 시간으로
 async function arrive(next, date, minutes) {
