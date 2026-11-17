@@ -45,7 +45,7 @@ import LiveTour from '@/components/live/LiveTour.vue'
 import { isTourDone, markTourDone } from '@/utils/liveTour'
 import LinkAddSheet from '@/components/live/LinkAddSheet.vue'
 import { useReplanStore } from '@/stores/replan'
-import { demoRoute } from '@/utils/demoRoute'
+import { demoRide, demoRoute } from '@/utils/demoRoute'
 
 const MUTE_AGAIN_MIN = 10 // "그냥 갈게요" 뒤 이만큼 더 늦어지면 다시 알림
 const LEG_MODE = { walk: 'walk', transit: 'subway', car: 'taxi' } // 서버 이동 수단 → 카드 칩 아이콘
@@ -512,6 +512,7 @@ const head = computed(() => {
     }
     return { cap: '출발 시간 지남', big: '+' + toDuration(-left), small: toTime(leaveAt) + ' 출발', cls: 'c-warning' }
   }
+  if (demoRide.value) return { ...demoRide.value, cls: '' } // ③ 시연 한강버스 타는 중 (11/17 예지 OK, 일반 계정은 늘 null)
   const next = nextStop.value
   if (next) {
     const label = doneCount.value === 0 ? '첫 장소 ' : '다음 '

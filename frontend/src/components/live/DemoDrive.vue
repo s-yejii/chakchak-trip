@@ -13,7 +13,7 @@ import { addDays } from '@/utils/dates'
 import { appNow, clearCommand, devMode, ensureDemoFlow, syncClock } from '@/utils/devMode'
 import { toMinutes, toTime } from '@/utils/time'
 import { showToast } from '@/utils/toast'
-import { demoRoute } from '@/utils/demoRoute'
+import { demoRide, demoRoute } from '@/utils/demoRoute'
 import { incidentClockMin, isBoardingPlace, lateMinutesFor, planDeparture } from '@/utils/departure'
 
 const props = defineProps({
@@ -105,6 +105,7 @@ async function goNext() {
   } catch (e) {
     showToast(e.message)
   } finally {
+    demoRide.value = null
     isBusy.value = false
   }
 }
@@ -311,13 +312,16 @@ async function rideHangang(option) {
   const from = props.live.position.value || { lat: current.lat, lng: current.lng }
   const piers = EAST_PIERS.slice(board, alight + 1)
   // ① 숙소 → 탈 선착장 (대중교통)
+  demoRide.value = { cap: option.boardPier + ' 선착장으로 가는 중', big: option.boardAt, strong: '배 출발' }
   await moveAlong([[from.lat, from.lng], [piers[0].lat, piers[0].lng]], option.toBoardMin)
   await setSpeed(STAY_SPEED)
   await setClock(date, boardMin) // 선착장에서 배 기다림 → 배 떠나는 시각
   // ② 배: 선착장 순서대로 강을 따라 (육지를 가로지르지 않게)
   demoRoute.value = piers.map((pier) => [pier.lat, pier.lng])
+  demoRide.value = { cap: '한강버스 타는 중 · ' + option.alightPier, big: option.alightAt, strong: '도착' }
   await moveAlong(demoRoute.value, toMinutes(option.alightAt) - boardMin)
   demoRoute.value = null
+  demoRide.value = null // 내린 뒤 버스는 원래 줄 ("다음 OO까지")
   await setSpeed(STAY_SPEED)
   await setClock(date, toMinutes(option.leaveAt)) // ③ 내린 선착장 근처 한강공원에서 쉬기 (restMin)
   // ④ 버스로 예약한 가게
