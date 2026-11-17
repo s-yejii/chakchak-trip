@@ -46,6 +46,7 @@ public class PlaceAskServiceImpl implements PlaceAskService {
 
     private static final Logger log = LoggerFactory.getLogger(PlaceAskServiceImpl.class); // 왜 못 찾았는지 남김 (좌표·질문 원문은 안 남김)
 
+    private static final double MIN_RATING = 4.0; // 이 보정 평점 아래는 결과에서 뺌 (11/17)
     private static final int STAY_MINUTES = CafeStay.BASE_MIN; // 들르면 머무는 시간(분) 30. 프롬프트 규칙과 같음. 카페는 여유가 많으면 CafeStay 규칙으로 늘림 (11/17)
     private static final int BAND_METERS = 190;  // 지도 띠 폭: 가는 길 양옆 190m = 걸어서 왕복 약 5분
     private static final String ROUTE = "route";
@@ -263,10 +264,18 @@ public class PlaceAskServiceImpl implements PlaceAskService {
         return null;
     }
 
+    /** 보정 평점이 MIN_RATING(4.0)보다 낮은지. 평점을 모르면 빼지 않음 */
+    static boolean isLowRated(AskedPlace place) {
+        return place.getRating() != null && place.getRating() < MIN_RATING;
+    }
+
     /** 지금 닫혀 있는 곳은 빼고, 닫는 시각·들르고 남는 여유를 채움 */
     private List<AskedPlace> addOpenAndSlack(List<AskedPlace> places, Integer slack) {
         List<AskedPlace> openPlaces = new ArrayList<>();
         for (AskedPlace place : places) {
+            if (isLowRated(place)) {
+                continue; // 평점 낮은 곳은 권하지 않음 (11/17: "제일 가까운 카페"로 3.43점 가게가 나왔어요. AI SQL이 가까운 순이면 평점 정렬이 빠짐)
+            }
             OpenInfo open = placeService.getOpenInfo(toPlace(place), Geo.now().toLocalDate(), Geo.nowMinutes(), STAY_MINUTES);
             if (open != null && Boolean.FALSE.equals(open.getOpen())) {
                 continue; // 휴무거나 닫을 시간
