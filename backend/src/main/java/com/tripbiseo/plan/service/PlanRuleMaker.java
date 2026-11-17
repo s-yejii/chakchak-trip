@@ -316,11 +316,6 @@ public class PlanRuleMaker {
         }
     }
 
-    /** 칸이 끝나는 분 (시작 + 머무는 분) */
-    private int endOf(Stop stop) {
-        return Geo.toMinutes(stop.getTime()) + (stop.getStay() == null ? 0 : stop.getStay());
-    }
-
     /**
      * 동선 정리(순서 바꾸기) 뒤 마지막 확인 (11/12): 날마다 시각 순으로 걸으며
      * 앞 일정 끝 + 이동 시간보다 일찍 시작하는 칸은 뒤로 밀고, 그 때문에 다음 예약(고정)까지 못 가면 머무는 시간을 줄이고,
