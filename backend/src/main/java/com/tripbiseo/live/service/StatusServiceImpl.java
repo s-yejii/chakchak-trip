@@ -14,6 +14,8 @@ import org.springframework.stereotype.Service;
 import com.tripbiseo.common.exception.ApiException;
 import com.tripbiseo.common.external.Route;
 import com.tripbiseo.common.external.RouteClient;
+import com.tripbiseo.common.external.RouteGuide;
+import com.tripbiseo.common.external.RouteGuideClient;
 import com.tripbiseo.common.util.Geo;
 import com.tripbiseo.live.dto.AreaInfo;
 import com.tripbiseo.live.dto.FixedStatus;
@@ -55,9 +57,11 @@ public class StatusServiceImpl implements StatusService {
     private final LiveAlertMaker liveAlertMaker;         // 출발 알림·맨 위 알림 만들기 (④ 도우미)
     private final LiveWeatherChecker liveWeatherChecker; // 비 소식 + 비 맞을 야외 일정 (④ 도우미)
     private final NotificationService notificationService; // 맨 위 알림을 알림함에도 남김 (①)
+    private final RouteGuideClient routeGuideClient;     // 택시 길찾기(TMAP 자동차): 놓침 카드에 택시 도착·요금 (11/17)
     private final TransferFinder transferFinder;         // 가장 빠른 방법 (④ 도우미, 놓침 판단)
     // "칸 id-늦음 단계" → 가장 빠른 방법으로 가도 남는 여유(분). 여러 요청이 동시에 써도 안전한 Map이라 ConcurrentHashMap (TMAP 호출 줄이기)
     private final Map<String, Integer> fastestSlackCache = new ConcurrentHashMap<>();
+    private final Map<String, RouteGuide> taxiGuideCache = new ConcurrentHashMap<>(); // 놓침 카드 택시 길 (같은 늦음 단계면 다시 안 부름)
 
     /** 지금 상황 다시 계산 */
     @Override
@@ -96,6 +100,7 @@ public class StatusServiceImpl implements StatusService {
         // 알림은 LiveAlertMaker, 날씨는 LiveWeatherChecker가 (계산 결과를 context 하나로 넘김)
         StatusContext context = toContext(todayStops, current, nextStop, fixedStop, slack, etaMap, openMap);
         context.setFastestSlack(getFastestSlack(fixedStop, slack, lat, lng)); // 어떤 방법으로도 못 닿는지 (lost-·늦음 카드 문구)
+        setTaxi(context, fixedStop, lat, lng); // 놓침 카드 "택시로 가도 12:45 도착 · 약 N원" (11/17)
         context.setFixedMeal(fixedStop != null && mealStopIds.contains(fixedStop.getId())); // 놓침 문구: 식당이면 "예약 시각", 아니면 "약속 시각" (11/12)
         context.setWeather(liveWeatherChecker.check(lat, lng, context)); // 알림(rain-)도 이 값을 씀
         response.setWeather(context.getWeather());
@@ -377,6 +382,20 @@ public class StatusServiceImpl implements StatusService {
         } else {
             open.setClosedReason("도착 전 " + reason);
         }
+    }
+
+    /** 어떤 방법으로도 못 닿을 때(놓침)만: 지금 택시로 바로 가면 도착 시각·요금 (TMAP 자동차 길찾기 실제 값, 못 받으면 비워 둠) */
+    private void setTaxi(StatusContext context, Stop fixedStop, double lat, double lng) {
+        if (fixedStop == null || context.getFastestSlack() == null || context.getFastestSlack() >= 0) {
+            return;
+        }
+        String cacheKey = fixedStop.getId() + "-" + (-context.getSlack()) / LATE_STEP_MIN;
+        RouteGuide taxi = taxiGuideCache.computeIfAbsent(cacheKey, key -> routeGuideClient.getGuide(lat, lng, fixedStop.getLat(), fixedStop.getLng(), "car"));
+        if (taxi == null || !taxi.isAvailable()) {
+            return;
+        }
+        context.setTaxiArrive(Geo.nowMinutes() + taxi.getMinutes());
+        context.setTaxiFare(taxi.getFare());
     }
 
     /** 고정 일정에 늦을 때: 가장 빠른 방법으로 지금 바로 가도 남는 여유(분). 안 늦으면 null (11/12 ④) */

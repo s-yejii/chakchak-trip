@@ -1,5 +1,7 @@
 package com.tripbiseo.live.service;
 
+import java.util.List;
+
 import org.springframework.stereotype.Component;
 
 import com.tripbiseo.common.util.Geo;
@@ -40,6 +42,9 @@ public class LiveAlertMaker {
         if (context.getMissedStops().contains(nextStop)) {
             return null;
         }
+        if (hasLeftAStop(context.getTodayStops())) {
+            return null; // 11/17: 이미 앞 칸을 떠나 다음 칸으로 가는 중이면 "N분 뒤 출발해야 해요"는 안 냄 (가는 중인데 출발하라고 뜨던 문제)
+        }
         // 이동 중이면 eta = 지금 + 이동 시간이라, 이동 시간 = eta − 지금
         int moveMinutes = context.getEtaMap().get(nextStop.getId()) - now;
         int leaveAt = Geo.toMinutes(nextStop.getTime()) - moveMinutes;
@@ -59,8 +64,7 @@ public class LiveAlertMaker {
         // 11/12 ④: 고정 일정에 가장 빠른 방법으로도 못 닿으면 "늦음" 대신 "놓침" (가운데 놓침 카드). 유예 0분
         if (isLost(context)) {
             // 어떤 방법으로도 못 맞춤 → 가운데 놓침 카드 (그대로 가기 / 빼고 다음으로 / 식당·카페면 비슷한 가게). 식당인지는 화면이 stops[].meal로 봄
-            return newAlert("lost-" + fixedStop.getId(), "danger", fixedStop.getName(),
-                    "가장 빠른 방법으로 가도 " + toTimeWord(context) + "(" + fixedStop.getTime() + ")보다 " + Geo.toDuration(-context.getFastestSlack()) + " 늦어요");
+            return newAlert("lost-" + fixedStop.getId(), "danger", fixedStop.getName(), makeLostText(context, fixedStop));
         }
         // 11/08: 고정 일정(KTX·예약)에 늦는 게 가장 중요해서 맨 먼저. 도착 "목표" 시각을 같이 보여 줘서 기차를 놓친다고 오해하지 않게
         if (isLate(slack)) {
@@ -94,7 +98,8 @@ public class LiveAlertMaker {
             return newAlert("missed-" + missed.getId(), "warn",
                     missed.getName() + " 계획 시간이 지났어요", "아직 안 갔다면 '대안 보기'에서 빼거나 바꿀 수 있어요");
         }
-        if (slack != null && slack <= TIGHT_SLACK_MIN) {
+        // 11/17: 예약 바로 앞 칸이 예약에 맞춰 넣은 카페(CafeStay, 예약 5분 전 도착)면 여유가 적어도 계획대로라 경고 안 함
+        if (slack != null && slack <= TIGHT_SLACK_MIN && !CafeStay.isFittedBefore(context.getTodayStops(), fixedStop, slack)) {
             return newAlert("tight-" + fixedStop.getId(), "warn",
                     fixedStop.getName() + "까지 여유가 " + Geo.toDuration(slack) + "뿐이에요", "다음 장소는 짧게 들르는 게 좋아요");
         }
@@ -177,6 +182,31 @@ public class LiveAlertMaker {
     }
 
     /** 놓침 문구의 시각 이름: 식당·카페·술집이면 "예약 시각", 그 밖(광장 등)은 "약속 시각" (11/12) */
+    /** 오늘 이미 떠난 칸이 있는지 (있으면 지금은 다음 칸으로 이동 중) */
+    static boolean hasLeftAStop(List<Stop> todayStops) {
+        for (Stop stop : todayStops) {
+            if (stop.getDepartedAt() != null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 놓침 카드 둘째 줄 (11/17 주형: 쉽게). 택시 길을 받았으면 "택시로 가도 12:45 도착 (15분 늦음 · 약 20,000원)" — 시각·분·요금은 TMAP 실제 값.
+     * 요금을 모르면 요금만 빼고, 택시 길을 못 받았으면 예전 문구 ("가장 빠른 방법으로 가도 …보다 N분 늦어요")
+     */
+    String makeLostText(StatusContext context, Stop fixedStop) {
+        Integer taxiArrive = context.getTaxiArrive();
+        if (taxiArrive == null) {
+            return "가장 빠른 방법으로 가도 " + toTimeWord(context) + "(" + fixedStop.getTime() + ")보다 " + Geo.toDuration(-context.getFastestSlack()) + " 늦어요";
+        }
+        int late = taxiArrive - Geo.toMinutes(fixedStop.getTime());
+        String lateText = late > 0 ? Geo.toDuration(late) + " 늦음" : "제시간";
+        String fare = context.getTaxiFare() == null || context.getTaxiFare() <= 0 ? "" : " · 약 " + String.format("%,d", context.getTaxiFare()) + "원";
+        return "택시로 가도 " + Geo.toHhmm(taxiArrive) + " 도착 (" + lateText + fare + ")";
+    }
+
     private String toTimeWord(StatusContext context) {
         return context.isFixedMeal() ? "예약 시각" : "약속 시각";
     }
