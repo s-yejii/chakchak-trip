@@ -1,102 +1,156 @@
-# 착착트립 (트립비서)
+# 착착트립
 
-여행 중 일정이 틀어지면 먼저 알려 주고, 지금 위치에서 갈 수 있는 대안을 보여 주는 앱입니다.
-화면은 Vue 3로 만든 스마트폰 모양 웹앱이고, 서버는 Spring Boot + MyBatis + PostgreSQL(PostGIS)입니다.
+> 늦어도, 바뀌어도 여행 일정은 착착.
 
-## 폴더 구조
+일정을 짤 때부터 여행 중, 다녀온 뒤까지 여행 비서 트리피가 함께하는 여행 일정 앱입니다.
+여행 중에 늦어질 것 같으면 먼저 알려 주고, 지금 위치에서 남은 일정을 다시 계산해 고를 수 있는 대안을 보여 줍니다.
+
+## 프로젝트 개요
+
+| 항목 | 내용 |
+|---|---|
+| 기간 | 2026.10.06 ~ 2026.12.03 |
+| 팀 | 착착크루 (5명) |
+| 과정 | LX공간정보아카데미 |
+| 지역 | 서울 6개 구 (중구·종로구·용산구·영등포구·강남구·송파구) |
+
+여행 일정은 짤 때보다 여행 중에 더 자주 틀어집니다.
+한 곳에서 오래 머물거나 길이 막히면, 뒤에 잡아 둔 예약에 맞추기 위해 그 자리에서 일정을 다시 짜야 합니다.
+착착트립은 이 "그 자리에서 다시 짜기"를 앱이 대신 계산해 주는 것을 목표로 만들었습니다.
+
+## 주요 기능
+
+### 여행 전
+
+<table>
+  <tr>
+    <th>AI 여행 일정 생성</th>
+    <th>일정 점검</th>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/images/plan-ai.png" width="260" alt="AI 여행 일정 생성"></td>
+    <td align="center"><img src="docs/images/plan-check.png" width="260" alt="일정 점검"></td>
+  </tr>
+  <tr>
+    <td>지역·날짜·출발지·동행·가고 싶은 곳의 종류·이동 수단을 단계별로 고르면 AI가 장소를 고르고 하루 동선을 짜 줍니다.<br>SNS 링크로 가고 싶은 곳을 담거나 예약 캡처를 올리면 Gemini가 장소·시간을 읽고, 사용자가 확인한 뒤에 일정에 넣습니다.</td>
+    <td>짠 일정을 실제 대중교통·도보 시간과 영업시간으로 다시 계산해 "미리 확인할 것"으로 알려 줍니다.<br>그날 날씨와 옷차림, 우산이 필요한 시간도 함께 보여 줍니다.</td>
+  </tr>
+</table>
+
+### 여행 중
+
+<table>
+  <tr>
+    <th>여행 중 일정 관리</th>
+    <th>AI 장소 검색</th>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/images/live-delay.png" width="260" alt="여행 중 일정 관리"></td>
+    <td align="center"><img src="docs/images/live-ask.png" width="260" alt="AI 장소 검색"></td>
+  </tr>
+  <tr>
+    <td>위치로 도착·출발을 알아서 기록하고, 다음 예약에 늦을 것 같으면 "14분 늦어요"처럼 먼저 알려 줍니다.<br>[대안 보기]를 누르면 지금 위치에서 남은 일정을 다시 계산한 대안을 고를 수 있습니다.</td>
+    <td>"가는 길에 들를 디저트 카페"처럼 말로 물으면 트리피가 조건에 맞는 장소를 찾아 줍니다.<br>평점·마감 시간·거리를 보고 바로 일정에 넣을 수 있습니다.</td>
+  </tr>
+</table>
+
+### 여행 후
+
+<img src="docs/images/retro-pay.png" alt="여행 회고와 결제 정산">
+
+**여행 회고**
+다녀온 길을 3D 지도 위에 다시 재생해 하루를 돌아볼 수 있습니다.
+실제 GPS 경로, 오래 머문 곳, 사진 찍은 곳을 함께 보여 줍니다.
+
+**사진·결제 관리**
+여행 사진을 앨범과 요약 영상으로 정리합니다.
+영수증을 올리면 Gemini가 가게·금액을 읽고, 사용자가 확인한 뒤에 결제 내역에 넣습니다. 누가 누구에게 얼마를 보내면 되는지 정산도 계산해 줍니다.
+
+## 기술 스택
+
+| 구분 | 기술 |
+|---|---|
+| Frontend | Vue 3.5, Vite 8, Pinia 4, Vue Router 5, Kakao Map, MapLibre GL 6, Unity 6 WebGL |
+| Backend | Java 17, Spring Boot 4.0, Spring Security, MyBatis, Spring AI 2.0, JSqlParser 5.3 |
+| Database | PostgreSQL 17, PostGIS 3.5, pgvector |
+| AI | Gemini 3.8 Flash, Gemini Embedding 001 |
+| 외부 API | 카카오 지도·로컬, TMAP, ODsay, TourAPI, 기상청 단기예보 |
+| 배포 | Docker Compose, Nginx |
+
+## 시스템 구성
 
 ```
-tripbiseo/
-├─ db/        PostgreSQL 스크립트 (번호 순서대로 실행)
-├─ docs/      API.md(API 기준) · DB.md(테이블 기준) · ROLES.md(담당별 할 일) · DECISIONS.md · DEMO.md
-├─ backend/   Spring Boot (Java 17)
-│  └─ src/main/java/com/tripbiseo/
-│     ├─ member/  ① 회원·홈·알림      ─┐
-│     ├─ trip/    ② 여행·일정·장소      │ 기능마다 controller / service / mapper / dto
-│     ├─ plan/    ③ AI 일정            │ (Service는 인터페이스 + Impl)
-│     ├─ live/    ④ 여행 중 판별        │
-│     ├─ after/   ⑤ 여행 후·지도 부가  ─┘
-│     ├─ common/  exception(오류) · auth(로그인 사용자) · ai(Gemini) · external(길찾기·날씨·장소 API) · util · dto
-│     └─ config/  보안·Swagger·MyBatis 설정
-│  └─ src/main/resources/mapper/{기능}/*.xml   SQL
-└─ frontend/  Vue 3 + Vite — views(화면) / components(지도·시트·모달) / api(서버 호출) / router / data(가짜 데이터) / utils
+브라우저 ──▶ web (Nginx :80) ──/api──▶ backend (Spring Boot :8080) ──▶ db (PostgreSQL :5432)
+              화면 파일 제공                Gemini · 지도 · 길찾기 · 날씨 API 호출
 ```
 
-## 처음 실행
+브라우저는 Nginx(web)만 거치고, `/api` 요청은 Nginx가 Spring Boot 서버로 넘깁니다.
+밖으로 열리는 것은 web 하나이고, 서버와 DB는 도커 내부 네트워크에서만 연결됩니다.
 
-### 1. DB
+## 핵심 구현
 
-PostgreSQL에 `tripbiseo` 데이터베이스를 만들고(PostGIS 설치 필요), `db/` 파일을 **번호 순서대로** 실행합니다.
+**자연어 공간 검색**
+Gemini가 질문을 SQL로 바꾸면 JSqlParser로 검사해 SELECT만 통과시킵니다. 장소·리뷰 뷰만 읽을 수 있는 전용 계정으로, 3초 제한을 걸고 실행합니다.
+"조용한", "분위기 좋은" 같은 조건은 리뷰 임베딩(pgvector, 768차원)으로 비슷한 리뷰를 찾아 반영합니다. 결과는 실제 도보 경로 기준으로 다시 정렬합니다.
 
-| 순서 | 파일 | 내용 |
+**도착·출발 판정**
+일반 장소는 반경으로 판정합니다 (도착 150m 안, 출발 200m 밖).
+공원처럼 넓은 장소는 PostGIS 경계 폴리곤과의 거리로 판정합니다 (경계에서 30m 안이면 도착, 80m 밖이면 출발).
+
+**지연 감지·대안**
+현재 위치, 지금 장소에 머문 시간, 실제 이동 시간으로 다음 예약 도착 시각을 예측합니다.
+늦을 것 같으면 대안 3가지(머무는 시간 줄이기, 한 곳 빼기, 다른 곳으로 바꾸기)를 만들고, 대안마다 예약 앞 여유 시간을 보여 줍니다.
+
+**AI 일정 생성**
+Gemini가 장소를 고르면 규칙으로 영업시간·거리를 다시 검사합니다.
+동선은 최근접 이웃으로 순서를 잡고 2-opt로 꼬인 구간을 풉니다. 서울 생활인구를 250m 격자로 나눠 시간대별 혼잡도를 반영합니다.
+
+**3D 회고**
+DEM 지형 위에 건물·도로 면을 올려 3D 지도를 만듭니다.
+버스·택시 구간은 GPS 점을 찻길에 맞추는 맵 매칭으로 다시 그립니다.
+
+## 팀원
+
+| 이름 | 역할 | 담당 |
 |---|---|---|
-| 1 | `01_common.sql` | PostGIS + 공통 테이블 (member, trip, trip_stop, retrip_place, retrip_review) |
-| 2 | `02_retrip_schema.sql` | 예전 결제·테마 테이블 (retrip_expense, retrip_theme) |
-| 3~5 | `03` ~ `05` | 장소·리뷰 데이터 (04·05는 큰 파일, 몇 분 걸림) |
-| 6 | `11_member.sql` ~ `15_after.sql` | 담당별 테이블 |
-| 7 | `90_test_data.sql` | 테스트 계정 **tripuser / tripuser1234** + 오늘 날짜 샘플 여행 |
-| (예전 DB만) | `91_drop_old.sql` | 예전 `01_member`~`06_tripbiseo` 시절 DB의 안 쓰는 테이블 정리 |
+| 김주형 | 팀장 | AI 여행 일정 생성, 예약·영수증 캡처 인식, SNS 링크 장소 추출 |
+| 박석진 | 부팀장 | 여행 회고·3D 지도, 사진 앨범·요약 영상, 결제·정산 |
+| 이찬기 | 팀원 | 일정 관리·점검, 생활인구 혼잡도 분석, 장소 선정 규칙 |
+| 신예지 | 팀원 | 여행 중 일정 관리, AI 장소 검색, Git 협업·배포 환경 |
+| 이상재 | 팀원 | 공통 DB 설계, 장소·리뷰·공공데이터 구축, 회원·일정 공유 |
 
-pgAdmin에서 DB를 우클릭 → PSQL Tool을 열고, 저장소 폴더 기준 경로로 입력합니다.
+## 실행 방법
+
+Docker가 설치돼 있으면 아래 명령으로 DB·서버·화면을 한 번에 켭니다.
+
 ```
-\encoding UTF8
-\i 'db/01_common.sql'
-```
-(PSQL Tool이 저장소 폴더에서 열리지 않으면 `\cd '저장소 폴더'`로 먼저 이동합니다.) 모든 SQL은 다시 실행해도 오류가 나지 않습니다.
-
-### 2. 내 PC 설정 (DB 비밀번호·API 키)
-
-`backend/src/main/resources/application-local.properties.example`을 같은 폴더에 **`application-local.properties`** 로 복사하고 값을 채웁니다.
-- 이 파일은 `.gitignore`에 있어서 커밋되지 않습니다. 키·비밀번호는 여기(또는 환경변수)에만 적습니다.
-- 메모장으로 저장할 때 인코딩은 **UTF-8(BOM 없음)** 으로 합니다. BOM이 붙으면 첫 줄을 못 읽습니다.
-- 이름 뒤에 `.txt`가 붙지 않았는지 확인합니다 (파일 탐색기 → 보기 → 파일 확장명).
-- 같은 이름의 환경변수가 있으면 환경변수가 먼저입니다.
-
-### 3. 백엔드
-
-이클립스에서 `backend` 폴더를 Maven 프로젝트로 가져와 `TripbiseoApplication`을 실행하거나, `backend` 폴더에서:
-```
-.\mvnw.cmd spring-boot:run
-```
-포트는 8080입니다. API 키가 하나도 없어도 서버는 켜집니다 (AI·길찾기는 규칙·추정 값으로 대신 동작).
-
-- **Swagger (API 문서·시험 호출)**: http://localhost:8080/swagger-ui.html (로그인 없이 열림)
-  로그인이 필요한 API는 Swagger에서 먼저 `POST /api/auth/login`을 실행하면 같은 브라우저 쿠키로 불러집니다.
-  기준은 `docs/API.md`이고, Swagger와 다르면 API.md가 맞습니다.
-- 지금은 `GET /api/trips`(완성 예시)와 로그인만 진짜 DB 값이고, 나머지 API는 가짜 값을 돌려줍니다. 각자 `ServiceImpl`의 `// TODO`를 채웁니다.
-
-### 4. 화면
-
-`frontend` 폴더에서 아래를 실행한 뒤 http://localhost:5173 을 엽니다. `/api` 요청은 8080 서버로 넘어갑니다.
-```
-npm install
-npm run dev
+cp .env.example .env
+docker compose --profile app up -d --build
 ```
 
-## API 키
+브라우저에서 http://localhost 를 엽니다. 처음 켤 때는 DB 데이터를 넣느라 몇 분 걸립니다.
 
-`application-local.properties`(또는 환경변수)에 아래 이름으로 넣습니다.
+- 테스트 계정: `tripuser` / `tripuser1234` (`db/90_test_data.sql`)
+- API 키가 없어도 서버는 켜집니다. 키가 없는 기능은 규칙·추정 값으로 대신 동작합니다.
+- 3D 회고는 유니티 빌드 파일(`frontend/public/unity3d/`)이 필요합니다. 크기가 커서 저장소에는 넣지 않았습니다.
+- 개발 환경 설정은 [docs/SETUP.md](docs/SETUP.md)를 참고하세요.
 
-| 키 | 어디서 받나 | 없으면 |
-|---|---|---|
-| `DB_USERNAME`, `DB_PASSWORD` | 내 PC PostgreSQL 계정 | 사용자 이름은 `postgres`, 비밀번호는 비어 있어 DB에 연결되지 않습니다 |
-| `GEMINI_API_KEY` | Google AI Studio | AI 일정 만들기·채팅 이해가 안 되고, 대안은 규칙으로만 만듭니다 |
-| `GEMINI_MODEL` | (선택) | `gemini-3.8-flash` |
-| `KAKAO_JS_KEY` | 카카오 콘솔 → 플랫폼 Web에 `http://localhost:5173` 등록 | 지도가 오픈스트리트맵으로 바뀝니다 |
-| `KAKAO_REST_API_KEY` | 같은 카카오 앱의 REST 키 | DB에 없는 장소의 위치를 못 찾고, 네이버 지도 링크만 줍니다 |
-| `TMAP_APP_KEY` | SK open API (대중교통은 상품 신청이 필요) | ODsay로, 그것도 없으면 거리로 이동시간을 추정합니다 |
-| `ODSAY_API_KEY` | ODsay LAB (서버 IP 등록) | TMAP이 실패했을 때 대신할 길찾기가 없습니다 |
-| `TOUR_API_KEY` | 공공데이터포털 '한국관광공사_국문 관광정보 서비스_GW' (Decoding 키) | 기상청 키로 대신 부릅니다 |
-| `KMA_SERVICE_KEY` | 공공데이터포털 '기상청_단기예보 조회서비스' (Decoding 키) | 날씨 알림·날씨 판단이 빠집니다 |
+## 문서
 
-## 예전 코드 보기
+| 문서 | 내용 |
+|---|---|
+| [docs/API.md](docs/API.md) | API 주소·요청·응답 |
+| [docs/DB.md](docs/DB.md) | 테이블 목록과 컬럼 |
+| [docs/DEMO.md](docs/DEMO.md) | 시연 흐름 |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | 팀에서 정한 것 |
 
-뼈대 전의 백엔드 코드(로직 참고용)는 `backend-v0` 태그에 있습니다. 예: `git show backend-v0:backend/src/main/java/com/tripbiseo/service/LiveService.java`
+## 데이터 출처
 
-## 알아 둘 것
-
-- 웹 위치 찾기(내 위치)는 `localhost`나 https 주소에서만 됩니다. PC에서는 와이파이 기준의 대략적인 위치가 잡힙니다.
-- 앱이 꺼져 있을 때 오는 푸시 알림은 아직 없습니다. 여행 중 화면이 열려 있는 동안만 알림이 옵니다.
-- CSRF 보호는 팀 설정대로 꺼 두었습니다. 배포하기 전에 켜는 것을 검토해야 합니다.
-- 네이버 장소·리뷰 데이터는 서울 프로토타입용입니다(약관상 자동 수집은 금지). 최종 구조에는 공식 API를 적어야 합니다.
-- Gemini에는 개인정보·위치(좌표) 기록을 보내지 않습니다 (무료 등급).
+| 데이터 | 출처 |
+|---|---|
+| 서울 생활인구 | 서울 열린데이터광장 (공공누리 제1유형) |
+| 관광지 정보 | 한국관광공사 TourAPI |
+| 날씨 | 기상청 단기예보 조회서비스 |
+| 지도·장소 검색 | 카카오 지도·로컬 API |
+| 지형 높이 | Terrain Tiles (SRTM 등) |
+| 장소·리뷰 일부 | 네이버 지도 (프로토타입 시연용) |
