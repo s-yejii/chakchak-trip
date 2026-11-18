@@ -51,7 +51,7 @@ public class PlanRuleMaker {
     private static final double FAR_PENALTY_PER_KM = 1.0;      // 넘은 1km마다 더 뺌
     private static final double BACKWARD_PENALTY = 0.5;        // 온 방향으로 되돌아가면 뺌
     private static final int MAX_CAFES_PER_DAY = 2;            // 하루 카페 수
-    private static final int AI_PICK_LIMIT_M = 2000;           // AI가 고른 곳이 앞 장소에서 이보다 멀면 다시 고름
+    private static final int AI_PICK_LIMIT_M = 1500;           // AI가 고른 곳이 앞 장소에서 이보다 멀면 다시 고름 (11/18 2km→1.5km: 용리단길→이촌→용리단길 왕복)
     private static final int TODAY_START_AFTER_MIN = 60;       // 오늘 출발이면 지금부터 1시간 뒤 칸부터
     private static final int TODAY_LAST_END_MIN = 23 * 60;     // 오늘 당겨 쓴 칸은 23:00 안에 끝나는 것만
     private static final int MIDDLE_DAY_START_MIN = 10 * 60;   // 여러 날 여행: 고른 시작 시각은 첫날만, 다른 날은 10:00부터 (11/06)
@@ -72,7 +72,7 @@ public class PlanRuleMaker {
     private static final int LUNCH_START_MIN = 11 * 60 + 30;   // 점심 칸은 이 사이에 시작 (시작·끝 시간을 고른 경우)
     private static final int LUNCH_END_MIN = 13 * 60 + 30;
     private static final int DINNER_START_MIN = 17 * 60 + 30;  // 저녁 칸
-    private static final int DINNER_END_MIN = 19 * 60 + 30;
+    private static final int DINNER_END_MIN = 20 * 60 + 30;    // 11/18 19:30→20:30: 19:30에 시작하면 저녁 칸이 안 생겨 밥 없이 숲 산책부터 했어요
     private static final int BAR_FROM_MIN = 18 * 60;           // 술집 칸은 이때부터
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(PlanRuleMaker.class); // 서버 기록 (AI가 고른 곳을 바꾼 이유)
     private static final String GU_SUFFIX = "구";
@@ -96,6 +96,11 @@ public class PlanRuleMaker {
     private static final String MOVE_KIND = "move";
     private static final int SAME_SPOT_M = 50;                 // 같은 종류가 이 안이면 같은 곳으로 봄 (11/12)
     private static final List<String> FALLBACK_KINDS = List.of("tour", "culture", "shop", "cafe"); // 볼거리 칸이 빌 때 넣어 볼 종류 (11/12)
+    // 11/18 사용성 점검에서 나온 규칙
+    private static final int NIGHT_OUTDOOR_FROM_MIN = 20 * 60;  // 이 시각부터는 공원·계단·광장 같은 바깥 볼거리 대신 (야경 명소는 그대로)
+    private static final java.util.regex.Pattern NIGHT_VIEW = java.util.regex.Pattern.compile("야경|전망|타워|야시장|루프탑");
+    private static final java.util.regex.Pattern MEAL_BAR = java.util.regex.Pattern.compile("요리주점|이자카야|이자까야|포차|주막|선술집|오뎅|전집|막걸리"); // 안주가 밥인 술집
+    private static final List<String> SIGHT_KINDS = List.of("tour", "culture", "shop");
 
     // 하루 칸: "시각/머무는 분/이 칸에 넣을 종류(앞이 먼저)". 고른 종류가 하나도 없는 칸은 건너뜀
     // 칸 사이는 이동 20~40분을 비워 둠 (10:00~11:30 → 12:00 점심)
@@ -154,7 +159,7 @@ public class PlanRuleMaker {
     /** 그날 칸 목록 (담은 곳이 있으면 그 시간은 비워 둠) */
     private List<String[]> getSlotList(PlanConditions conditions, int day) {
         if (hasDayTime(conditions)) {
-            int start = day == 1 ? Geo.toMinutes(conditions.getStartTime()) : laterDayStartMin(conditions, day);
+            int start = dayStartMinOf(conditions, day);
             int end = day == lastDayOf(conditions) ? Geo.toMinutes(conditions.getEndTime()) : MIDDLE_DAY_END_MIN;
             // 담은 곳 + 그날 예약(고정 일정)을 피해서 칸을 만듦 (11/12: 예약 시간은 빼고 칸을 만들다 보니 19:00 회식과 겹친 저녁 칸이 통째로 빠져 오후가 비었어요)
             List<Stop> blocks = keptOfDay(conditions, day);
@@ -210,7 +215,22 @@ public class PlanRuleMaker {
         }
         removeOutsideHours(conditions, candidates, days, stops);
         addMissingKindWarnings(conditions, candidates, stops, warnings);
+        addEarlyFixedWarning(conditions, warnings);
+        if (stops.size() <= 1) {
+            warnings.add("일정 시간이 짧아 " + stops.size() + "곳만 넣었어요 · 끝 시각을 늦추면 더 넣을 수 있어요"); // 11/18 저녁에 짜면 1곳만 나와 허전했어요
+        }
         return stops;
+    }
+
+    /** 예약이 고른 시작보다 이르면 알림 (11/18) */
+    private void addEarlyFixedWarning(PlanConditions conditions, List<String> warnings) {
+        if (!hasDayTime(conditions)) {
+            return;
+        }
+        Integer earliest = earliestFixedMinOf(conditions, 1);
+        if (earliest != null && earliest < Geo.toMinutes(conditions.getStartTime())) {
+            warnings.add("예약 " + Geo.toHhmm(earliest) + "이 고른 시작 " + conditions.getStartTime() + "보다 빨라서 예약부터 일정을 이었어요");
+        }
     }
 
     /**
@@ -226,7 +246,7 @@ public class PlanRuleMaker {
                 continue;
             }
             int day = dayOf(extra);
-            int start = day == 1 ? Geo.toMinutes(conditions.getStartTime()) : laterDayStartMin(conditions, day);
+            int start = dayStartMinOf(conditions, day);
             int end = day == days ? Geo.toMinutes(conditions.getEndTime()) : MIDDLE_DAY_END_MIN;
             int stay = extra.getStay() == null ? DEFAULT_EXTRA_STAY_MIN : extra.getStay();
             int time = Math.max(start, Math.min(Geo.toMinutes(extra.getTime()), end - stay));
@@ -248,7 +268,7 @@ public class PlanRuleMaker {
                 continue;
             }
             int day = dayOf(stop);
-            int start = day == 1 ? Geo.toMinutes(conditions.getStartTime()) : laterDayStartMin(conditions, day);
+            int start = dayStartMinOf(conditions, day);
             int end = day == days ? Geo.toMinutes(conditions.getEndTime()) : MIDDLE_DAY_END_MIN;
             int stopStart = Geo.toMinutes(stop.getTime());
             int stay = stop.getStay() == null ? 0 : stop.getStay();
@@ -390,6 +410,34 @@ public class PlanRuleMaker {
         return (int) ChronoUnit.DAYS.between(LocalDate.parse(conditions.getStartDate()), LocalDate.parse(conditions.getEndDate())) + 1;
     }
 
+    /**
+     * 그날 일정 시작 분 (시간을 골랐을 때). 2일차부터는 laterDayStartMin.
+     * 11/18: 1일차에 고른 시작보다 이른 예약이 있으면 예약 시각부터 (11시 시작 + 9시 예약 → 예약 뒤 2시간이 비었어요)
+     */
+    int dayStartMinOf(PlanConditions conditions, int day) {
+        if (day != 1) {
+            return laterDayStartMin(conditions, day);
+        }
+        int start = Geo.toMinutes(conditions.getStartTime());
+        Integer earliest = earliestFixedMinOf(conditions, 1);
+        return earliest != null && earliest < start ? earliest : start;
+    }
+
+    /** 그날 가장 이른 예약 시각 (없으면 null) */
+    private Integer earliestFixedMinOf(PlanConditions conditions, int day) {
+        Integer earliest = null;
+        if (conditions.getFixed() == null) {
+            return null;
+        }
+        for (FixedVisit fixed : conditions.getFixed()) {
+            int fixedDay = fixed.getDay() == null ? 1 : fixed.getDay();
+            if (fixedDay == day && isTimeText(fixed.getTime()) && (earliest == null || Geo.toMinutes(fixed.getTime()) < earliest)) {
+                earliest = Geo.toMinutes(fixed.getTime());
+            }
+        }
+        return earliest;
+    }
+
     /** 시작·끝 시간을 골랐는지 */
     private boolean hasDayTime(PlanConditions conditions) {
         return conditions.getStartTime() != null && conditions.getEndTime() != null;
@@ -406,6 +454,7 @@ public class PlanRuleMaker {
         boolean isLunchDone = !hasFood || hasKeptMeal(kept, LUNCH_START_MIN, LUNCH_END_MIN);
         boolean isDinnerDone = !hasFood || hasKeptMeal(kept, DINNER_START_MIN, DINNER_END_MIN);
         String previous = "";
+        String beforePrevious = ""; // 두 칸 앞 종류 (볼거리 3곳 연속 막기, 11/18)
         int clock = startMin;
         while (endMin - clock >= MIN_SLOT_MIN) {
             Stop nextKept = nextKeptAfter(kept, clock);
@@ -417,7 +466,7 @@ public class PlanRuleMaker {
             }
             boolean isLunchTime = !isLunchDone && clock >= LUNCH_START_MIN && clock < LUNCH_END_MIN;
             boolean isDinnerTime = !isDinnerDone && clock >= DINNER_START_MIN && clock < DINNER_END_MIN;
-            String slotKinds = isLunchTime || isDinnerTime ? FOOD_KIND : outingKindsOf(kinds, clock, previous);
+            String slotKinds = isLunchTime ? FOOD_KIND : isDinnerTime ? dinnerKindsOf(conditions) : outingKindsOf(kinds, clock, previous, beforePrevious);
             if (slotKinds.isEmpty()) {
                 clock += TIME_STEP_MIN; // 넣을 볼거리가 없으면 다음 식사 때까지 기다림
                 continue;
@@ -426,6 +475,7 @@ public class PlanRuleMaker {
             isDinnerDone = isDinnerDone || isDinnerTime;
             int stay = Math.min(stayOfSlot(slotKinds, conditions), limit - clock);
             slots.add(new String[] {slotKinds, Geo.toHhmm(clock), String.valueOf(stay)});
+            beforePrevious = previous;
             previous = slotKinds;
             clock = roundUp(clock + stay + TIMED_GAP_MIN);
         }
@@ -526,12 +576,23 @@ public class PlanRuleMaker {
         return category.matches(".*(관광|문화|쇼핑|공원|산책|거리).*") ? "tour" : FOOD_KIND;
     }
 
-    /** 식사 때가 아닌 칸의 종류 (앞이 먼저): 밤엔 술집, 식사 뒤엔 카페, 오전엔 볼거리. 카페 다음에 또 카페는 안 넣음 */
-    private String outingKindsOf(List<String> kinds, int clock, String previous) {
-        if (kinds.contains(BAR_KIND) && clock >= BAR_FROM_MIN && !previous.equals(BAR_KIND)) {
+    /** 저녁 칸 종류: 술집만 골랐으면 술집(안주가 저녁)도 저녁으로 (11/18: 술만 골랐는데 양식 → 요리주점으로 저녁을 두 번 먹었어요) */
+    String dinnerKindsOf(PlanConditions conditions) {
+        List<String> chosen = chosenKindsOf(conditions);
+        return chosen.contains(BAR_KIND) && !chosen.contains(FOOD_KIND) ? BAR_KIND + "," + FOOD_KIND : FOOD_KIND;
+    }
+
+    /**
+     * 식사 때가 아닌 칸의 종류 (앞이 먼저): 밤엔 술집, 식사 뒤엔 카페, 오전엔 볼거리. 카페 다음에 또 카페는 안 넣음.
+     * 11/18: 술집은 하루 2차 한 번만(저녁 칸이 술집이었으면 그 뒤 한 번), 볼거리 두 곳 다음엔 카페 먼저 (봉은사 → VR존 → 광장 3곳 연속)
+     */
+    String outingKindsOf(List<String> kinds, int clock, String previous, String beforePrevious) {
+        boolean isBarDone = previous.equals(BAR_KIND) || beforePrevious.equals(BAR_KIND);
+        if (kinds.contains(BAR_KIND) && clock >= BAR_FROM_MIN && !isBarDone) {
             return BAR_KIND;
         }
-        List<String> order = previous.equals(FOOD_KIND) ? List.of(CAFE_KIND, "culture", "tour", "shop") : List.of("tour", "culture", "shop", CAFE_KIND);
+        boolean isSightStreak = SIGHT_KINDS.contains(firstKind(previous)) && SIGHT_KINDS.contains(firstKind(beforePrevious));
+        List<String> order = previous.equals(FOOD_KIND) || isSightStreak ? List.of(CAFE_KIND, "culture", "tour", "shop") : List.of("tour", "culture", "shop", CAFE_KIND);
         List<String> chosen = new ArrayList<>();
         for (String kind : order) {
             boolean isCafeAgain = kind.equals(CAFE_KIND) && previous.equals(CAFE_KIND);
@@ -540,6 +601,10 @@ public class PlanRuleMaker {
             }
         }
         return String.join(",", chosen);
+    }
+
+    private String firstKind(String slotKinds) {
+        return slotKinds.split(",")[0];
     }
 
     /**
@@ -602,6 +667,7 @@ public class PlanRuleMaker {
         for (Stop stop : kept) {
             cafeCount += CAFE_KIND.equals(kindOfKept(stop)) ? 1 : 0;
         }
+        cafeCount += countExtraCafes(extras, candidates, day); // 11/18: 예약·꼭 갈 카페도 하루 카페 수에 (어니언 예약 + 카페 2곳 = 3곳이었어요)
         List<String[]> slots = getSlotList(conditions, day);
         if (isToday && !hasDayTime(conditions)) {
             slots = pullToNow(slots); // 오늘 출발이면 지난 칸을 버리지 않고 남은 시간으로 당김 (11/04)
@@ -633,6 +699,9 @@ public class PlanRuleMaker {
             if (isNearUserMeal(extras, candidates, day, start)) {
                 slotKinds = withoutMeal(slotKinds, lastKind, cafeCount); // 꼭 갈 식당·예약 식당 앞뒤 2시간엔 또 밥 안 먹게 (11/14)
             }
+            if (lastKind.isEmpty() && start < LUNCH_START_MIN && slotKinds.size() > 1) {
+                slotKinds = withoutKind(slotKinds, CAFE_KIND); // 11/18: 하루 첫 칸(점심 전)은 카페 말고 볼거리부터
+            }
             int stay = Integer.parseInt(slots.get(i)[2]);
             boolean isAfterEnd = dayEndMin != null && start + stay > dayEndMin; // 끝 장소로 가야 해서 못 쓰는 칸
             if (isAfterEnd || overlapsExtra(extras, day, start, stay)) {
@@ -642,6 +711,10 @@ public class PlanRuleMaker {
             // 여러 구면 이 칸은 정해진 구의 후보에서 먼저 (없으면 전체)
             Map<String, Place> slotCandidates = candidatesOfSlot(candidates, areas, singleGuOf(conditions), (day - 1) * slots.size() + i, days * slots.size());
             Set<String> blocked = withNearSameKind(used, candidates, stops); // 11/12 같은 곳 다른 이름(남대문·숭례문, DDP·역사문화공원)이 또 안 들어가게
+            blockNightOutdoor(blocked, candidates, start);
+            if (slotKinds.get(0).equals(BAR_KIND) && (FOOD_KIND.equals(lastKind) || BAR_KIND.equals(lastKind))) {
+                blockMealBars(blocked, candidates); // 저녁 뒤 2차는 안주가 밥인 술집 말고 (11/18 타파스 → 이자카야 = 저녁 두 번)
+            }
             Place place = pick == null ? null : checkPick(pick, slotKinds, slotCandidates, blocked, conditions, date, start, stay, point, maxWalkMeters);
             String reason = place == null ? null : pick.getReason();
             if (pick != null && place == null) {
@@ -690,6 +763,61 @@ public class PlanRuleMaker {
             cafeCount += CAFE_KIND.equals(lastKind) ? 1 : 0;
         }
         return replaced;
+    }
+
+    /** 그날 예약·꼭 갈 곳 중 카페 수 (11/18) */
+    private int countExtraCafes(List<AiDraftStop> extras, Map<String, Place> candidates, int day) {
+        int count = 0;
+        for (AiDraftStop extra : extras) {
+            Place place = dayOf(extra) == day ? findPlaceOf(extra, candidates) : null;
+            if (place != null && CAFE_KIND.equals(place.getKind())) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private List<String> withoutKind(List<String> kinds, String kind) {
+        List<String> rest = new ArrayList<>(kinds);
+        rest.remove(kind);
+        return rest;
+    }
+
+    /** 밤(20시부터) 칸이면 공원·계단·광장 같은 바깥 볼거리를 막음. 야경·전망 명소는 그대로 (11/18: 21:40 후암동108계단 70분) */
+    void blockNightOutdoor(Set<String> blocked, Map<String, Place> candidates, int start) {
+        if (start < NIGHT_OUTDOOR_FROM_MIN) {
+            return;
+        }
+        for (Place place : candidates.values()) {
+            boolean isNightView = place.getName() != null && NIGHT_VIEW.matcher(place.getName()).find();
+            if ("tour".equals(place.getKind()) && !isNightView) {
+                blocked.add(place.getId());
+            }
+        }
+    }
+
+    /** 안주가 밥인 술집(요리주점·이자카야·포차)을 막음. 그런 곳만 남으면 막지 않음 (2차를 아예 못 넣지 않게) */
+    void blockMealBars(Set<String> blocked, Map<String, Place> candidates) {
+        List<String> mealBars = new ArrayList<>();
+        boolean hasDrinkBar = false;
+        for (Place place : candidates.values()) {
+            if (!BAR_KIND.equals(place.getKind()) || blocked.contains(place.getId())) {
+                continue;
+            }
+            if (isMealBar(place)) {
+                mealBars.add(place.getId());
+            } else {
+                hasDrinkBar = true;
+            }
+        }
+        if (hasDrinkBar) {
+            blocked.addAll(mealBars);
+        }
+    }
+
+    private boolean isMealBar(Place place) {
+        String text = (place.getName() == null ? "" : place.getName()) + " " + (place.getCategory() == null ? "" : place.getCategory());
+        return MEAL_BAR.matcher(text).find();
     }
 
     /**
@@ -868,7 +996,7 @@ public class PlanRuleMaker {
     private int findEarlierFreeTime(List<AiDraftStop> extras, AiDraftStop extra, Place place, LocalDate date, int stay,
                                     PlanConditions conditions, int latest) {
         int dayStart = dayOf(extra) != 1 ? laterDayStartMin(conditions, dayOf(extra))
-                : !hasDayTime(conditions) ? MIDDLE_DAY_START_MIN : Geo.toMinutes(conditions.getStartTime());
+                : !hasDayTime(conditions) ? MIDDLE_DAY_START_MIN : dayStartMinOf(conditions, 1);
         for (int time = dayStart; time <= latest; time += OPEN_MOVE_STEP_MIN) {
             if (isOpenFor(place, date, time, stay) && !overlapsOtherExtra(extras, extra, time, stay)) {
                 return time;
