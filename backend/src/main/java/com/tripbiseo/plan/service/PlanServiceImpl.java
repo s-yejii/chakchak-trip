@@ -71,6 +71,7 @@ public class PlanServiceImpl implements PlanService {
     private static final java.util.regex.Pattern COUPLE_WORDS = java.util.regex.Pattern.compile("데이트|연인|커플");
     private static final java.util.regex.Pattern SOLO_WORDS = java.util.regex.Pattern.compile("혼밥|혼자|1인");
     private static final int MAX_REASON_LENGTH = 40;      // Gemini 이유 한 줄
+    private static final String MEMORIAL_MEMO = "역사를 기억하는 추모 공간이에요 · 조용히 둘러봐 주세요"; // 11/18 추모 공간 안내
     private static final java.util.regex.Pattern GUESS_REASON = java.util.regex.Pattern.compile("걸어서|도보|가까|가깝|인접|근처|바로 옆|인근|위치|동선|니다$|평점|리뷰 ?[\\d,]+개|에 있어|에 있는|편리|즐길 수 있|다양한|유명한|대표적|의미가 있|의미 있는|꼭 방문|가득한"); // 확인 안 된 거리 말·숫자·뻔한 말 (11/14)
     private static final int MAX_MEMO_LENGTH = 200;       // trip_stop.memo 저장 규칙
     private static final java.util.regex.Pattern WEAK_EVIDENCE = java.util.regex.Pattern.compile("리뷰 \\d+개 중 (\\d+)개");
@@ -1233,6 +1234,9 @@ public class PlanServiceImpl implements PlanService {
                 response.getNotes().add(makeNote(place.getName() + "은(는) 방문 전에 연락이 필요해요", placeService.getNaverUrl(place.getName(), null)));
             }
             stop.setMemo(makeMemo(pick.getReason(), reasons.get(place.getId()), conditions.getCompanion()));
+            if (planCandidateFinder.isMemorialName(place.getName())) {
+                stop.setMemo(MEMORIAL_MEMO); // 추모 공간엔 "산책하기 좋아요" 같은 여가 문구 대신 (11/18)
+            }
             stop.setImportance(isMustStop(pick, place, conditions, mustKindsLeft) ? MUST : MAYBE); // 여행 중 대안이 꼭은 안 줄임 (11/04)
             response.getStops().add(stop);
         }
