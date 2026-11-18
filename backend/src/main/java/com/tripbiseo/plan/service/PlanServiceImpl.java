@@ -250,6 +250,7 @@ public class PlanServiceImpl implements PlanService {
         if (response.getStops().isEmpty()) {
             boolean isMissingLocation = isNearMe && request.getLat() == null;
             throw fail(422, isMissingLocation ? "내 위치를 받지 못했어요. 브라우저 위치 권한을 허용하거나 지역 이름을 말해 주세요."
+                                              : isLateNow ? "지금은 문 연 곳을 찾지 못했어요. 술집을 고르거나 내일로 짜 보세요."
                                               : "일정에 넣을 장소를 찾지 못했어요. 가고 싶은 곳을 조금 더 자세히 말해 주세요.");
         }
         applyLimits(conditions, response, days, finish, progress);

@@ -233,7 +233,8 @@ public class PlanRuleMaker {
         addMissingKindWarnings(conditions, candidates, stops, warnings);
         addEarlyFixedWarning(conditions, warnings);
         addLongGapWarnings(stops, warnings);
-        if (stops.size() <= 1) {
+        boolean isToMidnight = hasDayTime(conditions) && Geo.toMinutes(conditions.getEndTime()) >= 24 * 60;
+        if (stops.size() <= 1 && !isToMidnight) { // 자정까지 고른 밤 일정은 더 늦출 수 없어서 안내 안 함
             warnings.add("일정 시간이 짧아 " + stops.size() + "곳만 넣었어요 · 끝 시각을 늦추면 더 넣을 수 있어요"); // 11/18 저녁에 짜면 1곳만 나와 허전했어요
         }
         return stops;
@@ -596,7 +597,8 @@ public class PlanRuleMaker {
                 continue;
             }
             boolean isLunchTime = !isLunchDone && clock >= LUNCH_START_MIN && clock < LUNCH_END_MIN;
-            boolean isDinnerTime = !isDinnerDone && clock >= DINNER_START_MIN && clock < DINNER_END_MIN;
+            // 11/18: 저녁 시간이 지나서 시작한 날(밤 10시 지금부터)은 첫 칸을 늦은 저녁·야식으로
+            boolean isDinnerTime = !isDinnerDone && clock >= DINNER_START_MIN && (clock < DINNER_END_MIN || slots.isEmpty());
             String slotKinds = isLunchTime ? FOOD_KIND : isDinnerTime ? dinnerKindsOf(conditions) : outingKindsOf(kinds, clock, previous, beforePrevious, !isOpenEnd);
             if (slotKinds.isEmpty()) {
                 clock += TIME_STEP_MIN; // 넣을 볼거리가 없으면 다음 식사 때까지 기다림
