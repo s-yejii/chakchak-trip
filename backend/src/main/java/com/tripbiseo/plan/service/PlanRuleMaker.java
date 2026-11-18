@@ -102,6 +102,11 @@ public class PlanRuleMaker {
     private static final java.util.regex.Pattern NIGHT_VIEW = java.util.regex.Pattern.compile("야경|전망|타워|야시장|루프탑");
     private static final java.util.regex.Pattern MEAL_BAR = java.util.regex.Pattern.compile("요리주점|이자카야|이자까야|포차|주막|선술집|오뎅|전집|막걸리"); // 안주가 밥인 술집
     private static final List<String> SIGHT_KINDS = List.of("tour", "culture", "shop");
+    private static final int EVENING_DAY_END_MIN = 22 * 60;     // 저녁에 시작한 1일차 끝 (끝 시각이 다음 날 것일 때)
+    private static final int FIRST_ROUND_MIN_STAY = 60;         // 1차(저녁) 머무는 시간 범위 (11/18 주형: 끝 시각까지 1차·2차가 나눠 씀)
+    private static final int FIRST_ROUND_MAX_STAY = 120;
+    private static final int SECOND_ROUND_MIN_STAY = 60;        // 2차는 남은 시간 전부, 적어도 이만큼
+    private static final int SECOND_ROUND_LONG_MIN = 150;       // 2차가 이보다 길면 그때만 3차로 나눔
     private static final int LONG_GAP_MIN = 90;                 // 일정 사이가 이보다 비면 알림
     private static final int SECOND_ROUND_MAX_STAY_MIN = 60;    // 2차를 짧게 할 때 머무는 분
     private static final String SECOND_ROUND_SKIP = "skip";     // 2차에서 요리주점·이자카야·포차 빼기
@@ -170,7 +175,7 @@ public class PlanRuleMaker {
     private List<String[]> getSlotList(PlanConditions conditions, int day) {
         if (hasDayTime(conditions)) {
             int start = dayStartMinOf(conditions, day);
-            int end = day == lastDayOf(conditions) ? Geo.toMinutes(conditions.getEndTime()) : MIDDLE_DAY_END_MIN;
+            int end = chosenDayEndMin(conditions, day, lastDayOf(conditions));
             // 담은 곳 + 그날 예약(고정 일정)을 피해서 칸을 만듦 (11/12: 예약 시간은 빼고 칸을 만들다 보니 19:00 회식과 겹친 저녁 칸이 통째로 빠져 오후가 비었어요)
             List<Stop> blocks = keptOfDay(conditions, day);
             blocks.addAll(fixedBlocksOfDay(conditions, day));
@@ -280,7 +285,7 @@ public class PlanRuleMaker {
             }
             int day = dayOf(extra);
             int start = dayStartMinOf(conditions, day);
-            int end = day == days ? Geo.toMinutes(conditions.getEndTime()) : MIDDLE_DAY_END_MIN;
+            int end = chosenDayEndMin(conditions, day, days);
             int stay = extra.getStay() == null ? DEFAULT_EXTRA_STAY_MIN : extra.getStay();
             int time = Math.max(start, Math.min(Geo.toMinutes(extra.getTime()), end - stay));
             extra.setTime(Geo.toHhmm(time));
@@ -302,7 +307,7 @@ public class PlanRuleMaker {
             }
             int day = dayOf(stop);
             int start = dayStartMinOf(conditions, day);
-            int end = day == days ? Geo.toMinutes(conditions.getEndTime()) : MIDDLE_DAY_END_MIN;
+            int end = chosenDayEndMin(conditions, day, days);
             int stopStart = Geo.toMinutes(stop.getTime());
             int stay = stop.getStay() == null ? 0 : stop.getStay();
             int lastEnd = isHardEnd(conditions, day, days) ? end : end + stay; // 끝 장소가 없으면 끝 시각 전에 시작만 하면 됨
@@ -504,6 +509,26 @@ public class PlanRuleMaker {
         return !hasDayTime(conditions) || (conditions.getFinish() != null && day == days);
     }
 
+    /**
+     * 그날 끝 시각 (시간을 골랐을 때): 마지막 날은 고른 끝 시각, 가운데 날은 20:00.
+     * 11/18: 1일차(마지막 날이 아니어도)도 고른 끝 시각까지 (1박 2일을 18시에 시작하면 1일차가 20:00에 끊겨 저녁 한 곳만 나왔어요).
+     * 고른 끝 시각이 1일차 시작보다 이르면(다음 날 끝 시각이라) 저녁 시작은 22:00, 아니면 20:00
+     */
+    int chosenDayEndMin(PlanConditions conditions, int day, int lastDay) {
+        int chosenEnd = Geo.toMinutes(conditions.getEndTime());
+        if (day == lastDay) {
+            return chosenEnd;
+        }
+        if (day != 1) {
+            return MIDDLE_DAY_END_MIN;
+        }
+        int start = Geo.toMinutes(conditions.getStartTime());
+        if (chosenEnd > start) {
+            return Math.max(chosenEnd, MIDDLE_DAY_END_MIN);
+        }
+        return start >= DINNER_START_MIN - 60 ? EVENING_DAY_END_MIN : MIDDLE_DAY_END_MIN;
+    }
+
     /** 시작·끝 시간을 골랐는지 */
     private boolean hasDayTime(PlanConditions conditions) {
         return conditions.getStartTime() != null && conditions.getEndTime() != null;
@@ -548,7 +573,51 @@ public class PlanRuleMaker {
             previous = slotKinds;
             clock = roundUp(clock + stay + TIMED_GAP_MIN);
         }
+        splitEvening(slots, endMin, kept);
         return slots;
+    }
+
+    /**
+     * 저녁(1차) 뒤 술집(2차)이 있으면 그날 끝 시각까지 둘이 시간을 나눠 씀 (11/18 주형).
+     * 18:00 시작·22:00 끝 → 1차 18:00~19:50, 2차 20:10~22:00. 2차 뒤에 끼워 넣은 밤 칸(카페 등)은 뺌.
+     * 1차는 60~120분, 2차는 남은 시간 전부(60분 이상). 2차가 150분을 넘으면 그때만 2차·3차로 반씩.
+     * 2차 뒤에 담은 곳·예약이 있거나 2차가 60분도 안 되면 그대로 둠
+     */
+    void splitEvening(List<String[]> slots, int endMin, List<Stop> kept) {
+        int dinner = -1;
+        for (int i = 0; i + 1 < slots.size(); i++) {
+            boolean isDinner = slots.get(i)[0].startsWith(FOOD_KIND) || slots.get(i)[0].equals(BAR_KIND + "," + FOOD_KIND);
+            if (isDinner && Geo.toMinutes(slots.get(i)[1]) >= DINNER_START_MIN && slots.get(i + 1)[0].equals(BAR_KIND)) {
+                dinner = i;
+            }
+        }
+        if (dinner < 0) {
+            return;
+        }
+        int dinnerStart = Geo.toMinutes(slots.get(dinner)[1]);
+        for (Stop stop : kept) {
+            if (Geo.toMinutes(stop.getTime()) > dinnerStart) {
+                return; // 2차 뒤에 사용자가 정한 일정이 있음
+            }
+        }
+        int dinnerStay = Math.max(FIRST_ROUND_MIN_STAY, Math.min(FIRST_ROUND_MAX_STAY, (endMin - dinnerStart - TIMED_GAP_MIN) / 2 / TIME_STEP_MIN * TIME_STEP_MIN));
+        int barStart = roundUp(dinnerStart + dinnerStay + TIMED_GAP_MIN);
+        int barStay = endMin - barStart;
+        if (barStay < SECOND_ROUND_MIN_STAY) {
+            return;
+        }
+        while (slots.size() > dinner + 1) {
+            slots.remove(slots.size() - 1); // 2차와 그 뒤 밤 칸을 지우고 다시 만듦
+        }
+        slots.get(dinner)[2] = String.valueOf(dinnerStay);
+        if (barStay <= SECOND_ROUND_LONG_MIN) {
+            slots.add(new String[] {BAR_KIND, Geo.toHhmm(barStart), String.valueOf(barStay)});
+            return;
+        }
+        int half = (barStay - TIMED_GAP_MIN) / 2 / TIME_STEP_MIN * TIME_STEP_MIN;
+        int thirdStart = roundUp(barStart + half + TIMED_GAP_MIN);
+        slots.add(new String[] {BAR_KIND, Geo.toHhmm(barStart), String.valueOf(half)});
+        slots.add(new String[] {BAR_KIND, Geo.toHhmm(thirdStart), String.valueOf(endMin - thirdStart)});
     }
 
     /** 그날 담은 곳 (시각 순). 시각이 없는 칸은 뺌 */
@@ -981,7 +1050,7 @@ public class PlanRuleMaker {
         if (!hasDayTime(conditions)) {
             return TODAY_LAST_END_MIN;
         }
-        return day == days ? Geo.toMinutes(conditions.getEndTime()) : MIDDLE_DAY_END_MIN;
+        return chosenDayEndMin(conditions, day, days);
     }
 
     /** start 전에 시작한 그날 마지막 꼭 갈 곳·예약 (없으면 null) */
@@ -1082,7 +1151,7 @@ public class PlanRuleMaker {
         if (!hasDayTime(conditions)) {
             return OPEN_MOVE_LATEST_MIN;
         }
-        int end = day == days ? Geo.toMinutes(conditions.getEndTime()) : MIDDLE_DAY_END_MIN;
+        int end = chosenDayEndMin(conditions, day, days);
         return end - stay;
     }
 

@@ -184,6 +184,42 @@ class PlanRuleMakerUsabilityTest {
         return stop;
     }
 
+    @Test
+    void 저녁_1차_2차가_끝_시각까지_나눠_씀() {
+        List<String[]> slots = ruleMaker.getSlotList(timed("18:00", "22:00", "food", "cafe", "bar"));
+        assertEquals(2, slots.size());
+        assertEquals("18:00", slots.get(0)[1]);
+        assertEquals("110", slots.get(0)[2]);          // 1차 18:00~19:50
+        assertEquals("bar", slots.get(1)[0]);
+        assertEquals("20:10", slots.get(1)[1]);
+        assertEquals("110", slots.get(1)[2]);          // 2차 20:10~22:00
+    }
+
+    @Test
+    void 이차가_150분_넘으면_그때만_삼차() {
+        List<String[]> slots = ruleMaker.getSlotList(timed("18:00", "23:30", "food", "bar"));
+        assertEquals(3, slots.size());
+        assertEquals("120", slots.get(0)[2]);          // 1차는 120분까지
+        assertEquals("bar", slots.get(2)[0]);
+        int thirdEnd = toMin(slots.get(2)[1]) + Integer.parseInt(slots.get(2)[2]);
+        assertEquals(23 * 60 + 30, thirdEnd);          // 3차가 끝 시각까지
+    }
+
+    @Test
+    void 일박이일_저녁_시작이면_첫날도_고른_끝_시각까지() {
+        PlanConditions conditions = timed("18:00", "22:00", "food", "bar");
+        conditions.setEndDate("2026-11-20");
+        assertEquals(22 * 60, ruleMaker.chosenDayEndMin(conditions, 1, 2));
+        PlanConditions nextDayEnd = timed("18:00", "12:00", "food", "bar");
+        nextDayEnd.setEndDate("2026-11-20");
+        assertEquals(22 * 60, ruleMaker.chosenDayEndMin(nextDayEnd, 1, 2)); // 끝 시각이 다음 날 것이면 22:00
+        assertEquals(20 * 60, ruleMaker.chosenDayEndMin(timed("10:00", "12:00"), 2, 3)); // 가운데 날은 20:00
+    }
+
+    private int toMin(String time) {
+        return Integer.parseInt(time.substring(0, 2)) * 60 + Integer.parseInt(time.substring(3));
+    }
+
     private boolean isSight(String slotKinds) {
         String first = slotKinds.split(",")[0];
         return first.equals("tour") || first.equals("culture") || first.equals("shop");
