@@ -213,8 +213,14 @@ public class PlaceAskServiceImpl implements PlaceAskService {
             return makeFallback();
         }
         log.info("AI에게 묻기 SQL: {} → {}곳", answer.getSql(), places.size());
+        boolean isMoodMissed = false; // 분위기에 맞는 곳이 없어서 근처 곳을 대신 보여 주는지 (11/18)
         if (hasMood(answer)) {
-            places = applyMood(places, answer);
+            List<AskedPlace> moodPlaces = applyMood(places, answer);
+            if (moodPlaces.isEmpty() && !places.isEmpty()) {
+                isMoodMissed = true; // 빈 결과 대신 분위기 조건만 빼고, SQL로 찾은 근처 곳을 그대로 씀 (임베딩이 없는 동네 등)
+            } else {
+                places = moodPlaces;
+            }
             if (check.getOrderBy() != null) {
                 places = keepFirst(places, MOOD_WALK_POOL);
             }
@@ -227,7 +233,11 @@ public class PlaceAskServiceImpl implements PlaceAskService {
         if (check.getPlaceholders().contains(ROUTE)) {
             band = askSqlRunner.getRouteBand(situation.getRoute(), BAND_METERS);
         }
-        return makeResult(answer, situation.getSlack(), band, openPlaces);
+        PlaceAskResult result = makeResult(answer, situation.getSlack(), band, openPlaces);
+        if (isMoodMissed && !openPlaces.isEmpty()) {
+            result.setMessage("분위기에 꼭 맞는 곳은 못 찾아서, 근처 " + openPlaces.size() + "곳을 보여 드려요");
+        }
+        return result;
     }
 
     /** 분위기 조건(mood)이 있는 질문인지 */
