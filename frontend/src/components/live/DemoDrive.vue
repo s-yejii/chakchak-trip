@@ -155,7 +155,7 @@ async function moveToNext() {
   await showNotice(next, travelMin)
 
   // 이동: 경로선을 따라 움직이고, 그동안 시계는 이동 시간만큼 흐름
-  const path = route && route.coords && route.coords.length > 1 ? route.coords : [[from.lat, from.lng], [next.lat, next.lng]]
+  const path = demoPathFor(next) || (route && route.coords && route.coords.length > 1 ? route.coords : [[from.lat, from.lng], [next.lat, next.lng]])
   demoRoute.value = path // 이동하는 동안 지도의 남색 점선도 이 길로 고정 (11/09 ①: 중간에 다시 받은 길과 어긋나지 않게)
   await wait(FOLLOW_START_MS) // 지도가 내 위치로 다가가며 확대하는 동안 점은 출발점에서 기다림 (11/09 ①)
   // 떠나는 그 시각에 서버에 "떠났다"를 먼저 알림 (점 두 개가 칸 밖이어야 출발로 봄) → 늦게 떠났으면 서버가 뒤 일정을 밀거나 줄임
@@ -189,6 +189,23 @@ async function moveToNext() {
     await wait(MOVE_MS / MOVE_STEPS)
   }
   await arrive(next, departDate, departMin + travelMin)
+}
+
+// 11/17 주형: 나들길은 산길 위라 TMAP 도보 길이 남산도서관 쪽으로 빙 돌아요 → 시연에선 회현·케이블카 쪽 짧은 길로 고정
+const NADEULGIL_NAME = '남산순환나들길'
+const NADEULGIL_PATH = [
+  [37.5616, 126.9827], // 르메르디앙 명동
+  [37.5604, 126.9830],
+  [37.5594, 126.9833], // 퇴계로 건너기 (회현 쪽)
+  [37.5584, 126.9833],
+  [37.5576, 126.9836], // 남산 케이블카 타는 곳 앞
+  [37.5567, 126.9845], // 소파로 오르막
+  [37.5559, 126.9856],
+  [37.55522, 126.98656], // 나들길 (와룡묘 앞)
+]
+/** 시연에서 길을 정해 둔 칸이면 그 길 (없으면 null → 길찾기 길) */
+function demoPathFor(next) {
+  return next && next.name === NADEULGIL_NAME ? NADEULGIL_PATH : null
 }
 
 // 출발 전 확인 (11/08 주형: 대안을 고른 다음에 움직여야지): 예약까지 여유 5분 이하·늦음 알림(late-)이면 시계를 멈추고 출발 안 함
