@@ -5,7 +5,6 @@ import static com.tripbiseo.common.exception.ApiException.fail;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -19,6 +18,7 @@ import org.springframework.stereotype.Service;
 
 import com.tripbiseo.common.ai.AiService;
 import com.tripbiseo.common.exception.ApiException;
+import com.tripbiseo.common.util.Geo;
 import com.tripbiseo.plan.dto.AiLinkPlaces;
 import com.tripbiseo.plan.dto.LinkRequest;
 import com.tripbiseo.plan.dto.LinkResponse;
@@ -49,6 +49,7 @@ public class LinkServiceImpl implements LinkService {
     private static final int MIN_NAME_LENGTH = 2;
     private static final int MAX_NAME_LENGTH = 40;
     private static final int MIN_PARTIAL_MATCH_LENGTH = 3; // 이보다 짧은 이름은 전체가 같아야 인정
+    private static final double SAME_PLACE_RADIUS_M = 50;  // DB·카카오로 두 번 찾은 같은 가게로 보는 거리 (더 멀면 다른 지점)
 
     private static final Pattern EMAIL = Pattern.compile("[\\w.+-]+@[\\w-]+\\.[\\w.-]+");
     private static final Pattern MENTION = Pattern.compile("@[\\w.]+");
@@ -216,16 +217,50 @@ public class LinkServiceImpl implements LinkService {
     private LinkResponse makeResponse(String source, List<String> names) {
         LinkResponse response = new LinkResponse();
         response.setSource(source);
-        Set<String> addedPlaces = new HashSet<>();
+        List<Place> addedPlaces = new ArrayList<>();
         for (String name : names) {
             Place place = findPlace(name);
             if (place == null) {
                 response.getMissed().add(name);
-            } else if (addedPlaces.add(place.getId() != null ? place.getId() : place.getName())) {
-                response.getPlaces().add(placeService.getPlaceCard(place, null, null));
+            } else {
+                addPlace(addedPlaces, place);
             }
         }
+        for (Place place : addedPlaces) {
+            response.getPlaces().add(placeService.getPlaceCard(place, null, null));
+        }
         return response;
+    }
+
+    /** 같은 곳이 이미 있으면 하나만 남김. 카카오 것(id 없음)이 먼저 있었으면 그 자리를 DB 것으로 바꿈 (11/18) */
+    void addPlace(List<Place> addedPlaces, Place place) {
+        for (int i = 0; i < addedPlaces.size(); i++) {
+            Place added = addedPlaces.get(i);
+            if (isSamePlace(added, place)) {
+                if (added.getId() == null && place.getId() != null) {
+                    addedPlaces.set(i, place); // 순서는 그대로, DB 장소로만 바꿈
+                }
+                return;
+            }
+        }
+        addedPlaces.add(place);
+    }
+
+    /** 같은 곳 = id가 같음, 또는 50m 안 + 한 이름이 다른 이름을 포함. 둘 다 id가 없으면 이름이 같을 때도 (전과 같음) */
+    private boolean isSamePlace(Place first, Place second) {
+        if (first.getId() != null && first.getId().equals(second.getId())) {
+            return true;
+        }
+        String firstName = compact(first.getName());
+        String secondName = compact(second.getName());
+        if (first.getId() == null && second.getId() == null && firstName.equals(secondName)) {
+            return true;
+        }
+        if (first.getLat() == null || first.getLng() == null || second.getLat() == null || second.getLng() == null) {
+            return false;
+        }
+        boolean isNear = Geo.distanceMeters(first.getLat(), first.getLng(), second.getLat(), second.getLng()) <= SAME_PLACE_RADIUS_M;
+        return isNear && (firstName.contains(secondName) || secondName.contains(firstName));
     }
 
     /** 짧은 이름은 이름 일부만 같아도 엉뚱한 곳이 나와서("갈빗" → 강동구 "강동갈빗살") 이름 전체가 같을 때만 인정 */
