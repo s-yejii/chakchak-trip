@@ -102,6 +102,7 @@ public class PlanRuleMaker {
     private static final java.util.regex.Pattern NIGHT_VIEW = java.util.regex.Pattern.compile("야경|전망|타워|야시장|루프탑");
     private static final java.util.regex.Pattern MEAL_BAR = java.util.regex.Pattern.compile("요리주점|이자카야|이자까야|포차|주막|선술집|오뎅|전집|막걸리"); // 안주가 밥인 술집
     private static final List<String> SIGHT_KINDS = List.of("tour", "culture", "shop");
+    private static final int LONG_GAP_MIN = 90;                 // 일정 사이가 이보다 비면 알림
     private static final int SECOND_ROUND_MAX_STAY_MIN = 60;    // 2차를 짧게 할 때 머무는 분
     private static final String SECOND_ROUND_SKIP = "skip";     // 2차에서 요리주점·이자카야·포차 빼기
     private static final String SECOND_ROUND_SHORT = "short";   // 2차는 그대로 고르되 1시간 이하로
@@ -225,10 +226,33 @@ public class PlanRuleMaker {
         removeOutsideHours(conditions, candidates, days, stops);
         addMissingKindWarnings(conditions, candidates, stops, warnings);
         addEarlyFixedWarning(conditions, warnings);
+        addLongGapWarnings(stops, warnings);
         if (stops.size() <= 1) {
             warnings.add("일정 시간이 짧아 " + stops.size() + "곳만 넣었어요 · 끝 시각을 늦추면 더 넣을 수 있어요"); // 11/18 저녁에 짜면 1곳만 나와 허전했어요
         }
         return stops;
+    }
+
+    /**
+     * 일정 사이가 1시간 30분 넘게 비면 알림 (11/18): 동네에 넣을 곳이 모자라 마포 2일차 15:10~18:10이 비었어요.
+     * 억지로 같은 종류를 또 넣지 않고 빈 시간을 그대로 알려 줘요
+     */
+    void addLongGapWarnings(List<AiDraftStop> stops, List<String> warnings) {
+        List<AiDraftStop> sorted = new ArrayList<>();
+        for (AiDraftStop stop : stops) {
+            if (isTimeText(stop.getTime())) {
+                sorted.add(stop);
+            }
+        }
+        sorted.sort((first, second) -> (dayOf(first) * 10000 + Geo.toMinutes(first.getTime())) - (dayOf(second) * 10000 + Geo.toMinutes(second.getTime())));
+        for (int i = 1; i < sorted.size(); i++) {
+            AiDraftStop before = sorted.get(i - 1);
+            AiDraftStop after = sorted.get(i);
+            int end = Geo.toMinutes(before.getTime()) + (before.getStay() == null ? DEFAULT_EXTRA_STAY_MIN : before.getStay());
+            if (dayOf(before) == dayOf(after) && Geo.toMinutes(after.getTime()) - end > LONG_GAP_MIN) {
+                warnings.add(dayOf(after) + "일차 " + Geo.toHhmm(end) + "~" + after.getTime() + "이 비어 있어요 · 근처에 넣을 곳이 모자라요. 장소 추가로 채울 수 있어요");
+            }
+        }
     }
 
     /** 예약이 고른 시작보다 이르면 알림 (11/18) */
@@ -475,7 +499,7 @@ public class PlanRuleMaker {
             }
             boolean isLunchTime = !isLunchDone && clock >= LUNCH_START_MIN && clock < LUNCH_END_MIN;
             boolean isDinnerTime = !isDinnerDone && clock >= DINNER_START_MIN && clock < DINNER_END_MIN;
-            String slotKinds = isLunchTime ? FOOD_KIND : isDinnerTime ? dinnerKindsOf(conditions) : outingKindsOf(kinds, clock, previous, beforePrevious);
+            String slotKinds = isLunchTime ? FOOD_KIND : isDinnerTime ? dinnerKindsOf(conditions) : outingKindsOf(kinds, clock, previous, beforePrevious, isBarOnly(conditions));
             if (slotKinds.isEmpty()) {
                 clock += TIME_STEP_MIN; // 넣을 볼거리가 없으면 다음 식사 때까지 기다림
                 continue;
@@ -585,18 +609,24 @@ public class PlanRuleMaker {
         return category.matches(".*(관광|문화|쇼핑|공원|산책|거리).*") ? "tour" : FOOD_KIND;
     }
 
+    /** 어디 위주로에서 술집만 골랐는지 (밥집은 안 고름) */
+    private boolean isBarOnly(PlanConditions conditions) {
+        List<String> chosen = chosenKindsOf(conditions);
+        return chosen.contains(BAR_KIND) && !chosen.contains(FOOD_KIND);
+    }
+
     /** 저녁 칸 종류: 술집만 골랐으면 술집(안주가 저녁)도 저녁으로 (11/18: 술만 골랐는데 양식 → 요리주점으로 저녁을 두 번 먹었어요) */
     String dinnerKindsOf(PlanConditions conditions) {
         List<String> chosen = chosenKindsOf(conditions);
-        return chosen.contains(BAR_KIND) && !chosen.contains(FOOD_KIND) ? BAR_KIND + "," + FOOD_KIND : FOOD_KIND;
+        return isBarOnly(conditions) ? BAR_KIND + "," + FOOD_KIND : FOOD_KIND;
     }
 
     /**
      * 식사 때가 아닌 칸의 종류 (앞이 먼저): 밤엔 술집, 식사 뒤엔 카페, 오전엔 볼거리. 카페 다음에 또 카페는 안 넣음.
      * 11/18: 술집은 하루 2차 한 번만(저녁 칸이 술집이었으면 그 뒤 한 번), 볼거리 두 곳 다음엔 카페 먼저 (봉은사 → VR존 → 광장 3곳 연속)
      */
-    String outingKindsOf(List<String> kinds, int clock, String previous, String beforePrevious) {
-        boolean isBarDone = previous.equals(BAR_KIND) || beforePrevious.equals(BAR_KIND);
+    String outingKindsOf(List<String> kinds, int clock, String previous, String beforePrevious, boolean isBarOnly) {
+        boolean isBarDone = !isBarOnly && (previous.equals(BAR_KIND) || beforePrevious.equals(BAR_KIND)); // 술만 고른 사람은 3차도 (술이 여행 목적)
         if (kinds.contains(BAR_KIND) && clock >= BAR_FROM_MIN && !isBarDone) {
             return BAR_KIND;
         }
@@ -669,6 +699,7 @@ public class PlanRuleMaker {
         double[] point = dayStartPoint(conditions, startDate, day, candidates);
         double[] firstPoint = null; // 그날 첫 장소 (하루 동선의 방향을 정해요)
         String lastKind = "";       // 앞 칸 종류 (카페 연달아 안 가게)
+        String beforeLastKind = ""; // 두 칸 앞 종류 (볼거리 3연속 막기, 11/18)
         int cafeCount = 0;          // 오늘 넣은 카페 수
         if (!kept.isEmpty() && realStartOf(conditions, startDate, day) == null) {
             point = new double[] {kept.get(0).getLat(), kept.get(0).getLng()}; // 담은 곳 근처부터
@@ -710,6 +741,9 @@ public class PlanRuleMaker {
             }
             if (lastKind.isEmpty() && start < LUNCH_START_MIN && slotKinds.size() > 1) {
                 slotKinds = withoutKind(slotKinds, CAFE_KIND); // 11/18: 하루 첫 칸(점심 전)은 카페 말고 볼거리부터
+            }
+            if (SIGHT_KINDS.contains(lastKind) && SIGHT_KINDS.contains(beforeLastKind)) {
+                slotKinds = withoutSightsIfOther(slotKinds); // AI가 볼거리 칸에 또 볼거리를 골라도 3곳 연달아는 안 되게 (11/18 VR존 → 봉은사 → SPA)
             }
             int stay = Integer.parseInt(slots.get(i)[2]);
             boolean isSecondRound = slotKinds.get(0).equals(BAR_KIND) && (FOOD_KIND.equals(lastKind) || BAR_KIND.equals(lastKind));
@@ -772,6 +806,7 @@ public class PlanRuleMaker {
             stops.add(stop);
             point = new double[] {place.getLat(), place.getLng()};
             firstPoint = firstPoint == null ? point : firstPoint;
+            beforeLastKind = lastKind;
             lastKind = place.getKind();
             cafeCount += CAFE_KIND.equals(lastKind) ? 1 : 0;
         }
@@ -788,6 +823,13 @@ public class PlanRuleMaker {
             }
         }
         return count;
+    }
+
+    /** 볼거리 종류를 뺌. 다른 종류가 하나도 안 남으면 그대로 (칸을 비우지는 않음) */
+    private List<String> withoutSightsIfOther(List<String> kinds) {
+        List<String> rest = new ArrayList<>(kinds);
+        rest.removeAll(SIGHT_KINDS);
+        return rest.isEmpty() ? kinds : rest;
     }
 
     private List<String> withoutKind(List<String> kinds, String kind) {
@@ -1170,7 +1212,7 @@ public class PlanRuleMaker {
         }
         boolean isUserWish = planCandidateFinder.isMustVisit(place, conditions.getMustVisit()) || planCandidateFinder.isMustVisit(place, conditions.getWishVisit());
         if (!isUserWish && isTooFar(point, place, AI_PICK_LIMIT_M)) {
-            return "앞 장소에서 2km 넘음"; // 사용자가 말한 곳이 아니면 앞 장소에서 2km 안에서
+            return "앞 장소에서 1.5km 넘음"; // 사용자가 말한 곳이 아니면 앞 장소에서 1.5km 안에서
         }
         // 꼭 갈 곳·가능하면 갈 곳은 칸 종류와 달라도 됨 (사용자가 직접 말한 곳)
         if (!slotKinds.contains(place.getKind()) && !isUserWish && !isSameSightKind(place.getKind(), slotKinds)) {
@@ -1218,6 +1260,9 @@ public class PlanRuleMaker {
                 placedKinds.add(kindOfKept(stop)); // 담은 곳의 종류도 넣은 걸로
             }
         }
+        if (hasMealTimeFixed(conditions)) {
+            placedKinds.add(FOOD_KIND); // 점심·저녁 시간 예약은 끼니로 셈 (11/18: 점심·저녁 예약이 있는데 "밥집을 못 넣었어요"가 떴어요)
+        }
         for (String kind : kindsOf(conditions)) {
             if (placedKinds.contains(kind)) {
                 continue;
@@ -1226,6 +1271,23 @@ public class PlanRuleMaker {
             warnings.add(hasKind(candidates, kind) ? "일정 시간이 모자라거나 영업시간이 안 맞아 " + name + " 장소를 못 넣었어요"
                                                    : "고른 지역 근처에서 " + name + " 장소를 찾지 못해 일정에 못 넣었어요");
         }
+    }
+
+    /** 점심·저녁 시간대에 예약이 있는지 (fixedBlocksOfDay와 같은 기준: 식사 시간 예약은 대부분 식당) */
+    private boolean hasMealTimeFixed(PlanConditions conditions) {
+        if (conditions.getFixed() == null) {
+            return false;
+        }
+        for (FixedVisit fixed : conditions.getFixed()) {
+            if (!isTimeText(fixed.getTime()) || isBoardingName(fixed.getName())) {
+                continue;
+            }
+            int time = Geo.toMinutes(fixed.getTime());
+            if ((time >= LUNCH_START_MIN && time < LUNCH_END_MIN) || (time >= DINNER_START_MIN && time < DINNER_END_MIN)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** 후보에 그 종류가 한 곳이라도 있는지 */

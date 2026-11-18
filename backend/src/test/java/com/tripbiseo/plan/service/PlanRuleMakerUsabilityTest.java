@@ -13,6 +13,7 @@ import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
+import com.tripbiseo.plan.dto.AiDraftStop;
 import com.tripbiseo.plan.dto.FixedVisit;
 import com.tripbiseo.plan.dto.PlanConditions;
 import com.tripbiseo.trip.dto.Place;
@@ -56,15 +57,16 @@ class PlanRuleMakerUsabilityTest {
         assertEquals("bar,food", ruleMaker.dinnerKindsOf(timed("18:00", "23:30", "bar")));
         assertEquals("food", ruleMaker.dinnerKindsOf(timed("11:00", "22:00", "food", "cafe", "bar")));
         List<String> kinds = List.of("bar", "food", "cafe", "tour");
-        assertEquals("bar", ruleMaker.outingKindsOf(kinds, 20 * 60, "bar,food", "")); // 저녁 뒤 2차
-        assertFalse(ruleMaker.outingKindsOf(kinds, 21 * 60 + 30, "bar", "bar,food").contains("bar")); // 3차는 없음
+        assertEquals("bar", ruleMaker.outingKindsOf(kinds, 20 * 60, "food", "", false)); // 저녁 뒤 2차
+        assertFalse(ruleMaker.outingKindsOf(kinds, 21 * 60 + 30, "bar", "food", false).contains("bar")); // 밥·술 고른 사람은 3차 없음
+        assertEquals("bar", ruleMaker.outingKindsOf(kinds, 21 * 60 + 30, "bar", "bar,food", true)); // 술만 고른 사람은 3차도
     }
 
     @Test
     void 볼거리_두_곳_다음엔_카페_먼저() {
         List<String> kinds = List.of("food", "cafe", "tour");
-        assertTrue(ruleMaker.outingKindsOf(kinds, 16 * 60, "tour", "tour,culture").startsWith("cafe"));
-        assertTrue(ruleMaker.outingKindsOf(kinds, 15 * 60, "tour", "cafe").startsWith("tour"));
+        assertTrue(ruleMaker.outingKindsOf(kinds, 16 * 60, "tour", "tour,culture", false).startsWith("cafe"));
+        assertTrue(ruleMaker.outingKindsOf(kinds, 15 * 60, "tour", "cafe", false).startsWith("tour"));
     }
 
     @Test
@@ -120,6 +122,22 @@ class PlanRuleMakerUsabilityTest {
             boolean isSightRun = isSight(slots.get(i)[0]) && isSight(slots.get(i - 1)[0]) && isSight(slots.get(i - 2)[0]);
             assertFalse(isSightRun, slots.get(i)[1] + " 칸까지 볼거리 3연속");
         }
+    }
+
+    @Test
+    void 일정_사이가_1시간30분_넘게_비면_알림() {
+        List<AiDraftStop> stops = new ArrayList<>(List.of(draft(2, "14:00", 70), draft(2, "18:10", 70), draft(1, "11:00", 70), draft(1, "12:30", 70)));
+        List<String> warnings = new ArrayList<>();
+        ruleMaker.addLongGapWarnings(stops, warnings);
+        assertEquals(List.of("2일차 15:10~18:10이 비어 있어요 · 근처에 넣을 곳이 모자라요. 장소 추가로 채울 수 있어요"), warnings);
+    }
+
+    private AiDraftStop draft(int day, String time, int stay) {
+        AiDraftStop stop = new AiDraftStop();
+        stop.setDay(day);
+        stop.setTime(time);
+        stop.setStay(stay);
+        return stop;
     }
 
     private boolean isSight(String slotKinds) {
