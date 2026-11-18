@@ -32,6 +32,9 @@ import { showToast } from '@/utils/toast'
 import { recommendTimeFor } from '@/utils/timeRecommend'
 import { appNow, devMode } from '@/utils/devMode'
 import { getDevScenario } from '@/api/dev'
+import youtubeLogo from '@/assets/brand/youtube.svg'
+import instagramLogo from '@/assets/brand/instagram.svg'
+import naverLogo from '@/assets/brand/naver.svg'
 
 const WORKSHOP_MIN_PEOPLE = 4 // 워크숍을 고르면 인원은 적어도 이만큼
 const DEFAULT_MOVES = ['지하철', '도보', '버스']
@@ -103,7 +106,18 @@ const nextLabel = computed(() => {
   return step.value.id === 'link' && !hasWish ? '링크 없어요, 넘어가기' : '다음'
 })
 
-// 11/18 사용성: 링크 단계의 유튜브·인스타·네이버·캐치테이블 바로가기 줄은 뺐어요 ("이게 왜 여기 있는지" 몰랐어요)
+// 1단계: 플랫폼 검색 바로가기 (새 창). 이 칸에선 아직 지역을 안 골라서 검색어는 늘 서울로 고정 (지난번 지역이 저장소에 남아 있어요)
+const YOUTUBE_WORD = '서울 핫플 브이로그'
+const NAVER_WORD = '서울 가볼만한곳'
+const INSTAGRAM_ACCOUNT_URL = 'https://www.instagram.com/yeohaenge_ottae/' // 여행어때 인스타그램 계정 (모든 계정 같음)
+// 11/13: 실제 제휴가 아닌 "착착트립 파트너스" 인증 배지·방송 이미지(먹을텐데·흑백요리사)·미쉐린 로고는 뺌. 실제로 여는 검색 바로가기만 둠
+const SEARCH_LINKS = [
+  { key: 'youtube', label: 'YouTube', logo: youtubeLogo, cls: 'pa-sns--yt', url: () => 'https://www.youtube.com/results?search_query=' + encodeURIComponent(YOUTUBE_WORD) },
+  { key: 'instagram', label: 'Instagram', labelCls: 'pa-sns__script', logo: instagramLogo, cls: 'pa-sns--ig', url: () => INSTAGRAM_ACCOUNT_URL }, // 11/08 주형: 인스타는 우리 계정 페이지로
+  { key: 'naver', label: '네이버', logo: naverLogo, cls: 'pa-sns--nv', url: () => 'https://search.naver.com/search.naver?query=' + encodeURIComponent(NAVER_WORD) }, // 통합검색: 플레이스 지도·사진 목록이 나와요
+  // 캐치테이블: 아이콘은 공식 사이트 favicon. 주소는 캐치테이블 웹에서 "서울"을 검색했을 때 뜨는 지도 + 가게 목록 화면
+  { key: 'catchtable', label: '캐치테이블', img: '/img/shortcut/catchtable.png', text: '캐치테이블에서 서울 가게 찾기', url: () => 'https://app.catchtable.co.kr/ct/map/search-map?showTabs=true&bottomSheetHeightType=PARTIAL_MAP&serviceType=INTEGRATION&keyword=' + encodeURIComponent('서울') + '&keywordSearch=' + encodeURIComponent('서울') + '&isInitSearch=1' },
+]
 const PLATFORM_LABEL = { instagram: '인스타', youtube: 'YouTube', naver: '네이버' }
 const recommended = ref([]) // 추천 게시물 (없으면 칸을 숨김)
 const wishLinks = ref(null)
@@ -482,6 +496,23 @@ function useRecommendedTime() {
           <WishLinks ref="wishLinks" @added="onLinkAdded" />
         </section>
 
+        <section v-if="step.id === 'link'" class="pa-sns-sec" aria-label="어디서 봤어요?">
+          <!-- 11/13 주형: 트리피(여행 중 화면과 같은 그림) + 안내 두 줄. 11/14 디자인 검토: 화면 제목은 하나만 → 여기는 작은 글씨, 그림은 깃발 글씨가 보이게 56px -->
+          <div class="pa-trippie">
+            <img src="/img/trippie-flag.webp" alt="" class="pa-trippie__img" aria-hidden="true" draggable="false" />
+            <span class="pa-trippie__text"><b class="pa-trippie__q">어디서 봤어요?</b><span class="t-cap">링크만 주면 트리피가 찾아올게요</span></span>
+          </div>
+          <div class="pa-sns">
+            <a v-for="item in SEARCH_LINKS" :key="item.key" class="pa-sns__tile" :href="item.url()" target="_blank" rel="noopener noreferrer" :aria-label="(item.text || item.label + '에서 서울 찾기') + ' (새 창)'">
+              <small v-if="item.caption" class="pa-sns__caption">{{ item.caption }}</small>
+              <span class="pa-sns__ic" :class="item.cls">
+                <img v-if="item.img" :src="item.img" :class="{ 'is-logo': item.isLogo, 'is-title': item.isTitle }" alt="" draggable="false" />
+                <i v-else class="pa-sns__logo" :style="{ '--logo': `url(&quot;${item.logo}&quot;)` }" aria-hidden="true"></i>
+              </span>
+              <span class="pa-sns__name"><b :class="item.labelCls">{{ item.label }}</b></span>
+            </a>
+          </div>
+        </section>
 
         <section v-if="step.id === 'link' && recommended.length" class="pa-rec" aria-label="추천 게시물">
           <h2 class="t-sub" style="margin: 0">추천 게시물</h2>
