@@ -11,6 +11,7 @@ import { useRouter } from 'vue-router'
 import { askRecommend, insertPlace } from '@/api/trips'
 import { radiusOptions } from '@/data/ask'
 import { showToast } from '@/utils/toast'
+import { devMode } from '@/utils/devMode'
 import { photoFor } from '@/utils/placePhoto'
 import { distanceMeters } from '@/utils/geo'
 import '@/assets/css/live-panel.css' // 지도 위 패널 생김새 (AI 채팅·근처 찾기·비슷한 가게 같이, 11/13)
@@ -54,6 +55,14 @@ const isReserved = ref(false) // [예약했어요]를 켰는지
 const reservedTime = ref('')  // 예약 시각 "15:00"
 
 const picked = computed(() => places.value.find((place) => place.id === props.pickedId))
+// 11/17 주형: 시연 계정은 시나리오 가게(스시이세이, 전화로 15:00 예약)를 고르면 [예약했어요]를 켜고 15:00을 미리 골라 둠 (버튼을 놓쳐도 🔒 예약으로 담겨 배 팝업이 뜨게). 일반 계정은 비워 둠
+const DEMO_RESERVE_NAME = '스시이세이'
+const DEMO_RESERVE_TIME = '15:00'
+watch(picked, (place) => {
+  if (!devMode.isOn || !place || !place.name || !place.name.startsWith(DEMO_RESERVE_NAME)) return
+  isReserved.value = true
+  reservedTime.value = DEMO_RESERVE_TIME
+}, { immediate: true })
 
 // 결과·반경이 바뀌면 부모 지도에 핀과 원을 알려 줌 (가는 길이면 원 중심도 같이)
 watch([places, radius], () => emit('results', { places: places.value, radius: radius.value, center: isOnRoute.value ? route.value : null }))
