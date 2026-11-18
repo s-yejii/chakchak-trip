@@ -315,6 +315,14 @@ function openAlert(alert) {
   }
   queueAlert(alert)
 }
+// 11/17 주형: 어느 칸에서 떠나면(지금 칸이 바뀌면) 그 칸의 "○○에서 나갈 시간이에요"(leave-칸id-…) 알림은 지난 말이라 닫기
+watch(() => (!isReady.value ? undefined : currentStop.value ? currentStop.value.id : null), (currentId) => {
+  if (currentId === undefined) return // 아직 상황을 못 받았으면 그대로
+  removeLiveNotices((notice) => {
+    const match = (notice.key || '').match(/^leave-(\d+)-/)
+    return !!match && Number(match[1]) !== currentId
+  })
+})
 // 서버 알림을 위쪽 알림 줄에 넣기 (닫을 때까지 남고, 앞 알림을 닫으면 이어서 보임). 늦음은 누르면 지연 화면(대안) + 버튼 두 개
 function queueAlert(alert) {
   const isLateAlert = /^late-/.test(alert.key || '')
