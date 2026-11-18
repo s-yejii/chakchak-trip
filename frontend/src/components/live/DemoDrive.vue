@@ -13,7 +13,7 @@ import { addDays } from '@/utils/dates'
 import { appNow, clearCommand, devMode, ensureDemoFlow, INCIDENT_STORE_KEY, syncClock } from '@/utils/devMode'
 import { toMinutes, toTime } from '@/utils/time'
 import { showToast } from '@/utils/toast'
-import { boatChecking, boatPending, demoRide, demoRoute } from '@/utils/demoRoute'
+import { boatChecking, boatPending, demoRide, demoRoute, restAsk } from '@/utils/demoRoute'
 import { incidentClockMin, isBoardingPlace, lateMinutesFor, planDeparture } from '@/utils/departure'
 
 const props = defineProps({
@@ -105,6 +105,7 @@ async function goNext() {
   if (isBusy.value) return
   for (let i = 0; i < BOAT_WAIT_TRIES && boatChecking.value; i++) await wait(BOAT_WAIT_MS) // 11/17: 배를 묻는 중이면 대답을 잠깐 기다림 (안 기다리면 배 팝업 전에 지하철로 떠났어요)
   if (boatPending.value) return showToast('배로 갈지 먼저 골라 주세요') // 11/17: 출발 전 한강버스 카드를 고르기 전엔 안 떠남
+  if (restAsk.value) return showToast('가운데 카드에서 먼저 골라 주세요') // 11/17: 카페 들를지 고르기 전엔 안 떠남
   isBusy.value = true
   try {
     await moveToNext()
@@ -313,8 +314,20 @@ async function busDown(current, from) {
   await setClock(date, departMin + setup.busDownMin)
   await props.live.placeAt(setup.busDownLat, setup.busDownLng, true) // 장소 칸은 아니고 버스에서 내린 자리 (다음 [다음 장소로]는 여기서 출발)
   await props.live.refresh()
+  askRestIfFree()
 }
 
+// 11/17 주형: 버스에서 내린 뒤 예약까지 여유가 REST_ASK_MIN 이상이면 가운데 카드 "시간이 남아요 · 이대로 갈까요?" (고르기 전엔 시계 멈춤)
+const REST_ASK_MIN = 30
+function askRestIfFree() {
+  const fixed = props.live.status.value && props.live.status.value.fixed
+  if (!fixed || fixed.slackMin < REST_ASK_MIN) return
+  restAsk.value = { name: fixed.name, slackMin: fixed.slackMin }
+  setSpeed(0)
+}
+watch(restAsk, (value, old) => {
+  if (old && !value) setSpeed(STAY_SPEED) // 카드에서 골랐으면 시계 다시 흐름
+})
 
 // ---- 11/16 장면 3 뒤: 한강버스 카드 [배 타고 갈게요] (시연 계정만) ----
 // 숙소 → 탈 선착장(대중교통) → 강을 따라 배(선착장 순서대로) → 내린 선착장에서 쉬기 → 버스로 예약한 가게. 시계도 카드 시각대로

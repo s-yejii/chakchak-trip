@@ -22,7 +22,8 @@ public class AskedPlace {
     private Boolean closingSoon;   // 곧 닫음
     private Integer walkMinutes;   // 지금 위치 → 이곳 실제 걷는 시간(분). 다시 재지 않았으면 null (11/13)
     private Boolean isEstimate;    // 다시 잴 때 길찾기가 실패해 거리로 어림했으면 true
-    private Integer slackAfter;    // 들러서 30분 머물면 다음 일정까지 남는 여유(분). 계산할 수 없으면 null
+    private Integer slackAfter;    // 들러서 stayMinutes만큼 머물면 다음 일정까지 남는 여유(분). 계산할 수 없으면 null
+    private Integer stayMinutes;   // 들르면 머무는 분: 기본 30, 카페는 여유가 많으면 최대 60 (CafeStay, 11/17)
     private String moodReason;     // 분위기로 고른 이유 한 줄 (리뷰 RAG, Gemini가 씀). 분위기 질문이 아니거나 못 쓰면 null (11/15)
     private String moodEvidence;   // 근거 리뷰 문장 (실제 리뷰에 있는 글인지 서버가 확인함). 없으면 null
 }

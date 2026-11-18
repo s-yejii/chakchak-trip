@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice">
+  <!-- 사진 없는 숙소 칸 기본 그림 (11/17): 침대 아이콘 -->
+  <rect width="400" height="300" fill="#E8EEF7"/>
+  <g fill="none" stroke="#1F3A68" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M110 200V110"/>
+    <path d="M110 170h180v30"/>
+    <path d="M110 170v-20a20 20 0 0 1 20-20h40a20 20 0 0 1 20 20v20"/>
+    <path d="M190 150h80a20 20 0 0 1 20 20"/>
+  </g>
+</svg>
