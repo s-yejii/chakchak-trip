@@ -27,9 +27,6 @@ import ChoiceCard from '@/components/plan/ChoiceCard.vue'
 import TimeRangePicker from '@/components/plan/TimeRangePicker.vue'
 import { KIND_CHIPS, MOVE_CODES, TAG_CHIPS } from '@/utils/styleCodes'
 // 서비스 아이콘: Simple Icons (CC0, 상표는 각 회사 소유). 그 서비스 바로가기에만 써요
-import youtubeLogo from '@/assets/brand/youtube.svg'
-import instagramLogo from '@/assets/brand/instagram.svg'
-import naverLogo from '@/assets/brand/naver.svg'
 import { toShortDate } from '@/utils/tripView'
 import { showToast } from '@/utils/toast'
 import { recommendTimeFor } from '@/utils/timeRecommend'
@@ -39,7 +36,7 @@ import { getDevScenario } from '@/api/dev'
 const WORKSHOP_MIN_PEOPLE = 4 // 워크숍을 고르면 인원은 적어도 이만큼
 const DEFAULT_MOVES = ['지하철', '도보', '버스']
 const STEPS = [
-  { id: 'link', title: '가고 싶은 곳이 있나요?', sub: '링크로 넣어보세요' },
+  { id: 'link', title: 'SNS에서 본 가게가 있나요?', sub: '인스타·유튜브·네이버 게시물 링크를 넣으면 나온 가게를 찾아 일정에 넣어요' }, // 11/18 사용성: "무슨 링크인지" 몰랐어요
   { id: 'where', title: '어디로 가요?', sub: '', isRequired: true },
   { id: 'dong', title: '어느 동이 좋아요?', sub: '안 고르면 구 전체' },
   { id: 'when', title: '언제 가요?', sub: '' },
@@ -99,19 +96,14 @@ const isLast = computed(() => store.planStep === STEPS.length - 1)
 const progress = computed(() => Math.round(((store.planStep + 1) / STEPS.length) * 100) + '%')
 // 다음 버튼: 어디로는 지역을 고른 뒤에. 출발지는 안 골라도 돼요 (그러면 첫 장소에서 시작)
 const canNext = computed(() => !step.value.isRequired || !!store.planArea)
+// 다음 버튼 글자: 링크 단계에서 아직 담은 곳이 없으면 "넘어가기" (11/18 사용성: 링크가 없으면 눌러도 되는지 몰랐어요)
+const nextLabel = computed(() => {
+  if (isLast.value) return '일정 만들기'
+  const hasWish = (store.planConditions?.mustVisit || []).length > 0
+  return step.value.id === 'link' && !hasWish ? '링크 없어요, 넘어가기' : '다음'
+})
 
-// 1단계: 플랫폼 검색 바로가기 (새 창). 이 칸에선 아직 지역을 안 골라서 검색어는 늘 서울로 고정 (지난번 지역이 저장소에 남아 있어요)
-const YOUTUBE_WORD = '서울 핫플 브이로그'
-const NAVER_WORD = '서울 가볼만한곳'
-const INSTAGRAM_ACCOUNT_URL = 'https://www.instagram.com/yeohaenge_ottae/' // 여행어때 인스타그램 계정 (모든 계정 같음)
-// 11/13: 실제 제휴가 아닌 "착착트립 파트너스" 인증 배지·방송 이미지(먹을텐데·흑백요리사)·미쉐린 로고는 뺌. 실제로 여는 검색 바로가기만 둠
-const SEARCH_LINKS = [
-  { key: 'youtube', label: 'YouTube', logo: youtubeLogo, cls: 'pa-sns--yt', url: () => 'https://www.youtube.com/results?search_query=' + encodeURIComponent(YOUTUBE_WORD) },
-  { key: 'instagram', label: 'Instagram', labelCls: 'pa-sns__script', logo: instagramLogo, cls: 'pa-sns--ig', url: () => INSTAGRAM_ACCOUNT_URL }, // 11/08 주형: 인스타는 우리 계정 페이지로
-  { key: 'naver', label: '네이버', logo: naverLogo, cls: 'pa-sns--nv', url: () => 'https://search.naver.com/search.naver?query=' + encodeURIComponent(NAVER_WORD) }, // 통합검색: 플레이스 지도·사진 목록이 나와요
-  // 캐치테이블: 아이콘은 공식 사이트 favicon. 주소는 캐치테이블 웹에서 "서울"을 검색했을 때 뜨는 지도 + 가게 목록 화면
-  { key: 'catchtable', label: '캐치테이블', img: '/img/shortcut/catchtable.png', text: '캐치테이블에서 서울 가게 찾기', url: () => 'https://app.catchtable.co.kr/ct/map/search-map?showTabs=true&bottomSheetHeightType=PARTIAL_MAP&serviceType=INTEGRATION&keyword=' + encodeURIComponent('서울') + '&keywordSearch=' + encodeURIComponent('서울') + '&isInitSearch=1' },
-]
+// 11/18 사용성: 링크 단계의 유튜브·인스타·네이버·캐치테이블 바로가기 줄은 뺐어요 ("이게 왜 여기 있는지" 몰랐어요)
 const PLATFORM_LABEL = { instagram: '인스타', youtube: 'YouTube', naver: '네이버' }
 const recommended = ref([]) // 추천 게시물 (없으면 칸을 숨김)
 const wishLinks = ref(null)
@@ -490,23 +482,6 @@ function useRecommendedTime() {
           <WishLinks ref="wishLinks" @added="onLinkAdded" />
         </section>
 
-        <section v-if="step.id === 'link'" class="pa-sns-sec" aria-label="어디서 봤어요?">
-          <!-- 11/13 주형: 트리피(여행 중 화면과 같은 그림) + 안내 두 줄. 11/14 디자인 검토: 화면 제목은 하나만 → 여기는 작은 글씨, 그림은 깃발 글씨가 보이게 56px -->
-          <div class="pa-trippie">
-            <img src="/img/trippie-flag.webp" alt="" class="pa-trippie__img" aria-hidden="true" draggable="false" />
-            <span class="pa-trippie__text"><b class="pa-trippie__q">어디서 봤어요?</b><span class="t-cap">링크만 주면 트리피가 찾아올게요</span></span>
-          </div>
-          <div class="pa-sns">
-            <a v-for="item in SEARCH_LINKS" :key="item.key" class="pa-sns__tile" :href="item.url()" target="_blank" rel="noopener noreferrer" :aria-label="(item.text || item.label + '에서 서울 찾기') + ' (새 창)'">
-              <small v-if="item.caption" class="pa-sns__caption">{{ item.caption }}</small>
-              <span class="pa-sns__ic" :class="item.cls">
-                <img v-if="item.img" :src="item.img" :class="{ 'is-logo': item.isLogo, 'is-title': item.isTitle }" alt="" draggable="false" />
-                <i v-else class="pa-sns__logo" :style="{ '--logo': `url(&quot;${item.logo}&quot;)` }" aria-hidden="true"></i>
-              </span>
-              <span class="pa-sns__name"><b :class="item.labelCls">{{ item.label }}</b></span>
-            </a>
-          </div>
-        </section>
 
         <section v-if="step.id === 'link' && recommended.length" class="pa-rec" aria-label="추천 게시물">
           <h2 class="t-sub" style="margin: 0">추천 게시물</h2>
@@ -612,7 +587,7 @@ function useRecommendedTime() {
       <div class="cta">
         <div class="cta__row">
           <button v-if="store.planStep > 0" type="button" class="btn btn--secondary btn--lg" @click="goPrev">이전</button>
-          <button type="button" class="btn btn--primary btn--lg" :class="{ 'is-wait': !canNext }" @click="goNext">{{ isLast ? '일정 만들기' : '다음' }}</button>
+          <button type="button" class="btn btn--primary btn--lg" :class="{ 'is-wait': !canNext }" @click="goNext">{{ nextLabel }}</button>
         </div>
       </div>
     </div>
