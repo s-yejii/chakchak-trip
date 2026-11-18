@@ -164,7 +164,7 @@
 | `POST /api/live/rag/embed` | 리뷰 RAG 준비: 시연 동선 500m 안 리뷰 임베딩 채우기 (개발용) | 화면 없음 | 있음 (11/15) |
 | `POST /api/live/rag/rank` | 후보 가게를 분위기로 줄 세워 보기 (개발·평가용) | 화면 없음 | 있음 (11/15) |
 | `POST /api/live/rag/compare` | 같은 후보에서 A(글자)·B(벡터)·C(RAG) 결과 비교 (평가용, `docs/rag-eval/run_eval.py`) | 화면 없음 | 있음 (11/16) |
-| (주소 미정) | 줄서기 대기 시간 반영 | live/LiveView (TablingModal) | 확인 필요 |
+| (주소 미정) | 줄서기 대기 시간 반영 | live/LiveView | 확인 필요 |
 | (주소 미정) | "그냥 갈게요" (늦어도 그대로 가기) | member/LockDelayView, member/LockPushView | 확인 필요 |
 
 ### ⑤ 여행 후·지도 부가 (after)
@@ -185,8 +185,8 @@
 | `GET /api/photos/{photoId}/file` | 사진·영상 파일 (`<img>`·`<video>` 주소) | after/AlbumView, after/RetroView | 있음 (11/06) |
 | `GET /api/trips/{id}/shorts` | 추억 쇼츠: 사진마다 AI 감성 자막 + 여행 분위기 | after/ShortsView | 있음 (11/14) |
 | `GET /api/route` | 길 안내: 경로선 + 단계별 안내 (도보·버스·지하철·택시) | after/RouteGuideView | 있음 |
-| `GET /api/amenities/nearby?kind=` | 근처 화장실·쓰레기통 | after/RouteGuideView, live/LiveView (AmenityChips) | 확인 필요 |
-| `POST /api/trips/{id}/visits` | 일정에 없던 곳 "들렀어요" 기록 | live/LiveView (VisitedPin), member/LockStayView | 확인 필요 |
+| `GET /api/amenities/nearby?kind=` | 근처 화장실·쓰레기통 | after/RouteGuideView, live/LiveView | 확인 필요 |
+| `POST /api/trips/{id}/visits` | 일정에 없던 곳 "들렀어요" 기록 | live/LiveView, member/LockStayView | 확인 필요 |
 
 ### 삭제 예정
 
@@ -1318,6 +1318,7 @@ key 끝의 숫자가 바뀔 때만 화면이 같은 알림을 다시 띄워요.
 | sql | string | AI가 쓴 SQL. 빈칸(`:route`·`:me`·`:next`·`:slack`·`:prev`) 그대로라 좌표 없음. 화면에는 안 보여 줌 (11/13) |
 | slack | number | 다음 일정까지 지금 여유(분), 남은 일정이 없으면 null |
 | band | string | 지도에 그릴 가는 길 띠 (경로 양옆 190m, GeoJSON). 가는 길로 찾지 않았으면 null |
+| area | object (null 가능) | 내 위치 대신 기준으로 삼은 곳 `{name, lat, lng}` ("강남역 근처 카페"면 `{"name": "강남역", …}`). 질문에 다른 곳 이름이 있으면 Gemini가 `place`로 뽑고, 서버가 카카오 검색으로 좌표를 찾아 `:me`를 그곳으로 바꿔요. 이때는 가는 길·다음 장소·여유를 쓰지 않아서 `slack`·`detourMinutes`·`slackAfter`는 null. 그곳을 못 찾으면 `places`는 빈 배열이고 `message`로 안내해요. 내 위치 기준이면 null (11/18) |
 | places | array | 찾은 곳 (최대 10, AI SQL이 정한 순서). `id`, `name`, `kind`, `category`, `lat`, `lng`, `rating`(보정 평점), `reviewCount`, `detourMinutes`(가는 길에서 몇 분 더, 없으면 null. 덜 돌아가는 순으로 찾았으면 실제 걷는 길로 다시 잰 값), `walkMinutes`(지금 위치 → 이곳 실제 걷는 시간, 다시 재지 않았으면 null), `isEstimate`(다시 잴 때 길찾기가 실패해 거리로 어림했으면 true), `joinLat`·`joinLng`(가는 길 위 가장 가까운 점), `closeAt`, `closingSoon`, `slackAfter`(`stayMinutes`만큼 머물고 남는 여유, 계산 못 하면 null), `stayMinutes`(머무는 분: 카페는 다음 예약 5분 전 도착에 맞춘 15~60분, 15분도 안 되면 null = "들르면 빠듯해요", 다음 예약이 없으면 30. 카페 아닌 곳은 30, 11/17), `moodReason`·`moodEvidence`(분위기 질문일 때 리뷰 RAG가 고른 이유 한 줄·근거 리뷰 문장. 근거는 실제 리뷰에 있는 글인지 서버가 확인함. 분위기 질문이 아니거나 예전 방식으로 찾았으면 null, 11/15). 지금 닫힌 곳은 빠짐. 분위기 질문("조용한 카페")은 SQL로 후보 30곳을 뽑고 리뷰 RAG(임베딩 → Gemini 판단 → 인용 검사)로 다시 골라요 |
 
 > Text-to-SQL: Gemini가 SQL을 쓰고(좌표 없이 빈칸만) → `SqlChecker`(JSqlParser)가 SELECT 하나·허용한 뷰(`ask_place`·`ask_review`)·함수·상한·LIMIT 10을 검사(떨어지면 이유를 붙여 한 번 더) → 읽기 전용 트랜잭션에서 `ask_reader` 계정 + 3초 제한으로 실행해요 (`db/18_ask_place.sql`). 가는 길(`:route`)은 다음 칸까지 걸어갈 때만 써요. Gemini 실패·검사 두 번 탈락·DB 3초 초과면 `"ask-radius"`로 돌아가요.

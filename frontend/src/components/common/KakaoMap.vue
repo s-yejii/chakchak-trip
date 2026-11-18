@@ -63,6 +63,10 @@ let meOverlay = null // 지금 위치 점 (위치만 바뀌면 이것만 옮기�
 const FLY_PAN_MS = 450 // flyTo 옮기는 시간
 const FLY_ZOOM_MS = 300 // flyTo 확대·축소 시간
 const WALK_DOT_GAP_PX = 12 // 걷는 길 동그라미 점 사이 간격 (화면 px, 확대해도 같은 간격)
+// 진짜 길(대중교통·차) 선 (11/18): 남색 한 줄 + 얇은 흰 테두리. 걷는 점(.walk-dot)도 같은 남색
+const LEG_HALO_PX = 9       // 흰 테두리 (선 양옆 1.5px씩)
+const LEG_LINE_PX = 6       // 남색 선
+const LEG_COLOR = '#1F3A68'
 const WALK_END_GAP_M = 30 // 대중교통 선 끝과 장소가 이보다 멀면 걷는 점으로 이어요
 let walkLegs = [] // 걷는 구간 좌표 목록 (확대·축소하면 점을 다시 찍음)
 let dotOverlays = [] // 지금 찍힌 동그라미 점
@@ -366,12 +370,13 @@ function addRoute(points) {
 }
 
 function addLeg(points) {
-  // 대중교통·차 구간의 진짜 길: 남색 실선. 지도 색에 묻히지 않게 아래에 흰 테두리 선을 먼저 깔아요
-  const under = new kakao.maps.Polyline({ path: points, strokeWeight: 9, strokeColor: '#FFFFFF', strokeOpacity: 0.9, strokeStyle: 'solid' })
-  const line = new kakao.maps.Polyline({ path: points, strokeWeight: 6, strokeColor: '#1F3A68', strokeOpacity: 1, strokeStyle: 'solid' })
-  under.setMap(map)
+  // 대중교통·차 구간의 진짜 길: 흰 테두리를 먼저 깔고 그 위에 남색 선 (지도 색에 묻히지 않게)
+  //   꺾이는 곳은 CSS(.kmap svg path)로 둥글게 (11/18)
+  const halo = new kakao.maps.Polyline({ path: points, strokeWeight: LEG_HALO_PX, strokeColor: '#FFFFFF', strokeOpacity: 1, strokeStyle: 'solid' })
+  const line = new kakao.maps.Polyline({ path: points, strokeWeight: LEG_LINE_PX, strokeColor: LEG_COLOR, strokeOpacity: 1, strokeStyle: 'solid' })
+  halo.setMap(map)
   line.setMap(map)
-  overlays.push(under, line)
+  overlays.push(halo, line)
 }
 
 // 대중교통 길찾기는 타는 구간 선만 줘서, 장소 → 역·정류장, 역·정류장 → 장소 걷는 부분이 비어요 (11/04)
@@ -428,10 +433,8 @@ function dotPositions(projection, points) {
 }
 
 function addPath(points) {
-  // 길 안내 경로선: 길찾기 API가 준 좌표를 이은 진한 실선
-  const line = new kakao.maps.Polyline({ path: points, strokeWeight: 7, strokeColor: '#1F3A68', strokeOpacity: 0.9, strokeStyle: 'solid' })
-  line.setMap(map)
-  overlays.push(line)
+  // 길 안내 경로선: 길찾기 API가 준 좌표를 이은 선. 11/18: 여행 중 화면 진짜 길과 같은 3겹 모양
+  addLeg(points)
 }
 
 function addRing(ring) {
@@ -666,7 +669,9 @@ function toScreenPoint(lat, lng) {
 /* z-index 0: 지도 안쪽 층이 위의 알림·일정 시트를 덮지 않게 지도끼리만 겹치게 함 */
 .kmap{z-index:0}
 /* 걷는 길 동그라미 점 (남색 + 흰 테두리, 11/04) */
-.walk-dot{display:block;width:7px;height:7px;border-radius:50%;background:#1F3A68;box-shadow:0 0 0 2px #fff}
+.walk-dot{display:block;width:7px;height:7px;border-radius:50%;background:#1F3A68;box-shadow:0 0 0 1.5px #fff}
+/* 지도 선(카카오가 SVG path로 그림)의 꺾이는 곳을 둥글게 (11/18: 기본값은 뾰족하게 튀어나옴) */
+.kmap svg path{stroke-linejoin:round}
 /* 내 위치 점 위쪽의 진행 방향 화살표 (점째로 돌아가요, 11/09) */
 .me__arrow{position:absolute;left:50%;top:-15px;margin-left:-7px;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:10px solid var(--coral)}
 .me__arrow[hidden]{display:none}

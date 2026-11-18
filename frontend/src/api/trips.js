@@ -22,8 +22,6 @@ export const updateStop = (tripId, stopId, stop) => put(`/trips/${tripId}/stops/
 export const deleteStop = (tripId, stopId) => del(`/trips/${tripId}/stops/${stopId}`)
 // 일정 칸 전부 한 번에 저장 (목록에 없는 칸은 서버가 지움, 편집 화면 "완료") (11/04)
 export const updateStops = (tripId, stops) => put(`/trips/${tripId}/stops`, stops)
-export const getChatList = (tripId) => get(`/trips/${tripId}/chats`)
-export const createChats = (tripId, messages) => post(`/trips/${tripId}/chats`, messages)
 export const checkPlan = (trip, day = 1) => post(`/plans/check?day=${day}`, trip)
 
 // ② 장소
@@ -35,7 +33,6 @@ export const searchPlaces = (q, lat, lng) => {
   }
   return get('/places/search?' + params)
 }
-export const getNearbyPlaces = (lat, lng, radius = 200) => get(`/places/nearby?lat=${lat}&lng=${lng}&radius=${radius}`)
 // 한 일정의 칸들 사진 (같은 사진 안 겹침). 칸마다 이름으로 찾아서 장소 번호가 없는 칸도 돼요. 돌려받는 건 { 칸 이름: 사진 주소 }
 export async function getTripPhotos(stops) {
   const list = stops.map((stop) => ({ key: stop.name, name: stop.name, address: stop.address, placeId: stop.placeId, category: stop.category, lat: stop.lat, lng: stop.lng }))
@@ -113,9 +110,6 @@ export const fitLinkPlaces = (tripId, places, lat, lng) =>
   post(`/trips/${tripId}/live/link-fit`, { lat, lng, places: places.map((place) => ({ placeId: place.id, name: place.name, category: place.category, address: place.address, lat: place.lat, lng: place.lng })) })
 export const previewPlan =(tripId, stops, lat, lng) => post(`/trips/${tripId}/live/preview`, { stops, lat, lng })
 export const getSwapCandidates = (tripId, stopId, lat, lng) => get(`/trips/${tripId}/live/swap-candidates?stopId=${stopId}&lat=${lat}&lng=${lng}`)
-
-// ⑤ 여행 후
-export const getRetro = (tripId) => get(`/trips/${tripId}/retro`)
 
 // ⑤ 길 안내: mode는 walk / bus / subway / car. 못 찾으면 available=false + message
 export const getRouteGuide = (fromLat, fromLng, toLat, toLng, mode) =>

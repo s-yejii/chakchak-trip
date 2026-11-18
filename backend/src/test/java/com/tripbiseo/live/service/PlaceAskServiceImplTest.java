@@ -25,6 +25,8 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.dao.QueryTimeoutException;
 
 import com.tripbiseo.common.ai.AiService;
+import com.tripbiseo.common.external.FoundLocation;
+import com.tripbiseo.common.external.LocationSearchClient;
 import com.tripbiseo.common.external.Route;
 import com.tripbiseo.common.external.RouteClient;
 import com.tripbiseo.live.dto.AreaInfo;
@@ -60,6 +62,7 @@ class PlaceAskServiceImplTest {
     private AiService aiService;
     private AskSqlRunner askSqlRunner;
     private PlaceService placeService;
+    private LocationSearchClient locationSearchClient;
     private PlaceAskServiceImpl placeAskService;
 
     @BeforeEach
@@ -70,9 +73,10 @@ class PlaceAskServiceImplTest {
         aiService = mock(AiService.class);
         askSqlRunner = mock(AskSqlRunner.class);
         placeService = mock(PlaceService.class);
+        locationSearchClient = mock(LocationSearchClient.class);
         placeAskService = new PlaceAskServiceImpl(liveTripReader, statusService, routeClient, aiService,
                 new SqlPromptMaker(), new SqlChecker(), askSqlRunner, placeService, new WalkRanker(routeClient),
-                mock(ReviewRagService.class));
+                mock(ReviewRagService.class), locationSearchClient);
 
         when(liveTripReader.getOngoingTrip(anyLong(), anyLong(), any(), any())).thenReturn(makeTrip());
         when(statusService.getStatus(anyLong(), anyLong(), any())).thenReturn(makeStatus());
@@ -231,6 +235,44 @@ class PlaceAskServiceImplTest {
     // ---------------------------------------------------------------- 도우미
 
     /** Gemini가 차례로 이 답들을 줌 */
+    @Test
+    void 다른_곳_이름이_있으면_그곳을_내_위치_대신_기준으로_찾음() {
+        SqlAnswer answer = sqlAnswer("SELECT id FROM ask_place WHERE kind = 'cafe' AND ST_DWithin(geom, :me, 500) LIMIT 5");
+        answer.setPlace("강남역");
+        answerWith(answer);
+        FoundLocation gangnam = new FoundLocation();
+        gangnam.setLat(37.4979);
+        gangnam.setLng(127.0276);
+        when(locationSearchClient.searchLocations(eq("강남역"), anyDouble(), anyDouble())).thenReturn(List.of(gangnam));
+        when(askSqlRunner.run(any(), any())).thenReturn(List.of(place("a", null)));
+
+        PlaceAskResult result = placeAskService.findPlaces(MEMBER_ID, TRIP_ID, "강남역 근처 카페", null, null, LAT, LNG);
+
+        assertEquals(1, result.getPlaces().size());
+        AskSituation situation = runSituation();
+        assertEquals(37.4979, situation.getMeLat());  // :me가 강남역
+        assertTrue(situation.getMe().contains("127.0276 37.4979"));
+        assertNull(situation.getRoute());             // 내 일정에 묶인 값은 지움
+        assertNull(situation.getSlack());
+        assertNull(result.getPlaces().get(0).getSlackAfter());
+        assertEquals("강남역", result.getArea().getName()); // 화면이 "강남역에서 300m"로 보여 줄 기준
+        assertEquals(127.0276, result.getArea().getLng());
+    }
+
+    @Test
+    void 다른_곳_이름을_못_찾으면_안내만_하고_SQL은_안_돌림() {
+        SqlAnswer answer = sqlAnswer("SELECT id FROM ask_place WHERE kind = 'cafe' AND ST_DWithin(geom, :me, 500) LIMIT 5");
+        answer.setPlace("없는역");
+        answerWith(answer);
+        when(locationSearchClient.searchLocations(anyString(), anyDouble(), anyDouble())).thenReturn(new ArrayList<>());
+
+        PlaceAskResult result = placeAskService.findPlaces(MEMBER_ID, TRIP_ID, "없는역 근처 카페", null, null, LAT, LNG);
+
+        assertTrue(result.getMessage().contains("없는역"));
+        assertTrue(result.getPlaces().isEmpty());
+        verify(askSqlRunner, never()).run(any(), any());
+    }
+
     private void answerWith(SqlAnswer first, SqlAnswer... rest) {
         when(aiService.askJsonQuick(anyString(), eq(SqlAnswer.class))).thenReturn(first, rest);
     }

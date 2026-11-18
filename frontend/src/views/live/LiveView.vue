@@ -7,7 +7,7 @@
 //   11/04: 위 알림은 같은 종류면 10분에 한 번만 펼쳐요 (다른 화면 갔다 와도 계속 펼쳐지지 않게, utils/alertMemory).
 //     접혀 있으면 알약(늦으면 +N분, 아니면 "알림")을 눌러 펼쳐요
 //   11/04: 지도에 지금 위치 → 다음 장소 진짜 길(서버 status.next: TMAP·ODsay 길찾기)을 그려요.
-//     대중교통·차는 실선, 걷기는 동그라미 점, 길찾기 실패로 거리 추정이면 점선 직선. 그 뒤 남은 장소끼리는 점선 직선
+//     대중교통·차는 실선, 걷기는 동그라미 점. 11/18: 직선은 안 그려요 (길찾기 실패 추정선, 남은 장소끼리 잇는 점선 둘 다)
 // 진행 중인 여행이 없거나 위치를 못 받으면 가짜 화면 대신 안내 문구를 보여 줘요.
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -468,6 +468,7 @@ const nextPath = computed(() => {
   if (!next || !statusFrom.value || !next.coords || next.coords.length < 2) return []
   const stop = stops.value.find((item) => item.id === next.id)
   if (!stop) return []
+  if (next.source === 'estimate' && !demoRoute.value) return [] // 11/18: 길찾기 실패면 직선을 그리지 않음 (진짜 길처럼 오해하지 않게)
   return [{
     coords: demoRoute.value || next.coords, // 시연 가짜 GPS가 움직이는 중이면 그 길 그대로 (점과 선이 같은 길, 11/09 ①)
     mode: stop.moveMode || 'walk',
@@ -992,6 +993,7 @@ function finishTour() {
           :smooth="devMode.isOn"
           :heading="devMode.isOn && isMoving ? heading : null"
           :paths="slotPlace ? [] : nextPath"
+          :show-route="false"
           :ring="nearRing"
           :band="askBand"
           :links="askLinks"
