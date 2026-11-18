@@ -19,5 +19,6 @@ public class PlanGenerateResponse {
     private List<Stop> stops = new ArrayList<>();        // day → time 순, id·tripId·mode·memo·arrivedAt·departedAt은 null
     private List<PlanNote> notes = new ArrayList<>();
     private List<PlaceCard> missed = new ArrayList<>();  // 꼭 갈 곳인데 일정에 못 넣은 곳 (못 찾은 곳은 이름만)
+    private List<StopNote> stopNotes = new ArrayList<>();  // 11/18 칸별 안내 [{day, time, text, level}] (빈 시간·이른 예약)
     private List<String> openEndStops = new ArrayList<>(); // 11/18 끝 시간 없는 칸 "날/시각" ("1/20:40"): 끝 장소가 없을 때 그날 마지막 칸
 }

@@ -174,6 +174,29 @@ class PlanRuleMakerUsabilityTest {
         assertEquals(List.of("1/20:40"), response.getOpenEndStops()); // 숙소 앞 칸만, 마지막이 예약이면 표시 안 함
     }
 
+    @Test
+    void 빈_시간과_이른_예약은_그_칸에_안내() {
+        PlanConditions conditions = timed("11:00", "20:00");
+        FixedVisit fixed = new FixedVisit();
+        fixed.setName("어니언");
+        fixed.setTime("09:00");
+        conditions.setFixed(new ArrayList<>(List.of(fixed)));
+        PlanGenerateResponse response = new PlanGenerateResponse();
+        Stop onion = stop(1, "09:00", "어니언", null, true);
+        onion.setStay(60);
+        Stop cafe = stop(1, "14:00", "카페", null, false);
+        cafe.setStay(70);
+        Stop dinner = stop(1, "18:10", "저녁", null, false);
+        response.getStops().addAll(List.of(onion, cafe, dinner));
+        ruleMaker.addStopNotes(response, conditions);
+        assertEquals(3, response.getStopNotes().size());
+        assertEquals("14:00", response.getStopNotes().get(0).getTime()); // 10:00~14:00 빔
+        assertEquals("warn", response.getStopNotes().get(0).getLevel());
+        assertEquals("18:10", response.getStopNotes().get(1).getTime()); // 15:10~18:10 빔
+        assertEquals("09:00", response.getStopNotes().get(2).getTime()); // 이른 예약
+        assertEquals("info", response.getStopNotes().get(2).getLevel());
+    }
+
     private Stop stop(int day, String time, String name, String category, boolean isFixed) {
         Stop stop = new Stop();
         stop.setDay(day);

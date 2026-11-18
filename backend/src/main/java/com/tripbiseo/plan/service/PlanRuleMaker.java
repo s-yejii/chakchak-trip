@@ -22,6 +22,7 @@ import com.tripbiseo.plan.dto.PlanArea;
 import com.tripbiseo.plan.dto.PlanConditions;
 import com.tripbiseo.plan.dto.PlanGenerateResponse;
 import com.tripbiseo.plan.dto.PlanStay;
+import com.tripbiseo.plan.dto.StopNote;
 import com.tripbiseo.trip.dto.OpenInfo;
 import com.tripbiseo.trip.dto.Place;
 import com.tripbiseo.trip.dto.Stop;
@@ -225,8 +226,8 @@ public class PlanRuleMaker {
             replaced += fillDay(conditions, candidates, scores, startDate, day, days, areas, extras, slotPicks, used, stops, dayEndMin, maxWalkMeters);
         }
         if (replaced > 0) {
-            // 11/12: "AI가 틀렸다"처럼 읽혀서, 서버가 확인하고 바꾼 일로 말함
-            warnings.add("영업시간·이동 거리를 확인해 " + replaced + "곳을 문 연 곳·가까운 곳으로 바꿨어요");
+            // 11/18 사용성: 사용자가 할 일이 없는 속사정이라 안내에서 빼고 서버 기록에만 (안내가 길어 아무도 안 읽었어요)
+            log.info("영업시간·이동 거리를 확인해 {}곳을 바꿈", replaced);
         }
         removeOutsideHours(conditions, candidates, days, stops);
         addMissingKindWarnings(conditions, candidates, stops, warnings);
@@ -374,6 +375,45 @@ public class PlanRuleMaker {
             }
         }
         response.getOpenEndStops().sort(null); // 날 순 (글자 순)
+    }
+
+    /**
+     * 칸별 안내 (11/18 사용성): 점검 화면이 그 칸 옆에 보여 주게 응답 stopNotes에 넣어요.
+     *  - 앞 일정이 끝나고 1시간 30분 넘게 비면 뒤 칸에 "앞에서 N 비어요" (warn)
+     *  - 1일차 고른 시작보다 이른 예약이면 그 예약 칸에 (info)
+     * 숙소·끝 장소 칸 앞의 빈 시간은 안 셈 (쉬는 시간이라)
+     */
+    public void addStopNotes(PlanGenerateResponse response, PlanConditions conditions) {
+        List<Stop> sorted = new ArrayList<>(response.getStops());
+        sorted.removeIf(stop -> stop.getTime() == null || stop.getDay() == null);
+        sorted.sort((first, second) -> (first.getDay() * 10000 + Geo.toMinutes(first.getTime())) - (second.getDay() * 10000 + Geo.toMinutes(second.getTime())));
+        for (int i = 1; i < sorted.size(); i++) {
+            Stop before = sorted.get(i - 1);
+            Stop after = sorted.get(i);
+            boolean isRest = "숙소".equals(after.getCategory()) || "여행 끝".equals(after.getCategory());
+            int gap = Geo.toMinutes(after.getTime()) - endOf(before);
+            if (before.getDay().equals(after.getDay()) && !isRest && gap > LONG_GAP_MIN) {
+                response.getStopNotes().add(toStopNote(after, "앞 일정이 끝나고 " + Geo.toDuration(gap) + " 비어요 · 근처 장소를 더 넣을 수 있어요", "warn"));
+            }
+        }
+        Integer earliest = hasDayTime(conditions) ? earliestFixedMinOf(conditions, 1) : null;
+        if (earliest == null || earliest >= Geo.toMinutes(conditions.getStartTime())) {
+            return;
+        }
+        for (Stop stop : sorted) {
+            if (stop.getDay() == 1 && Boolean.TRUE.equals(stop.getFixed()) && Geo.toMinutes(stop.getTime()) == earliest) {
+                response.getStopNotes().add(toStopNote(stop, "고른 시작 " + conditions.getStartTime() + "보다 이른 예약이라 여기부터 시작해요", "info"));
+            }
+        }
+    }
+
+    private StopNote toStopNote(Stop stop, String text, String level) {
+        StopNote note = new StopNote();
+        note.setDay(stop.getDay());
+        note.setTime(stop.getTime());
+        note.setText(text);
+        note.setLevel(level);
+        return note;
     }
 
     /**
