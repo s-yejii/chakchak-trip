@@ -41,7 +41,7 @@ public class LiveLinkServiceImpl implements LiveLinkService {
             + "|버거|치킨|족발|보쌈|곱창|초밥|스시|돈가스|찌개|탕|뷔페|오리|주꾸미|쭈꾸미|백숙|요리|이자카야|퓨전|멕시칸|양꼬치).*";
 
     private static final int MAX_PLACES = 5;            // 한 번에 넣을 수 있는 곳
-    private static final int CAFE_STAY_MIN = 40;        // 새 칸 머묾 (API.md live/insert와 같음)
+    private static final int CAFE_STAY_MIN = CafeStay.BASE_MIN; // 새 칸 머묾 30분 (11/17 주형: AI 카드·일정에 넣기와 같은 기본값. 링크는 여러 곳을 한 번에 맞춰 넣어서 늘리지는 않음)
     private static final int DEFAULT_STAY_MIN = 60;
     private static final int MEAL_MIN_STAY = 40;        // 시간을 줄여도 식사는 이만큼
     private static final int CAFE_MIN_STAY = 20;

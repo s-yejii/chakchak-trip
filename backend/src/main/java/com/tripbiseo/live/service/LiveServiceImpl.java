@@ -54,7 +54,7 @@ public class LiveServiceImpl implements LiveService {
     private static final double TRUSTED_RATING = 4.9;     // 가는 길: 평점 이 이상 + 리뷰 이 개수 이상이면 "검증된 가게" → 덜 돌아가는 순으로 맨 앞
     private static final int TRUSTED_REVIEWS = 1000;
     private static final String HHMM = "([01]\\d|2[0-3]):[0-5]\\d"; // 예약 시각 15:00 (11/16 ③)
-    private static final int CAFE_STAY_MIN = 40;          // 일정에 넣기: 카페·디저트면 40분, 아니면 60분 (API.md)
+    private static final int CAFE_STAY_MIN = CafeStay.BASE_MIN; // 일정에 넣기: 카페·디저트·베이커리 30분(여유가 많으면 CafeStay 규칙으로 늘림), 아니면 60분 (API.md, 11/17)
     private static final int OTHER_STAY_MIN = 60;
     private static final double WALK_METERS_PER_MIN = 75; // 도착 예상: 걸어서 분당 75m, 길 돌아감 1.3배
     private static final double ROAD_FACTOR = 1.3;
@@ -178,6 +178,9 @@ public class LiveServiceImpl implements LiveService {
         List<Stop> plan = makeInsertPlan(todayStops, current, newStop, request.getReplaceStopId(), request.getAfterStopId());
         plan = alternativeCalculator.copyStops(plan); // 원본을 고치지 않게 복사본으로 계산
         Alternative result = alternativeCalculator.calculate(trip, current, plan, request.getLat(), request.getLng());
+        if (CafeStay.fitNewCafe(plan, liveStopFinder.findFixedStop(plan, null), result.getSlackMin())) { // 카페는 다음 예약 5분 전 도착에 맞춰 머묾 (11/17, AI 카드와 같은 계산)
+            result = alternativeCalculator.calculate(trip, current, plan, request.getLat(), request.getLng());
+        }
         String shortened = shortenBeforeFixed(plan, result);
         if (shortened != null) {
             result = alternativeCalculator.calculate(trip, current, plan, request.getLat(), request.getLng());
@@ -395,10 +398,9 @@ public class LiveServiceImpl implements LiveService {
         return recommend;
     }
 
-    /** 카페·디저트면 40분, 아니면 60분 */
+    /** 카페·디저트·베이커리면 30분(넣을 때 다음 예약에 맞춰 CafeStay.fitNewCafe가 바꿈), 아니면 60분 */
     private int getStay(String category) {
-        boolean isCafe = category != null && (category.contains("카페") || category.contains("디저트") || category.contains("베이커리"));
-        return isCafe ? CAFE_STAY_MIN : OTHER_STAY_MIN;
+        return CafeStay.isCafe(category) ? CAFE_STAY_MIN : OTHER_STAY_MIN;
     }
 
     // ---------------------------------------------------------------- 일정에 넣기 도우미

@@ -46,7 +46,8 @@ public class PlaceAskServiceImpl implements PlaceAskService {
 
     private static final Logger log = LoggerFactory.getLogger(PlaceAskServiceImpl.class); // 왜 못 찾았는지 남김 (좌표·질문 원문은 안 남김)
 
-    private static final int STAY_MINUTES = 30;  // 들르면 머무는 시간(분). 프롬프트 규칙과 같음
+    private static final double MIN_RATING = 4.0; // 이 보정 평점 아래는 결과에서 뺌 (11/17)
+    private static final int STAY_MINUTES = CafeStay.BASE_MIN; // 들르면 머무는 시간(분) 30. 프롬프트 규칙과 같음. 카페는 여유가 많으면 CafeStay 규칙으로 늘림 (11/17)
     private static final int BAND_METERS = 190;  // 지도 띠 폭: 가는 길 양옆 190m = 걸어서 왕복 약 5분
     private static final String ROUTE = "route";
     private static final String ME = "me";
@@ -263,10 +264,18 @@ public class PlaceAskServiceImpl implements PlaceAskService {
         return null;
     }
 
+    /** 보정 평점이 MIN_RATING(4.0)보다 낮은지. 평점을 모르면 빼지 않음 */
+    static boolean isLowRated(AskedPlace place) {
+        return place.getRating() != null && place.getRating() < MIN_RATING;
+    }
+
     /** 지금 닫혀 있는 곳은 빼고, 닫는 시각·들르고 남는 여유를 채움 */
     private List<AskedPlace> addOpenAndSlack(List<AskedPlace> places, Integer slack) {
         List<AskedPlace> openPlaces = new ArrayList<>();
         for (AskedPlace place : places) {
+            if (isLowRated(place)) {
+                continue; // 평점 낮은 곳은 권하지 않음 (11/17: "제일 가까운 카페"로 3.43점 가게가 나왔어요. AI SQL이 가까운 순이면 평점 정렬이 빠짐)
+            }
             OpenInfo open = placeService.getOpenInfo(toPlace(place), Geo.now().toLocalDate(), Geo.nowMinutes(), STAY_MINUTES);
             if (open != null && Boolean.FALSE.equals(open.getOpen())) {
                 continue; // 휴무거나 닫을 시간
@@ -275,7 +284,7 @@ public class PlaceAskServiceImpl implements PlaceAskService {
                 place.setCloseAt(open.getCloseAt());
                 place.setClosingSoon(open.getClosingSoon());
             }
-            place.setSlackAfter(getSlackAfter(slack, place.getDetourMinutes()));
+            setStayAndSlack(place, getSlackAfter(slack, place.getDetourMinutes()));
             openPlaces.add(place);
         }
         return openPlaces;
@@ -287,6 +296,21 @@ public class PlaceAskServiceImpl implements PlaceAskService {
             return places;
         }
         return new ArrayList<>(places.subList(0, count));
+    }
+
+    /**
+     * 카드에 머무는 시간·여유. 카페는 [일정에 넣기]와 같은 CafeStay 계산 (다음 예약 5분 전 도착에 맞춰 머묾, 최대 60분)
+     * → 화면 "N분 쉬었다 가면 돼요". 15분도 못 있으면 stayMinutes null (화면 "들르면 빠듯해요"). 카페 아닌 곳은 30분 기준 그대로
+     */
+    private void setStayAndSlack(AskedPlace place, Integer slackAfterBase) {
+        if (!CafeStay.isCafe(place.getCategory()) || slackAfterBase == null) {
+            place.setStayMinutes(STAY_MINUTES);
+            place.setSlackAfter(slackAfterBase);
+            return;
+        }
+        Integer stay = CafeStay.stayMinutes(slackAfterBase);
+        place.setStayMinutes(stay);
+        place.setSlackAfter(stay == null ? slackAfterBase : slackAfterBase + STAY_MINUTES - stay);
     }
 
     /** 들르고 남는 여유 = 지금 여유 − (돌아가는 분 + 머무는 분). 여유나 돌아가는 분을 모르면 null */

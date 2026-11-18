@@ -41,6 +41,8 @@ export function isStayStop(stop) {
 // 분류로 고르는 기본 사진 (DB 장소 사진이 없을 때)
 export function imageFor(category) {
   const c = category || ''
+  if (/숙소|호텔|숙박|모텔|게스트하우스/.test(c)) return '/img/stay.svg' // 11/17: 사진 없는 숙소·터미널에 감자탕 사진이 나오던 문제
+  if (/터미널|정차역|공항/.test(c)) return '/img/terminal.svg'
   if (/카페|커피|디저트|베이커리/.test(c)) return '/img/daelim.jpg'
   if (/공연|문화|콘서트|극장/.test(c)) return '/img/concert.svg'
   if (/쇼핑|소품|편집/.test(c)) return '/img/sopum.jpg'

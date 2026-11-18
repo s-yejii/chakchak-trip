@@ -2,7 +2,9 @@ package com.tripbiseo.plan.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -122,5 +124,24 @@ class HangangBusPickerTest {
         assertNull(HangangBusServiceImpl.findBusNo("2호선 잠실새내→잠실 1정거장"));
         assertNull(HangangBusServiceImpl.findBusNo(null));
         assertEquals("3317", HangangBusServiceImpl.findBusNo("버스 지선:3317 잠일고등학교→잠실역.롯데월드 6정거장")); // TMAP 실제 모양 (11/17)
+    }
+
+    private static com.tripbiseo.plan.dto.HangangBusPier pier(double lat, double lng) {
+        com.tripbiseo.plan.dto.HangangBusPier pier = new com.tripbiseo.plan.dto.HangangBusPier();
+        pier.setLat(lat);
+        pier.setLng(lng);
+        return pier;
+    }
+
+    // 11/17: 배가 목적지 쪽으로 갈 때만 (선착장 좌표는 db/24_hangang_bus.sql)
+    @Test
+    void 숙소에서_스시이세이는_옥수에서_잠실_배라_보임() {
+        assertTrue(HangangBusServiceImpl.isTowardDestination(37.5616, 126.9827, pier(37.538856, 127.017870), pier(37.518712, 127.084794), 37.5125832, 127.1019664));
+    }
+
+    @Test
+    void 스시이세이에서_동서울은_뚝섬에서_잠실로_돌아오는_배라_안_보임() {
+        assertFalse(HangangBusServiceImpl.isTowardDestination(37.5125832, 127.1019664, pier(37.528805, 127.066495), pier(37.518712, 127.084794), 37.5343935, 127.0940622));
+        assertFalse(HangangBusServiceImpl.isTowardDestination(37.5125832, 127.1019664, pier(37.518712, 127.084794), pier(37.528805, 127.066495), 37.5343935, 127.0940622));
     }
 }

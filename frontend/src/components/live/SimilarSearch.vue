@@ -11,14 +11,12 @@ import { useRouter } from 'vue-router'
 import { askRecommend, insertPlace } from '@/api/trips'
 import { radiusOptions } from '@/data/ask'
 import { showToast } from '@/utils/toast'
+import { devMode } from '@/utils/devMode'
 import { photoFor } from '@/utils/placePhoto'
-import { appNow } from '@/utils/devMode'
-import { toTime } from '@/utils/time'
 import { distanceMeters } from '@/utils/geo'
 import '@/assets/css/live-panel.css' // 지도 위 패널 생김새 (AI 채팅·근처 찾기·비슷한 가게 같이, 11/13)
 
 const DEFAULT_RADIUS = 500 // 처음 반경: 근처 찾기와 같은 값
-const RESERVE_STEP_MIN = 30   // 예약 시각 기본값: 지금 + 30분 뒤 가장 가까운 정각·30분
 const ROUTE_MIN_RADIUS = 500  // 가는 길 반경: 두 곳 사이 거리의 절반, 이 범위 안으로 (서버는 100m~3km)
 const ROUTE_MAX_RADIUS = 3000
 
@@ -57,6 +55,14 @@ const isReserved = ref(false) // [예약했어요]를 켰는지
 const reservedTime = ref('')  // 예약 시각 "15:00"
 
 const picked = computed(() => places.value.find((place) => place.id === props.pickedId))
+// 11/17 주형: 시연 계정은 시나리오 가게(스시이세이, 전화로 15:00 예약)를 고르면 [예약했어요]를 켜고 15:00을 미리 골라 둠 (버튼을 놓쳐도 🔒 예약으로 담겨 배 팝업이 뜨게). 일반 계정은 비워 둠
+const DEMO_RESERVE_NAME = '스시이세이'
+const DEMO_RESERVE_TIME = '15:00'
+watch(picked, (place) => {
+  if (!devMode.isOn || !place || !place.name || !place.name.startsWith(DEMO_RESERVE_NAME)) return
+  isReserved.value = true
+  reservedTime.value = DEMO_RESERVE_TIME
+}, { immediate: true })
 
 // 결과·반경이 바뀌면 부모 지도에 핀과 원을 알려 줌 (가는 길이면 원 중심도 같이)
 watch([places, radius], () => emit('results', { places: places.value, radius: radius.value, center: isOnRoute.value ? route.value : null }))
@@ -116,13 +122,9 @@ async function search(meters, center = props.position) {
 }
 
 // [예약했어요] 켜기·끄기. 켤 때 기본 시각 = 지금(시연 시계) + 30분 뒤 가장 가까운 정각·30분
+// 11/17 주형: 기본 시각은 비워 두고 사용자가 고르게 (예전 기본값 "지금 + 30분"이라 12:18엔 13:00이 들어가 있었어요)
 function toggleReserved() {
   isReserved.value = !isReserved.value
-  if (isReserved.value && !reservedTime.value) {
-    const now = appNow()
-    const minutes = now.getHours() * 60 + now.getMinutes() + RESERVE_STEP_MIN
-    reservedTime.value = toTime(Math.ceil(minutes / RESERVE_STEP_MIN) * RESERVE_STEP_MIN)
-  }
 }
 
 // 담기: 놓친 칸 자리에 넣고 바로 다음 목적지로 (예약했으면 그 시각 고정 일정으로)
@@ -174,8 +176,10 @@ async function addPicked() {
         </div>
         <div class="lp-actions">
           <button type="button" class="btn btn--secondary btn--md" @click="router.push('/place?id=' + encodeURIComponent(picked.id))">자세히</button>
+          <!-- 11/17 주형: 네이버 가게 페이지에서 바로 예약 (주소가 있을 때만) -->
+          <a v-if="picked.naverUrl" :href="picked.naverUrl" target="_blank" rel="noopener" class="btn btn--secondary btn--md">네이버 예약</a>
           <button type="button" class="btn btn--primary btn--md" :disabled="isAdding" @click="addPicked">
-            <i class="ic ic--s i-plus" aria-hidden="true"></i>{{ isAdding ? '담는 중…' : isReserved ? reservedTime + ' 예약으로 담기' : '담기 · 다음 목적지로' }}
+            <i class="ic ic--s i-plus" aria-hidden="true"></i>{{ isAdding ? '담는 중…' : isReserved ? (reservedTime ? reservedTime + ' 예약으로 담기' : '예약 시각을 골라 주세요') : '담기 · 다음 목적지로' }}
           </button>
         </div>
       </div>

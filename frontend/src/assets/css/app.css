@@ -12,7 +12,7 @@ img { max-width: 100%; }
 
 /* 화면 한 장 */
 .scr { position: absolute; inset: 0; background: var(--surface); }
-.overlay-backdrop { position: absolute; inset: 0; }
+.overlay-backdrop { position: absolute; inset: 0; z-index: 0; } /* z-index 0: 뒤에 깐 앞 화면 복사본의 시트·버튼(z-index 2 등)이 위 화면을 덮지 않게 (11/17 결제 메모) */
 /* 어두운 막이 있는 시트 화면은 뒤의 앞 화면이 보이게 비움 */
 .scr:has(> .app > .dim) { background: transparent; }
 .app:has(> .dim) { background: transparent; }

@@ -32,6 +32,7 @@ import DevDot from '@/components/live/DevDot.vue'
 import DemoDrive from '@/components/live/DemoDrive.vue'
 import TripEndSheet from '@/components/live/TripEndSheet.vue'
 import LostFixedCard from '@/components/live/LostFixedCard.vue'
+import HangangBusOption from '@/components/plan/HangangBusOption.vue' // ③ 11/17: 출발 전 한강버스 제안
 import { closeLiveNotice, liveBanner, removeLiveNotices, showLiveNotice } from '@/utils/liveBanner'
 import { daysBetween, todayText } from '@/utils/dates'
 import { devMode, isFakeGps, setFakeGps } from '@/utils/devMode'
@@ -45,7 +46,7 @@ import LiveTour from '@/components/live/LiveTour.vue'
 import { isTourDone, markTourDone } from '@/utils/liveTour'
 import LinkAddSheet from '@/components/live/LinkAddSheet.vue'
 import { useReplanStore } from '@/stores/replan'
-import { demoRide, demoRoute } from '@/utils/demoRoute'
+import { demoRide, demoRoute, restAsk } from '@/utils/demoRoute'
 
 const MUTE_AGAIN_MIN = 10 // "그냥 갈게요" 뒤 이만큼 더 늦어지면 다시 알림
 const LEG_MODE = { walk: 'walk', transit: 'subway', car: 'taxi' } // 서버 이동 수단 → 카드 칩 아이콘
@@ -122,6 +123,14 @@ const stops = computed(() => {
 const currentStop = computed(() => stops.value.find((stop) => stop.reach === 'here') || null)
 const remainingStops = computed(() => stops.value.filter((stop) => stop.reach !== 'done' && stop.reach !== 'here'))
 const nextStop = computed(() => remainingStops.value[0] || null)
+// ③ 11/17: 지금 칸에 있고 다음이 예약(고정)이면 출발 전에 한강버스 카드 (카드가 서버에 물어서 '시간이 남을 때'만 보여요). [그냥 지하철]이면 그 예약엔 다시 안 보임
+const skippedBoatIds = ref([])
+const boatFor = computed(() => {
+  const next = nextStop.value
+  if (!currentStop.value || !next || !next.fixed || !next.time || !live.position.value || skippedBoatIds.value.includes(next.id)) return null
+  return next
+})
+const boatFrom = computed(() => live.position.value || { lat: 0, lng: 0 }) // 출발점 = 지금 위치 (boatFor가 있을 땐 늘 있음)
 // 지금 있는 곳·남은 일정의 장소 id: 검색 결과 카드에서 이미 일정에 있는 곳은 [일정에 넣기] 대신 '일정에 있어요' (11/13)
 const plannedPlaceIds = computed(() => {
   const ids = []
@@ -136,7 +145,8 @@ const plannedPlaceIds = computed(() => {
 const isMoving = computed(() => !!live.position.value && (!!demoRoute.value || (!currentStop.value && !!nextStop.value)) && !adding.value && !asking.value)
 // 지도 시점: 내 위치가 있으면 머무는 중에도 늘 내 위치를 가운데에 고정 (11/09 상재). 근처 찾기·AI 묻기 중에만 풀어요
 // 시연 계정(개발자 모드)에서만 (11/09 상재: 중간발표 시연용). 일반 계정은 원래 지도 동작 그대로
-const isFollowing = computed(() => devMode.isOn && !!live.position.value && !adding.value && !asking.value)
+const isFollowPaused = ref(false) // 11/17 주형: 지도를 손으로 끌면 따라가기를 멈춤 → [내 위치]를 누르면 다시 따라감
+const isFollowing = computed(() => devMode.isOn && !isFollowPaused.value && !!live.position.value && !adding.value && !asking.value)
 const heading = ref(null) // 진행 방향(도, 북=0)
 const HEADING_MIN_MOVE = 0.00004 // 이만큼(약 4m)보다 적게 움직이면 방향을 안 바꿔요 (GPS 떨림에 화살표가 흔들리지 않게)
 let lastPoint = null
@@ -214,7 +224,13 @@ const lostArriveText = computed(() => {
 })
 const isCardOpen = isLostOpen // 가운데 카드는 놓침 카드 하나뿐 (11/12)
 // 고른 카드가 아직 안 간 식당·카페 예약이면 "못 가게 됐어요" 버튼
-const selectedMealFixed = computed(() => stops.value.find((stop) => stop.id === selected.value && stop.fixed && stop.meal && stop.reach !== 'done' && stop.reach !== 'here') || null)
+const LOST_BUTTON_SLACK_MIN = -1 // 시연 계정: 예약에 늦을 때(여유 -1분 이하)만 [못 가게 됐어요] (11/17 주형: 여유 41분인데 버튼이 보여 대본 밖으로 감. 예약 앞 카페(여유 5분)에서도 안 보이게)
+const selectedMealFixed = computed(() => {
+  const stop = stops.value.find((item) => item.id === selected.value && item.fixed && item.meal && item.reach !== 'done' && item.reach !== 'here') || null
+  if (!stop || !devMode.isOn) return stop // 일반 계정은 그대로
+  const isTight = fixed.value && fixed.value.id === stop.id && fixed.value.slackMin <= LOST_BUTTON_SLACK_MIN
+  return isTight ? stop : null
+})
 
 // 비슷한 근처 가게: 지도 위에 핀으로 (근처 찾기와 같은 자리, 지금 위치 기준)
 function openSimilar() {
@@ -306,6 +322,14 @@ function openAlert(alert) {
   }
   queueAlert(alert)
 }
+// 11/17 주형: 어느 칸에서 떠나면(지금 칸이 바뀌면) 그 칸의 "○○에서 나갈 시간이에요"(leave-칸id-…) 알림은 지난 말이라 닫기
+watch(() => (!isReady.value ? undefined : currentStop.value ? currentStop.value.id : null), (currentId) => {
+  if (currentId === undefined) return // 아직 상황을 못 받았으면 그대로
+  removeLiveNotices((notice) => {
+    const match = (notice.key || '').match(/^leave-(\d+)-/)
+    return !!match && Number(match[1]) !== currentId
+  })
+})
 // 서버 알림을 위쪽 알림 줄에 넣기 (닫을 때까지 남고, 앞 알림을 닫으면 이어서 보임). 늦음은 누르면 지연 화면(대안) + 버튼 두 개
 function queueAlert(alert) {
   const isLateAlert = /^late-/.test(alert.key || '')
@@ -511,6 +535,10 @@ const head = computed(() => {
     if (!next || !next.fixed) { // 다음이 예약이 아니면 더 있어도 경고하지 않음 (뒤 일정이 밀릴 뿐, 11/08 주형)
       return { cap: current.name + '에서', big: '+' + toDuration(-left), small: '계획보다 더 머무는 중', cls: '' }
     }
+    const toNext = toMinutes(next.time) - now
+    if (fixed.value && fixed.value.slackMin >= 0 && toNext > 0) { // 11/17 주형: 출발 시각은 지났어도 예약에 늦지 않으면 '지남' 대신 다음 예약까지 남은 시간
+      return { cap: next.name + '까지', big: toDuration(toNext), strong: '남음', cls: '' }
+    }
     return { cap: '출발 시간 지남', big: '+' + toDuration(-left), small: toTime(leaveAt) + ' 출발', cls: 'c-warning' }
   }
   const next = nextStop.value
@@ -631,6 +659,7 @@ function previewStop(stop) {
 // 지도를 만지면 이름표를 지움
 function onMapTouched() {
   previewId.value = null
+  if (devMode.isOn) isFollowPaused.value = true // 시연 계정: 손으로 지도를 옮기면 따라가기 멈춤
 }
 onUnmounted(() => {
   clearTimeout(scrollTimer)
@@ -696,6 +725,7 @@ const segTo = computed(() => {
 
 // ------------------------------------------------------------ 오른쪽 버튼·칩
 function locate() {
+  isFollowPaused.value = false // 다시 내 위치 따라가기
   if (mapRef.value && mapRef.value.focusMe()) return
   showToast('아직 지금 위치를 받지 못했어요')
 }
@@ -736,6 +766,17 @@ async function onLinkAdded(message) {
   await live.refresh()
 }
 
+// 장면 2 카드 (11/17 주형, 시연 계정만): 버스에서 내린 뒤 예약까지 시간이 남으면 "이대로 갈까요?" → [가는 길 카페 찾기]는 AI에게 묻기를 질문 채워서 열어요
+const REST_QUESTION = '고기집 가는 길에 카페'
+const askDraft = ref('')
+function findRestCafe() {
+  restAsk.value = null
+  askDraft.value = REST_QUESTION
+  openAsk()
+}
+function keepGoing() {
+  restAsk.value = null
+}
 function openAsk() {
   asking.value = true
   adding.value = false
@@ -979,6 +1020,17 @@ function finishTour() {
         <!-- 중요한 알림: 가운데 카드 (이게 떠 있으면 위쪽 배너는 안 띄움) -->
         <!-- 예약 놓침: 가운데 카드 (11/12) -->
         <LostFixedCard v-if="isLostOpen" :name="lostStop.name" :text="lostText" :arrive-text="lostArriveText" :place-id="lostStop.placeId" :can-find-similar="!!lostStop.placeId && !!lostStop.meal" :is-skipping="isSkipping" @similar="openSimilar" @skip="skipLost" @keep="keepLost" />
+        <!-- 장면 2: 버스에서 내린 뒤 시간이 남으면 가운데 카드 (시연 계정만, 고르기 전엔 시계·[다음 장소로] 멈춤) -->
+        <div v-if="restAsk && !isLostOpen" class="rest-pop" role="alertdialog" aria-modal="true" aria-label="시간이 남아요">
+          <section class="rest-pop__card">
+            <b class="rest-pop__title">시간이 {{ toDuration(restAsk.slackMin) }} 남아요</b>
+            <span class="rest-pop__text">{{ restAsk.name }} 예약까지 여유가 있어요. 이대로 갈까요?</span>
+            <button type="button" class="btn btn--primary btn--lg btn--block" @click="findRestCafe">☕ 가는 길 카페 찾기</button>
+            <button type="button" class="btn btn--secondary btn--lg btn--block" @click="keepGoing">이대로 갈게요</button>
+          </section>
+        </div>
+        <!-- 출발 전 한강버스: 가운데 팝업 (11/17 주형: 시트 안 카드는 버튼에 가려 안 보였음). 권할 배가 없으면(서버 204) 아무것도 안 뜸 -->
+        <HangangBusOption v-if="boatFor && !isLostOpen" :key="boatFor.id" before-leave popup :from-lat="boatFrom.lat" :from-lng="boatFrom.lng" :to-lat="boatFor.lat" :to-lng="boatFor.lng" :arrive-by="boatFor.time" @skip="skippedBoatIds.push(boatFor.id)" />
         <!-- 위쪽 알림 줄: 한 장씩, 닫아야(위로 밀기) 다음 알림 · 저절로 안 사라짐 (11/08 주형) -->
         <AppNoti
           v-if="!isCardOpen && !isAskingEnd && liveBanner.queue.length && !adding"
@@ -1067,7 +1119,7 @@ function finishTour() {
           <!-- AI 채팅(④) -->
           <!-- 자리 고르기 중에는 숨기기만 (AskPanel은 뿌리 요소가 둘이라 v-show를 감싸는 div에) -->
           <div v-if="asking" v-show="!slotPlace">
-            <AskPanel :me="mePoint || { x: 195, y: 300 }" :late="isLate" :trip-id="live.tripId.value" :position="live.position.value" @close="asking = false" @add="onAskAdd" :selected="askPickedId" :chat-key="chatKey(live.trip.value)" :planned="plannedPlaceIds" @choose="openSlotSheet" @found="onAskFound" @pick="askPickedId = $event" />
+            <AskPanel :initial-draft="askDraft" :me="mePoint || { x: 195, y: 300 }" :late="isLate" :trip-id="live.tripId.value" :position="live.position.value" @close="asking = false" @add="onAskAdd" :selected="askPickedId" :chat-key="chatKey(live.trip.value)" :planned="plannedPlaceIds" @choose="openSlotSheet" @found="onAskFound" @pick="askPickedId = $event" />
           </div>
           <div v-else class="quick live-quick" data-sheet-follow role="group" aria-label="트리피에게 묻기와 근처 찾기">
             <button type="button" class="chip chip--sm chip--add live-chip" data-tour="ask" aria-label="어디 갈까? 트리피에게 갈 곳 물어보기" @click="openAsk"><span class="live-chip__ic live-chip__ic--ai" aria-hidden="true"><img src="/img/trippie-favicon.png" alt="" class="live-chip__img" draggable="false" /></span>어디 갈까?</button>
@@ -1079,7 +1131,7 @@ function finishTour() {
           <!-- 아래 시트: 오늘 일정 카드 -->
           <BottomSheet v-if="!asking" class="sheet--peek live-sheet" data-tour="sheet" :aria-label="doneCount ? '다음 일정' : '오늘 일정'">
             <div class="live-head" data-drag>
-              <div style="flex: 1; min-width: 0">
+              <div style="flex: 1 1 120px; min-width: 0">
                 <p class="t-cap">{{ head.cap }}</p>
                 <p class="t-big tn" :class="head.cls" style="margin: 0">
                   {{ head.big }}
@@ -1108,7 +1160,9 @@ function finishTour() {
             <div v-else class="cta__row">
               <RouterLink v-if="isLate" to="/live/delay" class="btn btn--secondary btn--lg">대안 보기</RouterLink>
               <RouterLink v-else :to="'/plan/edit?id=' + live.tripId.value" class="btn btn--secondary btn--lg"><i class="ic i-edit" aria-hidden="true"></i>일정 변경</RouterLink>
-              <RouterLink to="/live/route" class="btn btn--primary btn--lg"><i class="ic i-route" aria-hidden="true"></i>길 안내</RouterLink>
+              <!-- 11/17 주형: 시연 한강버스 타는 중이면 길 안내(지하철 길로 점이 따로 움직임) 대신 지금 화면에서 배 길을 따라감 -->
+              <button v-if="demoRide" type="button" class="btn btn--primary btn--lg" @click="showToast('한강버스 길로 가는 중이에요 · 지도에서 따라가요')"><i class="ic i-route" aria-hidden="true"></i>길 안내</button>
+              <RouterLink v-else to="/live/route" class="btn btn--primary btn--lg"><i class="ic i-route" aria-hidden="true"></i>길 안내</RouterLink>
             </div>
           </div>
 
@@ -1168,8 +1222,12 @@ function finishTour() {
 .scr-Live .live-chip__ic--pay { background: var(--navy-soft); color: var(--navy); } /* 11/12: 결제 메모까지 칩 3개가 + 버튼 왼쪽에 다 들어가게 */
 .scr-Live .live-quick { position: absolute; top: 392px; left: 0; right: 58px; z-index: 2; gap: 5px; padding-left: 12px; padding-right: 4px; }
 .scr-Live .live-sheet { top: 440px; padding: 8px 0 0; gap: 12px; }
-.scr-Live .live-head { display: flex; align-items: flex-end; gap: 12px; padding: 0 16px; }
+.scr-Live .live-head { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; padding: 0 16px; } /* 11/17: 배지가 길면(스시이세이 롯데백화점…) 왼쪽 글자를 세로로 쌓지 않고 배지가 아래 줄로 */
 /* 11/16 시트 머리: 위 한 줄(어디까지) 회색 작게 → 도착 시각 크게 → '도착 예정'은 회색 보조 글씨 */
+.rest-pop { position: absolute; inset: 0; z-index: 58; display: grid; place-items: center; padding: 24px; background: rgba(15, 20, 35, 0.45); }
+.rest-pop__card { width: 100%; max-width: 320px; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 22px 18px 18px; border-radius: 20px; background: var(--surface-raised); box-shadow: 0 16px 40px -8px rgba(24, 33, 58, 0.45); text-align: center; }
+.rest-pop__title { font-size: 18px; line-height: 26px; color: var(--ink); }
+.rest-pop__text { font-size: 14px; line-height: 20px; color: var(--ink-muted); margin-bottom: 6px; }
 .scr-Live .live-head .t-cap { font-size: 13px; line-height: 18px; color: var(--ink-muted); }
 .scr-Live .live-head .t-big { font-size: 28px; line-height: 36px; letter-spacing: -.03em; }
 .scr-Live .live-head__strong { margin-left: 4px; font-size: 14px; font-weight: 600; letter-spacing: 0; color: var(--ink-muted); }
