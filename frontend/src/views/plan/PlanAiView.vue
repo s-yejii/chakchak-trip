@@ -212,9 +212,9 @@ function isOutside(stay) {
 }
 
 // 시작·끝 시간 기본값: 오늘이면 지금+30분을 30분 단위로 올린 시각부터(22:00 넘으면 내일), 다른 날이면 10:00~20:00
-const TIME_STEP_MIN = 30
+const NOW_STEP_MIN = 10 // 오늘 시작 기본값: 지금을 10분 단위로
 const MIN_SPAN_MIN = 120
-const LAST_START_MIN = 22 * 60
+const LAST_START_MIN = 23 * 60 + 50 // 11/18 주형: 오늘은 지금부터 언제든 (예전 22:00 넘으면 내일로). 23:50 넘으면만 내일
 const LAST_END_MIN = 24 * 60
 const DEFAULT_END_MIN = 20 * 60
 const LATE_NOTE = '오늘은 늦어서 내일로 바꿨어요'
@@ -239,12 +239,10 @@ function moveToTomorrow() {
   store.planStartDate = tomorrow
   if (store.planEndDate && store.planEndDate <= tomorrow) store.planEndDate = null
   timeNote.value = LATE_NOTE
-  // 11/18: 달력에서 오늘을 눌렀는데 말없이 내일로 돌아가 "오늘이 안 눌린다"처럼 보였어요 → 날짜 단계에서는 이유를 토스트로
-  if (step.value.id === 'when') showToast('지금은 늦어서 오늘 일정은 못 만들어요 (22시 넘어 시작) · 내일로 골랐어요')
 }
 function setDefaultTimes() {
   if (isToday()) {
-    const start = Math.ceil((nowMinutes() + TIME_STEP_MIN) / TIME_STEP_MIN) * TIME_STEP_MIN
+    const start = Math.ceil(nowMinutes() / NOW_STEP_MIN) * NOW_STEP_MIN // 지금을 10분 단위로 올림 (11/18)
     if (start <= LAST_START_MIN) {
       store.planFromTime = toTime(start)
       store.planToTime = toTime(Math.min(LAST_END_MIN, Math.max(DEFAULT_END_MIN, start + MIN_SPAN_MIN)))
@@ -264,11 +262,11 @@ watch(() => store.planStartDate, () => {
   timeNote.value = ''
   setDefaultTimes()
 })
-// 오늘인데 이미 지난 시작 시각을 고르면 내일로
+// 오늘인데 이미 지난 시작 시각을 고르면 지금으로 맞춤 (11/18: 예전엔 내일로 넘겼어요)
 //   시연 계정은 빼요: 시나리오 출발 15:00을 [시간 추천]으로 넣을 때 시연 시계가 15:07이면 첫날이 11/11로 밀리던 문제 (11/09)
 watch(() => store.planFromTime, (time) => {
   if (scenario.value) return
-  if (time && isToday() && toMinutes(time) < nowMinutes()) moveToTomorrow()
+  if (time && isToday() && toMinutes(time) < nowMinutes()) store.planFromTime = toTime(Math.min(LAST_START_MIN, Math.ceil(nowMinutes() / NOW_STEP_MIN) * NOW_STEP_MIN))
 })
 if (!store.planFromTime) setDefaultTimes()
 

@@ -71,6 +71,10 @@ public class PlanServiceImpl implements PlanService {
     private static final java.util.regex.Pattern COUPLE_WORDS = java.util.regex.Pattern.compile("데이트|연인|커플");
     private static final java.util.regex.Pattern SOLO_WORDS = java.util.regex.Pattern.compile("혼밥|혼자|1인");
     private static final int MAX_REASON_LENGTH = 40;      // Gemini 이유 한 줄
+    private static final int MIDNIGHT_MIN = 24 * 60;       // 오늘 일정은 자정까지 (11/18)
+    private static final int TEN_MIN = 10;
+    private static final int HOUR_MIN = 60;
+    private static final int LATE_NIGHT_MIN = 21 * 60;     // 이 뒤에 시작하면 "지금 열린 곳 위주로" 안내
     private static final String MEMORIAL_MEMO = "역사를 기억하는 추모 공간이에요 · 조용히 둘러봐 주세요"; // 11/18 추모 공간 안내
     private static final java.util.regex.Pattern GUESS_REASON = java.util.regex.Pattern.compile("걸어서|도보|가까|가깝|인접|근처|바로 옆|인근|위치|동선|니다$|평점|리뷰 ?[\\d,]+개|에 있어|에 있는|편리|즐길 수 있|다양한|유명한|대표적|의미가 있|의미 있는|꼭 방문|가득한"); // 확인 안 된 거리 말·숫자·뻔한 말 (11/14)
     private static final int MAX_MEMO_LENGTH = 200;       // trip_stop.memo 저장 규칙
@@ -207,11 +211,11 @@ public class PlanServiceImpl implements PlanService {
         if (devService.isDemoAccount(memberId)) {
             return makeDemoDraft(conditions, progress); // 시연 계정은 발표 시나리오 일정 (11/08 주형)
         }
-        boolean isMoved = moveToTomorrowIfLate(conditions);
+        boolean isLateNow = startFromNow(conditions);
         PlanGenerateResponse response = makeEmptyDraft(conditions);
         addBoardingBuffer(conditions, response.getNotes());
-        if (isMoved) {
-            response.getNotes().add(makeNote("오늘은 늦어서 내일 일정으로 짰어요", null));
+        if (isLateNow) {
+            response.getNotes().add(makeNote("밤이라 지금 열린 곳 위주로 골랐어요", null));
         }
         int days = (int) ChronoUnit.DAYS.between(LocalDate.parse(response.getStartDate()), LocalDate.parse(response.getEndDate())) + 1;
         String region = conditions.getRegion() == null ? "" : conditions.getRegion();
@@ -344,20 +348,36 @@ public class PlanServiceImpl implements PlanService {
     }
 
     /** 오늘 하루 일정인데 남은 칸이 없으면(밤늦게) 내일로 옮김. 예약(고정 일정)이 있으면 그날을 지켜야 해서 안 옮김 */
-    private boolean moveToTomorrowIfLate(PlanConditions conditions) {
-        LocalDate today = Geo.now().toLocalDate();
-        String start = hasText(conditions.getStartDate()) ? conditions.getStartDate() : today.toString();
+    /**
+     * 오늘 여행이면 지금부터 짜기 (11/18 주형: "여행을 지금부터 할 수 있는데"). 예전엔 늦으면 내일로 넘겼어요.
+     *  - 시작이 지금보다 이르면(또는 시간을 안 골랐는데 남은 칸이 없으면) 시작 = 지금을 10분 단위로 올린 시각
+     *  - 끝이 시작보다 1시간도 안 남으면 자정(24:00)까지. 자정을 넘는 일정은 만들지 않음
+     * 밤(21시 넘어 시작)이면 true → "지금 열린 곳 위주로" 안내. 예약이 있으면 사용자가 정한 대로 둠
+     */
+    private boolean startFromNow(PlanConditions conditions) {
+        String today = Geo.now().toLocalDate().toString();
+        String start = hasText(conditions.getStartDate()) ? conditions.getStartDate() : today;
         boolean hasFixed = conditions.getFixed() != null && !conditions.getFixed().isEmpty();
-        if (!start.equals(today.toString()) || hasFixed || !planRuleMaker.isTodayOver(conditions)) {
+        if (!start.equals(today) || hasFixed) {
             return false;
         }
-        String tomorrow = today.plusDays(1).toString();
-        boolean isOneDay = !hasText(conditions.getEndDate()) || conditions.getEndDate().equals(start);
-        conditions.setStartDate(tomorrow);
-        if (isOneDay) {
-            conditions.setEndDate(tomorrow);
+        int now = roundUpTen(Geo.nowMinutes());
+        boolean hasTime = hasText(conditions.getStartTime()) && hasText(conditions.getEndTime());
+        if (!hasTime && !planRuleMaker.isTodayOver(conditions)) {
+            return false; // 시간을 안 골랐고 남은 칸이 있으면 예전처럼 지금 뒤 칸으로 당겨 짬
         }
-        return true;
+        if (!hasTime || Geo.toMinutes(conditions.getStartTime()) < now) {
+            conditions.setStartTime(Geo.toHhmm(Math.min(now, MIDNIGHT_MIN - TEN_MIN)));
+        }
+        int startMin = Geo.toMinutes(conditions.getStartTime());
+        if (!hasText(conditions.getEndTime()) || Geo.toMinutes(conditions.getEndTime()) - startMin < HOUR_MIN) {
+            conditions.setEndTime(Geo.toHhmm(MIDNIGHT_MIN));
+        }
+        return startMin >= LATE_NIGHT_MIN;
+    }
+
+    private int roundUpTen(int minutes) {
+        return (minutes + TEN_MIN - 1) / TEN_MIN * TEN_MIN;
     }
 
     /** Gemini 고르기(실패하면 규칙) → 칸 검사·빈 칸 채우기. 두 단계를 알림 */
