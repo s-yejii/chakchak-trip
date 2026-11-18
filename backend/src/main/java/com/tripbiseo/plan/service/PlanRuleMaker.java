@@ -787,7 +787,8 @@ public class PlanRuleMaker {
             if (isSecondRound && SECOND_ROUND_SHORT.equals(secondRoundMode)) {
                 stay = Math.min(stay, SECOND_ROUND_MAX_STAY_MIN);
             }
-            boolean isAfterEnd = dayEndMin != null && start + stay > dayEndMin; // 끝 장소로 가야 해서 못 쓰는 칸
+            // 끝 장소로 가야 해서 못 쓰는 칸. 11/18: 짧게라도(40분) 들를 수 있으면 넣고 머무는 시간은 아래에서 마감에 맞춰 줄임
+            boolean isAfterEnd = dayEndMin != null && start + SHORTEST_STAY_MIN > dayEndMin;
             if (isAfterEnd || overlapsExtra(extras, day, start, stay)) {
                 continue; // 마감 뒤이거나 꼭 갈 곳·고정 일정과 겹치는 칸
             }

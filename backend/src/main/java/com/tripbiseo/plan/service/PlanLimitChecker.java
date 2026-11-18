@@ -34,6 +34,7 @@ public class PlanLimitChecker {
     private static final int FINISH_STAY_MIN = 10;          // 끝 칸 머무는 분 (일정표 표시용, 칸 규칙 최소 10분)
     private static final int UNKNOWN_TRAVEL_MIN = 60;       // 끝 장소 위치를 못 찾았을 때 이동 시간 추정
     private static final int WALK_M_PER_MIN = 75;           // 걷는 속도 4.5km/h (RouteClient와 같음)
+    private static final int SHORTEST_STAY_MIN = 40;        // 마감에 맞춰 줄여도 이보다 짧게는 안 함 (PlanRuleMaker와 같은 값)
     private static final int MAX_TRIMS = 3;                 // 마감에 맞추려고 뒤에서 뺄 수 있는 칸 수
     private static final int MAX_WALK_NOTES = 3;
     private static final String MUST = "must";
@@ -100,6 +101,12 @@ public class PlanLimitChecker {
                 notes.add(makeNote("꼭 갈 곳 '" + last.getName() + "' 때문에 " + finish.getName() + "에 " + Geo.toHhmm(arrive) + "쯤 도착해요. 일정을 줄여 주세요"));
                 isMustLate = true;
                 break;
+            }
+            int over = arrive + FINISH_BUFFER_MIN - deadline;
+            int stay = last.getStay() == null ? 0 : last.getStay();
+            if (stay - over >= SHORTEST_STAY_MIN) {
+                last.setStay(stay - over); // 11/18: 몇 분 넘는다고 통째로 빼지 않고 머무는 시간을 줄임 (3차가 5분 넘는다고 빠졌어요)
+                continue; // 다시 도착 시각을 계산해 봄
             }
             response.getStops().remove(last);
             removed.add(last.getName());
