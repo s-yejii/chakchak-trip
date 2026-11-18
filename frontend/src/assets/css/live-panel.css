@@ -107,6 +107,8 @@
 /* 찾은 곳 카드 줄 (11/13): 네이버·카카오 지도처럼 가로로 넘기는 카드, 넘기면 지도 핀도 같이 골라짐 */
 .lp-cards { position: relative; display: flex; gap: 8px; margin: 0 -12px; padding: 2px 12px 4px; overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding-left: 12px; scrollbar-width: none; }
 .lp-cards::-webkit-scrollbar { display: none; }
+.lp-cards--drag { cursor: grab; user-select: none; }  /* PC 마우스로 잡고 끌기 (11/18, utils/chipScroll.js) */
+.lp-cards.is-dragging { scroll-snap-type: none; cursor: grabbing; }
 .lp-card { flex: none; width: 276px; display: flex; flex-direction: column; gap: 10px; padding: 10px; border: 1px solid var(--line); border-radius: 16px; background: #fff; scroll-snap-align: start; transition: border-color .15s, box-shadow .15s; }
 .lp-card.is-sel { border-color: var(--navy); box-shadow: 0 0 0 1px var(--navy); }
 .lp-card__main { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 0; border: 0; background: none; text-align: left; font: inherit; color: inherit; cursor: pointer; }

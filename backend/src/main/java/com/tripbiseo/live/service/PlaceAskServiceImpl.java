@@ -12,8 +12,12 @@ import org.springframework.stereotype.Service;
 
 import com.tripbiseo.common.ai.AiService;
 import com.tripbiseo.common.exception.ApiException;
+import com.tripbiseo.common.external.FoundArea;
+import com.tripbiseo.common.external.FoundLocation;
+import com.tripbiseo.common.external.LocationSearchClient;
 import com.tripbiseo.common.external.RouteClient;
 import com.tripbiseo.common.util.Geo;
+import com.tripbiseo.live.dto.AskArea;
 import com.tripbiseo.live.dto.AskSituation;
 import com.tripbiseo.live.dto.AskedPlace;
 import com.tripbiseo.live.dto.LocationRequest;
@@ -67,6 +71,7 @@ public class PlaceAskServiceImpl implements PlaceAskService {
     private final PlaceService placeService;       // 영업 중인지 (②)
     private final WalkRanker walkRanker;           // 실제 걷는 길로 다시 줄 세우기 (11/13)
     private final ReviewRagService reviewRagService; // 분위기 조건은 리뷰 RAG로 고르기 (11/15)
+    private final LocationSearchClient locationSearchClient; // "강남역 근처"처럼 다른 곳 이름 → 좌표 (카카오 검색, 공통, 11/18)
 
     /** 사용자 말로 장소 찾기 (prevPlaceIds가 있으면 그 안에서만) */
     @Override
@@ -85,6 +90,12 @@ public class PlaceAskServiceImpl implements PlaceAskService {
             log.info("AI에게 묻기: 표에 없는 조건 - {}", answer.getReason());
             return makeUnsupported(answer);
         }
+        if (hasPlace(answer)) {
+            if (!moveToPlace(situation, answer.getPlace().trim())) {
+                return makePlaceNotFound(answer.getPlace().trim());
+            }
+            usable = findUsable(situation); // 다른 곳 기준이면 가는 길·다음 장소·여유는 빠지고 :me(그곳)만 남음
+        }
         SqlCheck check = checkAnswer(answer, usable);
         if (!check.isOk()) {
             answer = askSql(message, prevMessage, usable, check.getReason()); // 한 번 더: 떨어진 이유를 붙여서
@@ -94,7 +105,11 @@ public class PlaceAskServiceImpl implements PlaceAskService {
             log.warn("AI에게 묻기 fallback: SQL 검사 두 번 탈락 - {} / SQL: {}", check.getReason(), answer == null ? null : answer.getSql());
             return makeFallback();
         }
-        return runAndFinish(answer, check, situation);
+        PlaceAskResult result = runAndFinish(answer, check, situation);
+        if (hasPlace(answer) && !result.isFallback()) {
+            result.setArea(toArea(answer.getPlace().trim(), situation)); // 화면이 "강남역에서 300m"처럼 그곳 기준 거리를 보여 줌
+        }
+        return result;
     }
 
     // ---------------------------------------------------------------- 1. 상황 모으기
@@ -141,6 +156,54 @@ public class PlaceAskServiceImpl implements PlaceAskService {
     private boolean isWalkingToNext(Trip trip, Stop nextStop, double lat, double lng) {
         double meters = Geo.distanceMeters(lat, lng, nextStop.getLat(), nextStop.getLng());
         return "walk".equals(routeClient.chooseMode(nextStop.getMode(), meters, trip.getTransports()));
+    }
+
+    /** 질문에 다른 곳 이름(강남역·용산구청·한남동 등)이 있는지 */
+    private boolean hasPlace(SqlAnswer answer) {
+        return answer.getPlace() != null && !answer.getPlace().isBlank();
+    }
+
+    /**
+     * 다른 곳 기준으로 찾기 (11/18): :me를 그곳 좌표로 바꾸고, 내 일정에 묶인 값(가는 길·다음 장소·여유)은 지움.
+     * 그곳을 못 찾으면 false (상황은 그대로)
+     */
+    private boolean moveToPlace(AskSituation situation, String place) {
+        double[] point = findPlacePoint(place, situation.getMeLat(), situation.getMeLng());
+        if (point == null) {
+            log.info("AI에게 묻기: 장소 이름 '{}'을 찾지 못함", place);
+            return false;
+        }
+        situation.setMe(toPoint(point[0], point[1]));
+        situation.setMeLat(point[0]);
+        situation.setMeLng(point[1]);
+        situation.setRoute(null);
+        situation.setNext(null);
+        situation.setNextLat(null);
+        situation.setNextLng(null);
+        situation.setSlack(null);
+        return true;
+    }
+
+    /**
+     * 장소 이름 → {위도, 경도}. "○○구·○○동"이면 지역 가운데, 아니면 역·건물·가게 키워드 검색 첫 번째(내 위치 쪽).
+     * 카카오 검색에 내 위치를 보내는 건 괜찮아요 (Gemini에는 안 보냄). 못 찾거나 키가 없으면 null
+     */
+    private double[] findPlacePoint(String place, double myLat, double myLng) {
+        try {
+            if (place.endsWith("구") || place.endsWith("동")) {
+                List<FoundArea> areas = locationSearchClient.searchAreas(place);
+                if (!areas.isEmpty()) {
+                    return new double[] {areas.get(0).getLat(), areas.get(0).getLng()};
+                }
+            }
+            List<FoundLocation> locations = locationSearchClient.searchLocations(place, myLat, myLng);
+            if (!locations.isEmpty()) {
+                return new double[] {locations.get(0).getLat(), locations.get(0).getLng()};
+            }
+        } catch (ApiException e) { // 카카오 키가 없거나 호출 실패
+            log.warn("AI에게 묻기: 장소 이름 검색 실패 - {}", e.getMessage());
+        }
+        return null;
     }
 
     /** 지금 값이 있는 빈칸 (프롬프트에 "지금 쓸 수 있는 빈칸"으로 알려 줌) */
@@ -213,8 +276,14 @@ public class PlaceAskServiceImpl implements PlaceAskService {
             return makeFallback();
         }
         log.info("AI에게 묻기 SQL: {} → {}곳", answer.getSql(), places.size());
+        boolean isMoodMissed = false; // 분위기에 맞는 곳이 없어서 근처 곳을 대신 보여 주는지 (11/18)
         if (hasMood(answer)) {
-            places = applyMood(places, answer);
+            List<AskedPlace> moodPlaces = applyMood(places, answer);
+            if (moodPlaces.isEmpty() && !places.isEmpty()) {
+                isMoodMissed = true; // 빈 결과 대신 분위기 조건만 빼고, SQL로 찾은 근처 곳을 그대로 씀 (임베딩이 없는 동네 등)
+            } else {
+                places = moodPlaces;
+            }
             if (check.getOrderBy() != null) {
                 places = keepFirst(places, MOOD_WALK_POOL);
             }
@@ -227,7 +296,11 @@ public class PlaceAskServiceImpl implements PlaceAskService {
         if (check.getPlaceholders().contains(ROUTE)) {
             band = askSqlRunner.getRouteBand(situation.getRoute(), BAND_METERS);
         }
-        return makeResult(answer, situation.getSlack(), band, openPlaces);
+        PlaceAskResult result = makeResult(answer, situation.getSlack(), band, openPlaces);
+        if (isMoodMissed && !openPlaces.isEmpty()) {
+            result.setMessage("분위기에 꼭 맞는 곳은 못 찾아서, 근처 " + openPlaces.size() + "곳을 보여 드려요");
+        }
+        return result;
     }
 
     /** 분위기 조건(mood)이 있는 질문인지 */
@@ -332,6 +405,22 @@ public class PlaceAskServiceImpl implements PlaceAskService {
         result.setBand(band);
         result.setPlaces(places);
         return result;
+    }
+
+    /** 질문에 나온 곳을 지도에서 못 찾았을 때 (11/18) */
+    private PlaceAskResult makePlaceNotFound(String place) {
+        PlaceAskResult result = new PlaceAskResult();
+        result.setMessage("'" + place + "'을(를) 지도에서 찾지 못했어요. 역이나 동네 이름으로 다시 물어봐 주세요.");
+        return result;
+    }
+
+    /** 기준으로 삼은 곳 (moveToPlace가 바꿔 둔 :me 좌표) */
+    private AskArea toArea(String place, AskSituation situation) {
+        AskArea area = new AskArea();
+        area.setName(place);
+        area.setLat(situation.getMeLat());
+        area.setLng(situation.getMeLng());
+        return area;
     }
 
     /** 표에 없는 조건(가격·메뉴 등)이라 찾을 수 없음 → 이유만 안내 */
