@@ -520,6 +520,10 @@ const head = computed(() => {
     if (!next || !next.fixed) { // 다음이 예약이 아니면 더 있어도 경고하지 않음 (뒤 일정이 밀릴 뿐, 11/08 주형)
       return { cap: current.name + '에서', big: '+' + toDuration(-left), small: '계획보다 더 머무는 중', cls: '' }
     }
+    const toNext = toMinutes(next.time) - now
+    if (fixed.value && fixed.value.slackMin >= 0 && toNext > 0) { // 11/17 주형: 출발 시각은 지났어도 예약에 늦지 않으면 '지남' 대신 다음 예약까지 남은 시간
+      return { cap: next.name + '까지', big: toDuration(toNext), strong: '남음', cls: '' }
+    }
     return { cap: '출발 시간 지남', big: '+' + toDuration(-left), small: toTime(leaveAt) + ' 출발', cls: 'c-warning' }
   }
   const next = nextStop.value
@@ -1088,7 +1092,7 @@ function finishTour() {
           <!-- 아래 시트: 오늘 일정 카드 -->
           <BottomSheet v-if="!asking" class="sheet--peek live-sheet" data-tour="sheet" :aria-label="doneCount ? '다음 일정' : '오늘 일정'">
             <div class="live-head" data-drag>
-              <div style="flex: 1; min-width: 0">
+              <div style="flex: 1 1 120px; min-width: 0">
                 <p class="t-cap">{{ head.cap }}</p>
                 <p class="t-big tn" :class="head.cls" style="margin: 0">
                   {{ head.big }}
