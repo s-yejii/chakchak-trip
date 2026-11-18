@@ -1014,6 +1014,9 @@ public class PlanRuleMaker {
         }
         int spare = Math.min(MAX_EXTEND_MIN, (leaveBy - prevEnd) / TIME_STEP_MIN * TIME_STEP_MIN);
         Place place = last.getId() == null ? null : candidates.get(last.getId());
+        if (place != null && FOOD_KIND.equals(place.getKind())) {
+            spare = Math.min(spare, Math.max(0, FIRST_ROUND_MAX_STAY - last.getStay())); // 밥은 120분까지만 (11/18 1차가 130분이 됐어요)
+        }
         if (spare < TIME_STEP_MIN || place == null || !isOpenFor(place, date, lastStart, last.getStay() + spare)) {
             return;
         }
