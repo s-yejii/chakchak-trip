@@ -62,6 +62,7 @@ public class LiveLinkServiceImpl implements LiveLinkService {
     private static final String IMPORTANCE_OPTIONAL = "drop";
     private static final String[] KEYS = {"A", "B", "C", "D", "E", "F", "G"};
     private static final int MAX_SWAP_CHOICES = KEYS.length - 3; // [바꾸기] 선택지 수. 줄이기·빼기·그대로 넣기와 합쳐도 KEYS 안에 들게 (11/18)
+    private static final int NO_PRECISE = 0;            // 길찾기 API 없이 거리로만 추정 (전과 같음)
 
     private final LiveTripReader liveTripReader;
     private final LiveStopFinder liveStopFinder;
@@ -82,7 +83,7 @@ public class LiveLinkServiceImpl implements LiveLinkService {
         List<Stop> newStops = toNewStops(request, remaining, trip);
 
         Stop fixedStop = liveStopFinder.findFixedStop(remaining, null);
-        Alternative base = remaining.isEmpty() ? null : alternativeCalculator.calculate(trip, current, remaining, request.getLat(), request.getLng());
+        Alternative base = remaining.isEmpty() ? null : alternativeCalculator.calculate(trip, current, remaining, request.getLat(), request.getLng(), NO_PRECISE, true); // 비교 기준도 같은 방식(계획 시각까지 기다리기)으로
         int baseClosed = base == null ? 0 : fillOpenInfo(base);
         Context context = new Context(trip, current, remaining, newStops, fixedStop != null, base, baseClosed, request.getLat(), request.getLng());
 
@@ -551,6 +552,7 @@ public class LiveLinkServiceImpl implements LiveLinkService {
      * 계산 + 영업 정보 + 새 칸 표시. 새 칸은 계획 시각이 없어서 먼저 지금 시각으로 계산한 뒤
      * 나온 도착 시각을 계획 시각으로 두고 한 번 더 계산 (마지막 칸이면 여유 계산에 계획 시각을 씀).
      * 새 칸은 목록끼리 같이 써서, 복사본에 시각을 적어 원본이 안 바뀌게 함
+     * 원래 칸은 일찍 도착하면 계획 시각까지 기다렸다 시작 (11/18: 넣은 뒤 원래 칸 사이 빈 시간이 사라져 시각이 다 당겨지던 문제)
      */
     private Alternative calculatePlan(Context context, List<Stop> stops) {
         List<Stop> timed = new ArrayList<>();
@@ -562,13 +564,13 @@ public class LiveLinkServiceImpl implements LiveLinkService {
             }
             timed.add(item);
         }
-        Alternative plan = alternativeCalculator.calculate(context.trip(), context.current(), timed, context.lat(), context.lng());
+        Alternative plan = alternativeCalculator.calculate(context.trip(), context.current(), timed, context.lat(), context.lng(), NO_PRECISE, true);
         for (int i = 0; i < timed.size(); i++) {
             if (timed.get(i).getId() == null) {
                 timed.get(i).setTime(plan.getStops().get(i).getEta());
             }
         }
-        plan = alternativeCalculator.calculate(context.trip(), context.current(), timed, context.lat(), context.lng());
+        plan = alternativeCalculator.calculate(context.trip(), context.current(), timed, context.lat(), context.lng(), NO_PRECISE, true);
         for (AltStop stop : plan.getStops()) {
             if (stop.getId() == null) {
                 stop.setChange("새로 추가");
