@@ -50,7 +50,6 @@ public class LiveLinkServiceImpl implements LiveLinkService {
     private static final int BOTH_CAFE_STAY = 25;
     private static final int TRIM_BUFFER_MIN = 5;       // 늦는 시간보다 이만큼 더 줄임
     private static final int PUSH_LIMIT_MIN = 30;       // 고정 일정이 없을 때 이만큼 넘게 밀리면 "늦어진다"로 봄
-    private static final int OVERLAP_MIN = 120;         // 같은 종류가 이 시간 안에 있으면 겹친다고 봄
     private static final int ANY_TIME_GAP = 48 * 60;    // 늦어질 때는 시간이 멀어도 같은 종류면 바꾸기를 제안
     private static final int LAST_ARRIVE_MIN = 22 * 60; // 이보다 늦게 도착하는 자리는 피함
     private static final int MINUTES_OF_DAY = 24 * 60;
@@ -61,7 +60,9 @@ public class LiveLinkServiceImpl implements LiveLinkService {
     private static final int TOO_LATE_PENALTY = 120;    // 너무 늦은 도착
     private static final String IMPORTANCE_MUST = "must";
     private static final String IMPORTANCE_OPTIONAL = "drop";
-    private static final String[] KEYS = {"A", "B", "C", "D"};
+    private static final String[] KEYS = {"A", "B", "C", "D", "E", "F", "G"};
+    private static final int MAX_SWAP_CHOICES = KEYS.length - 3; // [바꾸기] 선택지 수. 줄이기·빼기·그대로 넣기와 합쳐도 KEYS 안에 들게 (11/18)
+    private static final int NO_PRECISE = 0;            // 길찾기 API 없이 거리로만 추정 (전과 같음)
 
     private final LiveTripReader liveTripReader;
     private final LiveStopFinder liveStopFinder;
@@ -82,7 +83,7 @@ public class LiveLinkServiceImpl implements LiveLinkService {
         List<Stop> newStops = toNewStops(request, remaining, trip);
 
         Stop fixedStop = liveStopFinder.findFixedStop(remaining, null);
-        Alternative base = remaining.isEmpty() ? null : alternativeCalculator.calculate(trip, current, remaining, request.getLat(), request.getLng());
+        Alternative base = remaining.isEmpty() ? null : alternativeCalculator.calculate(trip, current, remaining, request.getLat(), request.getLng(), NO_PRECISE, true); // 비교 기준도 같은 방식(계획 시각까지 기다리기)으로
         int baseClosed = base == null ? 0 : fillOpenInfo(base);
         Context context = new Context(trip, current, remaining, newStops, fixedStop != null, base, baseClosed, request.getLat(), request.getLng());
 
@@ -93,15 +94,15 @@ public class LiveLinkServiceImpl implements LiveLinkService {
         best.setChanges(newStops.size());
 
         boolean fits = isFit(context, best);
-        Map<Stop, Stop> swaps = findOverlaps(context, best, fits ? OVERLAP_MIN : ANY_TIME_GAP);
+        List<Map<Stop, Stop>> swapChoices = findSwapChoices(context.newStops(), context.remaining(), best, fits);
 
         LinkFitResponse response = new LinkFitResponse();
         response.setFits(fits);
         response.setFixedName(fixedStop == null ? null : fixedStop.getName());
         response.setBest(best);
-        response.setMessage(getMessage(fits, swaps, best, fixedStop));
-        if (!fits || !swaps.isEmpty()) {
-            response.setAlternatives(makeOptions(context, best, swaps));
+        response.setMessage(getMessage(fits, swapChoices, best, fixedStop));
+        if (!fits || !swapChoices.isEmpty()) {
+            response.setAlternatives(makeOptions(context, best, swapChoices));
         }
         return response;
     }
@@ -236,17 +237,54 @@ public class LiveLinkServiceImpl implements LiveLinkService {
         return true;
     }
 
-    /** 새 장소마다 maxGap분 안의 같은 종류 칸(식당·카페, 바꿀 수 있는 칸, 한 칸은 한 번만)을 찾음. 새 칸 → 바꿀 칸 */
-    private Map<Stop, Stop> findOverlaps(Context context, Alternative best, int maxGap) {
+    /**
+     * [바꾸기] 선택지마다 새 칸 → 바꿀 칸 (11/18). 남은 칸 시간 순, 맨 앞 것으로 줄이기·빼기를 계산.
+     * 새 장소가 식당 한 곳이면 바꿀 수 있는 식당마다 하나씩(점심·저녁 중 고르게), 카페 한 곳이면 첫 번째 카페 하나 (늦어져도 같음).
+     * 새 장소가 여러 곳이거나 식당·카페가 아니면 findOverlaps 그대로 (선택지 0~1개)
+     */
+    List<Map<Stop, Stop>> findSwapChoices(List<Stop> newStops, List<Stop> remaining, Alternative best, boolean fits) {
+        List<Map<Stop, Stop>> choices = new ArrayList<>();
+        String kind = newStops.size() == 1 ? toKind(newStops.get(0).getCategory()) : KIND_OTHER;
+        if (KIND_OTHER.equals(kind)) {
+            Map<Stop, Stop> swaps = findOverlaps(newStops, remaining, best, fits);
+            if (!swaps.isEmpty()) {
+                choices.add(swaps);
+            }
+            return choices;
+        }
+        for (Stop stop : remaining) { // 남은 칸은 시간 순
+            if (isChangeable(stop) && kind.equals(toKind(stop.getCategory())) && choices.size() < MAX_SWAP_CHOICES) {
+                Map<Stop, Stop> swaps = new LinkedHashMap<>();
+                swaps.put(newStops.get(0), stop);
+                choices.add(swaps);
+            }
+            if (KIND_CAFE.equals(kind) && !choices.isEmpty()) {
+                break; // 카페는 첫 번째 하나만
+            }
+        }
+        return choices;
+    }
+
+    /**
+     * 새 장소마다 바꿀 같은 종류 칸(식당·카페, 바꿀 수 있는 칸, 한 칸은 한 번만)을 찾음. 새 칸 → 바꿀 칸.
+     * 새 장소가 여러 곳일 때 씀 (한 곳이면 findSwapChoices가 따로 찾음).
+     * 그냥 넣어도 되면(fits) 남은 칸 중 시간 순 첫 번째 같은 종류 칸 (11/18: 여유가 많으면 새 장소가 하루 끝에 들어가서
+     * 도착 시각으로 재면 안 겹쳐 [바꾸기]가 안 떴음). 늦어지면 도착 시각이 가장 가까운 칸 (전과 같음)
+     */
+    Map<Stop, Stop> findOverlaps(List<Stop> newStops, List<Stop> remaining, Alternative best, boolean fits) {
         Map<Stop, Stop> swaps = new LinkedHashMap<>(); // 넣은 순서를 지키는 Map
         Map<String, Integer> arriveMap = getArriveMap(best);
-        for (Stop newStop : context.newStops()) {
+        for (Stop newStop : newStops) {
             String kind = toKind(newStop.getCategory());
             Stop found = null;
-            int foundGap = maxGap + 1;
-            for (Stop stop : context.remaining()) {
+            int foundGap = ANY_TIME_GAP + 1;
+            for (Stop stop : remaining) { // 남은 칸은 시간 순
                 boolean isCandidate = !KIND_OTHER.equals(kind) && kind.equals(toKind(stop.getCategory()))
                         && isChangeable(stop) && !swaps.containsValue(stop);
+                if (isCandidate && fits) {
+                    found = stop;
+                    break;
+                }
                 if (isCandidate) {
                     int gap = Math.abs(arriveMap.get(stop.getName()) - arriveMap.get(newStop.getName()));
                     if (gap < foundGap) {
@@ -264,12 +302,13 @@ public class LiveLinkServiceImpl implements LiveLinkService {
 
     // ---------------------------------------------------------------- 고를 방법
 
-    /** 겹치면 바꾸기·둘 다 가기, 늦으면 줄이기·빼기. 맨 앞이 추천, 그대로 넣기는 맨 뒤에 */
-    private List<Alternative> makeOptions(Context context, Alternative best, Map<Stop, Stop> swaps) {
+    /** 겹치면 바꾸기(선택지마다 하나)·둘 다 가기, 늦으면 줄이기·빼기. 맨 앞이 추천, 그대로 넣기는 맨 뒤에 */
+    private List<Alternative> makeOptions(Context context, Alternative best, List<Map<Stop, Stop>> swapChoices) {
         List<Alternative> options = new ArrayList<>();
-        if (!swaps.isEmpty()) {
-            options.add(makeSwapOption(context, swaps));
+        for (Map<Stop, Stop> choice : swapChoices) {
+            options.add(makeSwapOption(context, choice));
         }
+        Map<Stop, Stop> swaps = swapChoices.isEmpty() ? new LinkedHashMap<>() : swapChoices.get(0); // 줄이기·빼기는 맨 앞 [바꾸기] 기준
         Alternative trim = makeTrimOption(context, swaps);
         if (trim != null) {
             options.add(trim);
@@ -513,6 +552,7 @@ public class LiveLinkServiceImpl implements LiveLinkService {
      * 계산 + 영업 정보 + 새 칸 표시. 새 칸은 계획 시각이 없어서 먼저 지금 시각으로 계산한 뒤
      * 나온 도착 시각을 계획 시각으로 두고 한 번 더 계산 (마지막 칸이면 여유 계산에 계획 시각을 씀).
      * 새 칸은 목록끼리 같이 써서, 복사본에 시각을 적어 원본이 안 바뀌게 함
+     * 원래 칸은 일찍 도착하면 계획 시각까지 기다렸다 시작 (11/18: 넣은 뒤 원래 칸 사이 빈 시간이 사라져 시각이 다 당겨지던 문제)
      */
     private Alternative calculatePlan(Context context, List<Stop> stops) {
         List<Stop> timed = new ArrayList<>();
@@ -524,13 +564,13 @@ public class LiveLinkServiceImpl implements LiveLinkService {
             }
             timed.add(item);
         }
-        Alternative plan = alternativeCalculator.calculate(context.trip(), context.current(), timed, context.lat(), context.lng());
+        Alternative plan = alternativeCalculator.calculate(context.trip(), context.current(), timed, context.lat(), context.lng(), NO_PRECISE, true);
         for (int i = 0; i < timed.size(); i++) {
             if (timed.get(i).getId() == null) {
                 timed.get(i).setTime(plan.getStops().get(i).getEta());
             }
         }
-        plan = alternativeCalculator.calculate(context.trip(), context.current(), timed, context.lat(), context.lng());
+        plan = alternativeCalculator.calculate(context.trip(), context.current(), timed, context.lat(), context.lng(), NO_PRECISE, true);
         for (AltStop stop : plan.getStops()) {
             if (stop.getId() == null) {
                 stop.setChange("새로 추가");
@@ -603,15 +643,18 @@ public class LiveLinkServiceImpl implements LiveLinkService {
     }
 
     /** 화면 맨 위 한 줄 (짧게) */
-    private String getMessage(boolean fits, Map<Stop, Stop> swaps, Alternative best, Stop fixedStop) {
+    private String getMessage(boolean fits, List<Map<Stop, Stop>> swapChoices, Alternative best, Stop fixedStop) {
         if (!fits) {
             if (fixedStop != null && best.getSlackMin() < 0) {
                 return fixedStop.getName() + " " + Geo.toDuration(-best.getSlackMin()) + " 늦어요";
             }
             return getLastArrive(best) > LAST_ARRIVE_MIN ? "밤늦게 끝나요" : "문 닫는 곳이 생겨요";
         }
-        if (!swaps.isEmpty()) {
-            return swaps.values().iterator().next().getName() + "과(와) 겹쳐요";
+        if (swapChoices.size() >= 2) {
+            return "식당 " + swapChoices.size() + "곳과 겹쳐요"; // 여러 곳은 식당 한 곳을 넣을 때만 생김
+        }
+        if (!swapChoices.isEmpty()) {
+            return swapChoices.get(0).values().iterator().next().getName() + "과(와) 겹쳐요";
         }
         return "다른 일정은 그대로예요";
     }
