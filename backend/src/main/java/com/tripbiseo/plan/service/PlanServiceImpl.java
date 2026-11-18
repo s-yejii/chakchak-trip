@@ -1089,6 +1089,9 @@ public class PlanServiceImpl implements PlanService {
 
     /** Gemini가 고른 칸 중 시간 고정 일정은 사용자가 정한 날·시각으로 다시 맞춤 (Gemini가 날을 틀려도 서버가 지킴, 11/04) */
     private void pinFixedDays(PlanConditions conditions, List<AiDraftStop> picks) {
+        for (AiDraftStop pick : picks) {
+            pick.setFixed(false); // 11/18: 예약(🔒)은 사용자가 시각을 정한 일정만. Gemini가 꼭 갈 곳에 붙인 fixed는 믿지 않음 (아래에서 예약만 다시 켬)
+        }
         if (conditions.getFixed() == null) {
             return;
         }
