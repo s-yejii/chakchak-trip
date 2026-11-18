@@ -239,6 +239,8 @@ function moveToTomorrow() {
   store.planStartDate = tomorrow
   if (store.planEndDate && store.planEndDate <= tomorrow) store.planEndDate = null
   timeNote.value = LATE_NOTE
+  // 11/18: 달력에서 오늘을 눌렀는데 말없이 내일로 돌아가 "오늘이 안 눌린다"처럼 보였어요 → 날짜 단계에서는 이유를 토스트로
+  if (step.value.id === 'when') showToast('지금은 늦어서 오늘 일정은 못 만들어요 (22시 넘어 시작) · 내일로 골랐어요')
 }
 function setDefaultTimes() {
   if (isToday()) {
