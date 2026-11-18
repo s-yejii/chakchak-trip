@@ -164,7 +164,7 @@
 | `POST /api/live/rag/embed` | 리뷰 RAG 준비: 시연 동선 500m 안 리뷰 임베딩 채우기 (개발용) | 화면 없음 | 있음 (11/15) |
 | `POST /api/live/rag/rank` | 후보 가게를 분위기로 줄 세워 보기 (개발·평가용) | 화면 없음 | 있음 (11/15) |
 | `POST /api/live/rag/compare` | 같은 후보에서 A(글자)·B(벡터)·C(RAG) 결과 비교 (평가용, `docs/rag-eval/run_eval.py`) | 화면 없음 | 있음 (11/16) |
-| (주소 미정) | 줄서기 대기 시간 반영 | live/LiveView (TablingModal) | 확인 필요 |
+| (주소 미정) | 줄서기 대기 시간 반영 | live/LiveView | 확인 필요 |
 | (주소 미정) | "그냥 갈게요" (늦어도 그대로 가기) | member/LockDelayView, member/LockPushView | 확인 필요 |
 
 ### ⑤ 여행 후·지도 부가 (after)
@@ -185,8 +185,8 @@
 | `GET /api/photos/{photoId}/file` | 사진·영상 파일 (`<img>`·`<video>` 주소) | after/AlbumView, after/RetroView | 있음 (11/06) |
 | `GET /api/trips/{id}/shorts` | 추억 쇼츠: 사진마다 AI 감성 자막 + 여행 분위기 | after/ShortsView | 있음 (11/14) |
 | `GET /api/route` | 길 안내: 경로선 + 단계별 안내 (도보·버스·지하철·택시) | after/RouteGuideView | 있음 |
-| `GET /api/amenities/nearby?kind=` | 근처 화장실·쓰레기통 | after/RouteGuideView, live/LiveView (AmenityChips) | 확인 필요 |
-| `POST /api/trips/{id}/visits` | 일정에 없던 곳 "들렀어요" 기록 | live/LiveView (VisitedPin), member/LockStayView | 확인 필요 |
+| `GET /api/amenities/nearby?kind=` | 근처 화장실·쓰레기통 | after/RouteGuideView, live/LiveView | 확인 필요 |
+| `POST /api/trips/{id}/visits` | 일정에 없던 곳 "들렀어요" 기록 | live/LiveView, member/LockStayView | 확인 필요 |
 
 ### 삭제 예정
 

@@ -37,32 +37,3 @@ export const concertTrip = {
     { text: '알러지약', done: false },
   ],
 }
-
-// 다가오는 여행: 성내동 카페 2차
-export const cafeTrip = {
-  id: 'plan2',
-  title: '성내동 카페 2차',
-  date: '11/1(토)',
-  who: '친구 2명',
-  move: 40,
-  stops: [
-    { id: 'alley', time: '11:00', name: '천호 골목 산책', dur: 40, img: '/img/alley.jpg', meta: '산책 · 40분', imp: 'drop', wx: 'sun', x: 70, y: 190 },
-    { id: 'dessert', time: '11:47', name: '천호 디저트 카페', dur: 50, img: '/img/dessert.jpg', meta: '카페 · 50분', imp: 'maybe', wx: 'sun', x: 118, y: 212, leg: { mode: 'walk', min: 7, walk: 7 } },
-    { id: 'daelim', time: '12:46', name: '성내동 카페', dur: 80, img: '/img/daelim.jpg', meta: '카페 · 1시간 20분', imp: 'must', wx: 'sun', x: 215, y: 205, leg: { mode: 'walk', min: 9, walk: 9 } },
-    { id: 'gallery', time: '14:12', name: '천호 작은 갤러리숍', dur: 40, img: '/img/gallery.jpg', meta: '전시 · 40분', imp: 'maybe', wx: 'sun', x: 175, y: 118, leg: { mode: 'walk', min: 6, walk: 6 } },
-    { id: 'sopum', time: '15:10', name: '천호 소품 편집숍', dur: 30, img: '/img/sopum.jpg', meta: '쇼핑 · 30분', imp: 'maybe', wx: 'cloud', x: 252, y: 236, leg: { mode: 'walk', min: 18, walk: 18 } },
-  ],
-  checks: [],
-  pack: [
-    { text: '신분증', done: false },
-    { text: '보조배터리', done: false },
-  ],
-}
-
-// 이동 수단마다 걸리는 시간 (걸어서 걸리는 시간으로 대충 계산한 시연용 값)
-export function minutesBy(mode, walk) {
-  if (mode === 'bus') return Math.round(walk * 0.55) + 6
-  if (mode === 'subway') return Math.round(walk * 0.45) + 9
-  if (mode === 'taxi') return Math.round(walk * 0.3) + 4
-  return walk
-}

@@ -28,9 +28,3 @@ export const planArrive = 1095 // 18:15
 // 늦은 상황(16:21, 아직 성내동 카페)의 남은 일정 도착 예상
 export const lateArrive = { 4: 996, 5: 1064, 6: 1124 } // 16:36, 17:44, 18:44
 export const lateMinutes = 14 // 공연 입장에 14분 늦음
-
-// 다녀온 곳 핀을 눌렀을 때 보이는 정보
-export const visitedInfo = {
-  1: { name: '천호 쭈꾸미골목', time: '13:00–14:00 다녀옴', pay: 32000, x: 90, y: 330 },
-  2: { name: '강풀만화거리 산책', time: '14:10–14:40 다녀옴', pay: 0, x: 140, y: 250 },
-}

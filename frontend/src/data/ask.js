@@ -31,17 +31,11 @@ const CATEGORIES = [
   { category: '술집', kind: 'pub', words: /술|맥주|펍/ },
 ]
 const REPLAN_WORDS = /비|실내|우산|늦|바꿔|더 있|다시/
-const RAIN_WORDS = /비|실내|우산/
 const NEXT_WORDS = /다음|어디/
 const TIME_WORDS = /남았|여유|몇 시|공연/
 
 const MAP_METERS_PER_PX = 4 // 지도 그림 1px ≈ 4m
 const TOP_COUNT = 3 // 추천은 평점 상위 3곳
-
-// 비·실내 요청인지 (비 요청은 "비 올 때 바꾸기" 화면으로 보내요, 10/30 결정)
-export function isRainRequest(message) {
-  return RAIN_WORDS.test(message)
-}
 
 // 사용자 말 → assist 응답 { kind, ... }
 // kind: 'ask-radius'(추천) / 'alternatives'(일정 바꾸기) / 'text'(그 밖의 질문)
