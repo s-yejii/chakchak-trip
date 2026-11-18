@@ -7,13 +7,13 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { clearLiveNotices, showLiveNotice } from '@/utils/liveBanner'
 import { getDevScenario, setDevClock, setDevSpeed } from '@/api/dev'
-import { getTrip } from '@/api/trips'
+import { getRouteGuide, getTrip } from '@/api/trips'
 import { useReplanStore } from '@/stores/replan'
 import { addDays } from '@/utils/dates'
-import { appNow, clearCommand, devMode, ensureDemoFlow, syncClock } from '@/utils/devMode'
+import { appNow, clearCommand, devMode, ensureDemoFlow, INCIDENT_STORE_KEY, syncClock } from '@/utils/devMode'
 import { toMinutes, toTime } from '@/utils/time'
 import { showToast } from '@/utils/toast'
-import { demoRide, demoRoute } from '@/utils/demoRoute'
+import { boatChecking, boatPending, demoRide, demoRoute } from '@/utils/demoRoute'
 import { incidentClockMin, isBoardingPlace, lateMinutesFor, planDeparture } from '@/utils/departure'
 
 const props = defineProps({
@@ -34,6 +34,8 @@ const METERS_PER_DEGREE = 111000
 const WAIT_MIN_PER_KM = 3 // 경로를 못 받을 때 이동 분 어림 (1km에 3분 + 기다림)
 const WAIT_EXTRA_MIN = 8
 const MORNING_LEAD_MIN = 15
+const BOAT_WAIT_TRIES = 16 // 배 대답 기다리기: 0.5초 × 16 = 최대 8초
+const BOAT_WAIT_MS = 500
 const NOTICE_MS = 2000 // 출발 안내를 보여 주고 움직이기 시작할 때까지
 const NEARBY_M = 200 // 이만큼 가까우면(같은 건물·바로 옆) 길 이동을 안 보여 주고 걸어서 몇 분
 const INSIDE_WALK_MIN = 2 // 다음 날 아침: 첫 장소로 떠날 시각 몇 분 전에 일어난 걸로
@@ -43,6 +45,7 @@ const replan = useReplanStore()
 const router = useRouter()
 const MUTE_AGAIN_MIN = 10 // 여행 중 화면 MUTE_AGAIN_MIN과 같음
 const TIGHT_SLACK_MIN = 5 // 예약까지 여유가 이 이하면 돌발 (서버 "지금 나가지 않으면 늦어요"와 같은 기준)
+const CAFE_KEEP_MIN = 5 // 카페를 예약에 맞춰 넣을 때 예약 이만큼 전 도착 (서버 CafeStay.KEEP_SLACK_MIN과 같음, 11/17)
 const origin = ref(null) // 시나리오 출발지 (가마산로 242)
 const scenario = ref(null) // 시연 시나리오 (조금 더 머무는 곳 등)
 let wanderTimer = null
@@ -100,6 +103,8 @@ function guessMinutes(from, to) {
 // "다음 장소로"
 async function goNext() {
   if (isBusy.value) return
+  for (let i = 0; i < BOAT_WAIT_TRIES && boatChecking.value; i++) await wait(BOAT_WAIT_MS) // 11/17: 배를 묻는 중이면 대답을 잠깐 기다림 (안 기다리면 배 팝업 전에 지하철로 떠났어요)
+  if (boatPending.value) return showToast('배로 갈지 먼저 골라 주세요') // 11/17: 출발 전 한강버스 카드를 고르기 전엔 안 떠남
   isBusy.value = true
   try {
     await moveToNext()
@@ -153,7 +158,7 @@ async function moveToNext() {
   await showNotice(next, travelMin)
 
   // 이동: 경로선을 따라 움직이고, 그동안 시계는 이동 시간만큼 흐름
-  const path = route && route.coords && route.coords.length > 1 ? route.coords : [[from.lat, from.lng], [next.lat, next.lng]]
+  const path = demoPathFor(next) || (route && route.coords && route.coords.length > 1 ? route.coords : [[from.lat, from.lng], [next.lat, next.lng]])
   demoRoute.value = path // 이동하는 동안 지도의 남색 점선도 이 길로 고정 (11/09 ①: 중간에 다시 받은 길과 어긋나지 않게)
   await wait(FOLLOW_START_MS) // 지도가 내 위치로 다가가며 확대하는 동안 점은 출발점에서 기다림 (11/09 ①)
   // 떠나는 그 시각에 서버에 "떠났다"를 먼저 알림 (점 두 개가 칸 밖이어야 출발로 봄) → 늦게 떠났으면 서버가 뒤 일정을 밀거나 줄임
@@ -169,7 +174,9 @@ async function moveToNext() {
   }
   // 떠난 뒤 다시 계산해서 예약에 늦게 되면 그 자리에서 멈춤 (시계도 멈춤) → 카드에서 고른 뒤 다시 [다음 장소로] (11/09 주형: 시간도 공간도 stop)
   const after = props.live.status.value
-  const isNowTight = next.fixed && after && after.fixed && after.fixed.slackMin <= TIGHT_SLACK_MIN && !replan.isMutedFor(props.live.tripId.value, after.fixed.name, Math.max(0, -after.fixed.slackMin))
+  // 11/17: 예약에 맞춰 넣은 카페(서버 CafeStay: 예약 5분 전 도착)에서 떠나는 거면 여유 5분도 계획대로라 안 멈춤
+  const isFittedCafe = isCafeStop(current) && after && after.fixed && after.fixed.slackMin >= CAFE_KEEP_MIN
+  const isNowTight = next.fixed && after && after.fixed && after.fixed.slackMin <= TIGHT_SLACK_MIN && !isFittedCafe && !replan.isMutedFor(props.live.tripId.value, after.fixed.name, Math.max(0, -after.fixed.slackMin))
   if (isIncident(after) || isNowTight) {
     blockedKey = after.alert ? after.alert.key : blockedKey
     demoRoute.value = null // 멈추면 서버가 지금 자리에서 다시 잰 길을 보여 줌
@@ -187,6 +194,23 @@ async function moveToNext() {
   await arrive(next, departDate, departMin + travelMin)
 }
 
+// 11/17 주형: 나들길은 산길 위라 TMAP 도보 길이 남산도서관 쪽으로 빙 돌아요 → 시연에선 회현·케이블카 쪽 짧은 길로 고정
+const NADEULGIL_NAME = '남산순환나들길'
+const NADEULGIL_PATH = [
+  [37.5616, 126.9827], // 르메르디앙 명동
+  [37.5604, 126.9830],
+  [37.5594, 126.9833], // 퇴계로 건너기 (회현 쪽)
+  [37.5584, 126.9833],
+  [37.5576, 126.9836], // 남산 케이블카 타는 곳 앞
+  [37.5567, 126.9845], // 소파로 오르막
+  [37.5559, 126.9856],
+  [37.55522, 126.98656], // 나들길 (와룡묘 앞)
+]
+/** 시연에서 길을 정해 둔 칸이면 그 길 (없으면 null → 길찾기 길) */
+function demoPathFor(next) {
+  return next && next.name === NADEULGIL_NAME ? NADEULGIL_PATH : null
+}
+
 // 출발 전 확인 (11/08 주형: 대안을 고른 다음에 움직여야지): 예약까지 여유 5분 이하·늦음 알림(late-)이면 시계를 멈추고 출발 안 함
 //   → 가운데 카드에서 대안을 고르면(안 늦게 되면) 다음에 누를 때 출발. "나중에"·"그냥 갈게요" 뒤 한 번 더 누르면 그대로 출발
 // 돌발(가운데 카드가 뜨는 늦음 알림)인지. 대안을 골랐거나 "그냥 갈게요"면 10분 더 늦기 전까지는 아님 (여행 중 화면과 같은 기준)
@@ -195,6 +219,10 @@ function isIncident(status) {
   if (!status || !status.alert || !status.fixed || !/^(late|lost)-/.test(status.alert.key || '')) return false
   const lateMin = Math.max(0, -status.fixed.slackMin)
   return !replan.isMutedFor(props.live.tripId.value, status.fixed.name, lateMin)
+}
+/** 카페·디저트·베이커리 칸인지 (서버 CafeStay.isCafe와 같은 글자) */
+function isCafeStop(stop) {
+  return !!stop && /카페|디저트|베이커리/.test(stop.category || '')
 }
 // 출발 안내와 같은 계산(planDeparture)으로 여유 5분 이하면 막음. 대안을 골랐거나 그냥 가기로 한 늦음(10분 더 늦기 전), 카드에서 [나중에] 뒤 다시 누름은 통과
 async function isBlocked(plan, status) {
@@ -207,6 +235,7 @@ async function isBlocked(plan, status) {
     return true
   }
   if (!plan.isTight) return false
+  if (isCafeStop(currentStop()) && plan.slack >= CAFE_KEEP_MIN) return false // 예약에 맞춰 넣은 카페에서 떠남 (11/17)
   const fixedName = status && status.fixed ? status.fixed.name : ''
   if (replan.isMutedFor(props.live.tripId.value, fixedName, Math.max(0, -plan.slack))) return false
   const key = status && status.alert && /^late-/.test(status.alert.key || '') ? status.alert.key : 'tight-' + plan.departMin
@@ -245,6 +274,17 @@ function isBusDownStart(current) {
   return !!setup && !!setup.busDownFrom && current.name === setup.busDownFrom && !isIncidentDone('busdown-' + current.id)
 }
 
+// 차 길(TMAP 자동차 길찾기)을 따라가는 점들. 길찾기가 안 되면 두 점 직선 (11/17 주형: 순환버스가 일직선으로 내려가던 문제)
+async function roadPath(from, to) {
+  try {
+    const guide = await getRouteGuide(from.lat, from.lng, to.lat, to.lng, 'car')
+    if (guide.available && guide.coords && guide.coords.length > 1) return [[from.lat, from.lng], ...guide.coords, [to.lat, to.lng]]
+  } catch (e) {
+    // 길찾기 실패면 직선으로
+  }
+  return [[from.lat, from.lng], [to.lat, to.lng]]
+}
+
 async function busDown(current, from) {
   const setup = scenario.value
   markIncidentDone('busdown-' + current.id)
@@ -253,7 +293,7 @@ async function busDown(current, from) {
   if (departMin > minutesOf(appNow())) await setClock(date, departMin)
   showLiveNotice({ key: 'busdown-' + current.id, at: hhmm(appNow()), title: '순환버스로 내려가요', body: '걸어서 내려가는 대신 버스 · 약 ' + setup.busDownMin + '분', warn: false })
   await wait(NOTICE_MS)
-  const path = [[from.lat, from.lng], [setup.busDownLat, setup.busDownLng]]
+  const path = await roadPath(from, { lat: setup.busDownLat, lng: setup.busDownLng }) // 11/17: 직선 대신 남산 찻길을 따라 내려가게
   demoRoute.value = path
   await wait(FOLLOW_START_MS)
   for (let step = 1; step <= LEFT_STEP; step++) { // 처음 몇 걸음은 서버에도 보내 "팔각정에서 떠났다"를 알림 (일반 이동과 같음)
@@ -274,6 +314,7 @@ async function busDown(current, from) {
   await props.live.placeAt(setup.busDownLat, setup.busDownLng, true) // 장소 칸은 아니고 버스에서 내린 자리 (다음 [다음 장소로]는 여기서 출발)
   await props.live.refresh()
 }
+
 
 // ---- 11/16 장면 3 뒤: 한강버스 카드 [배 타고 갈게요] (시연 계정만) ----
 // 숙소 → 탈 선착장(대중교통) → 강을 따라 배(선착장 순서대로) → 내린 선착장에서 쉬기 → 버스로 예약한 가게. 시계도 카드 시각대로
@@ -446,6 +487,9 @@ async function setUp() {
   if (saved) {
     for (const stop of saved.stops) if (isVisited(stop) && stop.state !== 'skipped') place = stop
   }
+  // 11/17: 이미 떠난 칸이면(순환버스로 내려온 뒤 등) 그 칸 말고 마지막으로 있던 자리에 둠 (화면을 다시 열면 팔각정으로 돌아가 하산을 또 하던 문제)
+  const last = readLastPosition(props.live.tripId.value)
+  if (last && (!place || place.departedAt || place === origin.value)) place = last
   if (place && !props.live.position.value) await props.live.placeAt(place.lat, place.lng, false)
 }
 
@@ -496,7 +540,6 @@ watch(() => devMode.command, async (command) => {
 //   예약(회식·서울역) 바로 앞 장소에서 [다음 장소로]를 처음 누르면, 그 자리에서 더 머문 걸로 LATE_TARGET_MIN분 늦는 시각까지 시계를 옮김
 //   → 가운데 늦음 카드가 뜨고 시계가 멈춤. 대안을 고르면 그 수단으로, "그냥 갈게요"면 원래 수단으로 늦게 도착
 //   예약마다 한 번만 (이미 [늦게 만들기]를 눌렀거나 이미 늦었으면 그대로)
-const INCIDENT_STORE_KEY = 'demo-incident-done'
 function readIncidents() {
   try { return JSON.parse(sessionStorage.getItem(INCIDENT_STORE_KEY) || '[]') } catch (e) { return [] }
 }
@@ -517,13 +560,28 @@ function isScenarioIncident(current) {
 async function startIncident(current, next, status) {
   // 11/16 리허설: 돌발은 하루에 한 번 (늦잠 뒤 스시이세이로 바꿔 넣어도 다시 늦게 만들지 않게). 예전엔 다음 칸 id마다 한 번이라 새 칸에서 또 늦었어요
   if (!current) return false
-  const doneKey = 'overstay-' + current.day
+  const doneKey = 'overstay-' + props.live.tripId.value + '-' + current.day // 11/17: 여행 번호까지 붙여 새 여행마다 늦잠이 꼭 뜨게 (날짜만 쓰면 전 판 기록 때문에 건너뛰었어요)
   if (!next.fixed || next.day !== current.day || isIncidentDone(doneKey) || !isScenarioIncident(current)) return false
   markIncidentDone(doneKey)
   if (!status || !status.fixed || status.fixed.id !== next.id || status.fixed.slackMin <= 0) return false // 이미 늦었으면 카드가 이미 떠 있음
   await makeLate(status, current, scenario.value.overstayLateMin)
   return true
 }
+
+// 마지막 위치를 여행 번호와 함께 기억 (다시 열거나 새로고침해도 그 자리에서 이어지게, 11/17)
+const LAST_POSITION_KEY = 'demo-last-position'
+function readLastPosition(tripId) {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(LAST_POSITION_KEY) || 'null')
+    return saved && saved.tripId === tripId ? { lat: saved.lat, lng: saved.lng } : null
+  } catch (e) {
+    return null
+  }
+}
+watch(() => props.live.position.value, (position) => {
+  if (!devMode.isOn || !position || !props.live.tripId.value) return
+  try { sessionStorage.setItem(LAST_POSITION_KEY, JSON.stringify({ tripId: props.live.tripId.value, lat: position.lat, lng: position.lng })) } catch (e) { /* 저장 못 해도 진행 */ }
+})
 
 onMounted(() => {
   setUp()

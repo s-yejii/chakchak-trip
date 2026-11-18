@@ -426,6 +426,13 @@ onMounted(async () => {
   }
   const setup = scenario.value
   if (!store.planOrigin) store.planOrigin = { name: setup.originName, address: setup.originAddress, category: '출발지', lat: setup.originLat, lng: setup.originLng }
+  // 11/17 주형: 날짜가 진짜 오늘(11/17, 시연 시계를 맞추기 전에 잡힌 기본값)이면 시연 날짜(11/16)로 → 만든 여행이 'D-1'이 되어 [여행 시작]이 안 보이던 문제
+  const realToday = dateText(new Date())
+  if (setup.demoDate && store.planStartDate === realToday && setup.demoDate !== realToday) {
+    const nights = store.planEndDate ? daysBetween(store.planStartDate, store.planEndDate) : 0
+    store.planStartDate = setup.demoDate
+    if (store.planEndDate) store.planEndDate = addDays(setup.demoDate, nights)
+  }
   // 예약(산청숯불가든 회식·스시도)은 미리 넣지 않음. 발표자가 "예약한 곳" 단계에서 장소 검색으로 직접 넣어요 (11/09 상재 제보)
 })
 // 숙소는 미리 넣지 않음 (11/08 주형: 시연에서 숙소 단계에서 직접 찾아 넣는 모습을 보여 줌)

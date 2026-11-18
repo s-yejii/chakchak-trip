@@ -65,8 +65,8 @@ public class HangangBusServiceImpl implements HangangBusService {
         Integer rainStart = liveWeatherChecker.findRainStart(fromLat, fromLng);
         int directArrive = nowMin + direct.getMinutes();
         HangangBusPicker.Choice choice = HangangBusPicker.pick(hangangBusMapper.selectTimeList(), readyAt, afterAlightMin, arriveByMin, directArrive, rainStart);
-        if (choice == null) {
-            return null;
+        if (choice == null || !isTowardDestination(fromLat, fromLng, findPier(boardPiers, choice.board.getPierId()), findPier(alightPiers, choice.alight.getPierId()), toLat, toLng)) {
+            return null; // 11/17: 배가 목적지 쪽으로 가는 경우만 (잠실 스시이세이 → 동서울에 "뚝섬까지 가서 배로 잠실로 돌아오기"가 나왔어요)
         }
         HangangBusOption option = new HangangBusOption();
         option.setBoardPier(shortName(findPier(boardPiers, choice.board.getPierId())));
@@ -126,6 +126,21 @@ public class HangangBusServiceImpl implements HangangBusService {
             }
         }
         return null;
+    }
+
+    /**
+     * 배가 목적지 쪽으로 데려다주는지 (11/17): 탈 선착장이 목적지보다 가깝고(지나쳐 가지 않음),
+     * 내릴 선착장이 탈 선착장보다 목적지에 가까울 때만 true. 거리는 직선(m)
+     */
+    static boolean isTowardDestination(double fromLat, double fromLng, HangangBusPier board, HangangBusPier alight, double toLat, double toLng) {
+        if (board == null || alight == null) {
+            return false;
+        }
+        double fromToDestination = Geo.distanceMeters(fromLat, fromLng, toLat, toLng);
+        double fromToBoard = Geo.distanceMeters(fromLat, fromLng, board.getLat(), board.getLng());
+        double boardToDestination = Geo.distanceMeters(board.getLat(), board.getLng(), toLat, toLng);
+        double alightToDestination = Geo.distanceMeters(alight.getLat(), alight.getLng(), toLat, toLng);
+        return fromToBoard < fromToDestination && alightToDestination < boardToDestination;
     }
 
     private HangangBusPier findPier(List<HangangBusPier> piers, String id) {

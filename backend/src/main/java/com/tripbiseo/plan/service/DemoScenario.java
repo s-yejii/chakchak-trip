@@ -48,6 +48,7 @@ public class DemoScenario {
     private static final double BUS_LNG = 127.0940622;
     private static final String STAY_NAME = "르메르디앙 서울 명동";
     private static final String STAY_ADDRESS = "서울 중구 명동8나길 38";
+    private static final String STAY_PLACE_ID = "tour-3341540"; // 11/17: 관광공사(TourAPI) "르메르디앙 서울 명동" → 카드에 공식 사진 (좌표는 아래 STAY_LAT·LNG 그대로)
     private static final double STAY_LAT = 37.5616;   // DB에 숙소가 없어 같은 건물 식당 좌표 (11/12)
     private static final double STAY_LNG = 126.9827;
     private static final String STAY_CHECK_IN = "15:00";
@@ -58,6 +59,9 @@ public class DemoScenario {
     // 11/16 장면 2(주형 A안): 팔각정 → 회식은 걸어서 내려갈 계획(여유가 적게 보임) → [다음 장소로]를 누르면 순환버스로 빨리 내려와 여유가 늘어남
     private static final String BUS_DOWN_FROM = "남산 팔각정";
     private static final String WALK_DOWN_TO = "산청숯불가든 을지로"; // 이 칸까지는 걸어서 가는 계획 (move_mode walk)
+    // 11/17 리허설: 나들길 → 팔각정도 걷기로 (산책로를 걸어 올라가는 장면). 수단을 비워 두면 서버 길찾기가 판마다 걷기 19분 / 대중교통 섞인 21분을 골라
+    //   팔각정 도착이 17:22 ↔ 17:24로 흔들렸어요 → 대본 숫자(17:22 · 여유 30분 · 17:52 · 18:05 · 43분)가 매번 같게
+    private static final String WALK_UP_TO = "남산 팔각정";
     private static final double BUS_DOWN_LAT = 37.5605217984; // 버스에서 내리는 곳: 남산 아래 퇴계로(예전 예장공원 자리)
     private static final double BUS_DOWN_LNG = 126.9888869118;
     private static final int BUS_DOWN_MIN = 13;         // 순환버스로 내려오는 분
@@ -75,15 +79,17 @@ public class DemoScenario {
     //          → 16:40 동서울종합터미널 버스(고정). 동서울터미널도 DB에 없어 같은 건물 좌표를 씀
     //   르메르디앙 서울 명동은 DB에 없어 장소 번호 없이 같은 건물(라팔레트 파리, 명동8나길 38) 좌표를 씀
     //   이동(PlanTravelTime 어림): 역→남도분식 7분, 동백양과점→숙소 17분, 숙소→나들길 15분, 나들길→팔각정 7분, 팔각정→을지로 18분, 회식→숙소 15분, 숙소→스시도 65분
+    // 11/17 리허설: 진짜 길찾기로 숙소 → 나들길 28분, 나들길 → 팔각정 19분이라 계획 시각을 16:15·17:25로 (일정 점검 "늦게 도착해요" 경고 없게).
+    //   실제 움직임은 도착 + 머무는 시간으로 가서 대본 숫자(16:13 나들길 · 17:22 팔각정 · 여유 30분 · 17:52 순환버스 · 18:05 여유 43분)는 그대로
     private static final Object[][] STOPS = {
         { 1, "12:00", "남도분식 익선점", "naver-1129603411", "분식", 37.5731697, 126.9901014, 80, false, "점심 · 종로3가역에서 걸어서 7분", null },
         { 1, "13:30", "동백양과점 익선점", "naver-1387480043", "카페,디저트", 37.5734323, 126.9895996, 60, false, "같은 익선동 골목 · 걸어서 5분", null },
-        { 1, "15:00", STAY_NAME, null, "숙소", STAY_LAT, STAY_LNG, 45, false, "체크인 15:00 · 짐 풀고 쉬기", null },
-        { 1, "16:00", "남산순환나들길", "tour-2783557", "관광지", 37.5552151, 126.9865625, 50, false, "숙소에서 15분 · 걸어서 팔각정까지", null }, // 11/17: 장소 핀이 산책로 경계에서 35m 밖이라(도착은 경계 30m 안) 경계 위 가장 가까운 점으로
-        { 1, "17:00", "남산 팔각정", "tour-1603336", "관광지", 37.5516394747, 126.9876206116, 30, false, "내려올 때는 걸어서 내려올 계획 (약 50분)", "must" }, // 11/16 리허설(주형 B안): 예장공원 칸을 빼서, 순환버스로 빨리 내려오면 회식까지 여유가 1시간 넘게 보이게
+        { 1, "15:00", STAY_NAME, STAY_PLACE_ID, "숙소", STAY_LAT, STAY_LNG, 45, false, "체크인 15:00 · 짐 풀고 쉬기", null },
+        { 1, "16:15", "남산순환나들길", "tour-2783557", "관광지", 37.5552151, 126.9865625, 50, false, "숙소에서 15분 · 걸어서 팔각정까지", null }, // 11/17: 장소 핀이 산책로 경계에서 35m 밖이라(도착은 경계 30m 안) 경계 위 가장 가까운 점으로
+        { 1, "17:25", "남산 팔각정", "tour-1603336", "관광지", 37.5516394747, 126.9876206116, 30, false, "내려올 때는 걸어서 내려올 계획 (약 50분)", "must" }, // 11/16 리허설(주형 B안): 예장공원 칸을 빼서, 순환버스로 빨리 내려오면 회식까지 여유가 1시간 넘게 보이게
         { 1, "19:00", "산청숯불가든 을지로", "naver-1850187827", "육류,고기요리", 37.5658389, 126.9906186, 120, true, "회식 예약 5명", null },
-        { 1, "21:30", STAY_NAME, null, "숙소", STAY_LAT, STAY_LNG, 30, false, "숙소 · 다음 날 여기서 출발", null },
-        { 2, "10:00", STAY_NAME, null, "숙소", STAY_LAT, STAY_LNG, 60, false, "체크아웃 11:00 · 지하철로 강남", null },
+        { 1, "21:30", STAY_NAME, STAY_PLACE_ID, "숙소", STAY_LAT, STAY_LNG, 30, false, "숙소 · 다음 날 여기서 출발", null },
+        { 2, "10:00", STAY_NAME, STAY_PLACE_ID, "숙소", STAY_LAT, STAY_LNG, 60, false, "체크아웃 11:00 · 지하철로 강남", null },
         { 2, "12:30", "스시도", "naver-1008521969", "일식당", 37.4952278, 127.0850148, 90, true, "점심 예약 5명 · 숙소에서 대중교통 약 65분 · 점심 뒤 해산", null },
         { 2, BUS_TIME, BUS_NAME, null, "버스터미널", BUS_LAT, BUS_LNG, 30, true, "고속버스 16:40 출발 · 넘기면 놓침 · 스시도에서 대중교통 약 31분", null },
     };
@@ -116,8 +122,8 @@ public class DemoScenario {
         response.setTransports(new ArrayList<>(List.of("subway", "walk", "bus")));
         for (Object[] row : STOPS) {
             Stop stop = toStop(row);
-            if (WALK_DOWN_TO.equals(stop.getName())) {
-                stop.setMode("walk"); // 장면 2: 팔각정에서 걸어서 내려갈 계획 → 여유가 적게 보였다가 버스를 타면 늘어남
+            if (WALK_DOWN_TO.equals(stop.getName()) || WALK_UP_TO.equals(stop.getName())) {
+                stop.setMode("walk"); // 장면 2: 나들길 → 팔각정 걸어 올라가고, 팔각정에서 걸어서 내려갈 계획 → 여유가 적게 보였다가 버스를 타면 늘어남
             }
             response.getStops().add(stop);
         }
