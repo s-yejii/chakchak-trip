@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class SqlPromptMaker {
 
-    /** 예시: {사용자 말, SQL (못 찾는 질문이면 null), 설명 또는 못 찾는 이유, (분위기가 있으면) mood, moodWord} */
+    /** 예시: {사용자 말, SQL (못 찾는 질문이면 null), 설명 또는 못 찾는 이유, (분위기가 있으면) mood, moodWord, (다른 곳이면) place} */
     static final List<String[]> EXAMPLES = List.of(
         new String[] {"가는 길에 5분 안에 들를 카페",
             "SELECT id FROM ask_place WHERE kind = 'cafe' AND detour_minutes(geom, :route) <= 5 "
@@ -42,6 +42,14 @@ public class SqlPromptMaker {
             "SELECT id FROM ask_place WHERE kind = 'cafe' AND amenities ILIKE '%반려동물 동반%' AND ST_DWithin(geom, :me, 700) "
                 + "ORDER BY ST_Distance(geom, :me) LIMIT 5",
             "가게 정보에 반려동물 동반이 있는 700m 안 카페를 가까운 순으로 찾았어요"},
+        new String[] {"용산구청 주변 맛집 추천해줘",
+            "SELECT id FROM ask_place WHERE kind = 'food' AND ST_DWithin(geom, :me, 500) ORDER BY rating_adj DESC LIMIT 5",
+            "용산구청 500m 안 식당을 평점 순으로 찾았어요",
+            null, null, "용산구청"},
+        new String[] {"강남역 근처 분위기 좋은 카페",
+            "SELECT p.id FROM ask_place p WHERE p.kind = 'cafe' AND ST_DWithin(p.geom, :me, 500) ORDER BY p.rating_adj DESC LIMIT 5",
+            "강남역 500m 안 카페 중 리뷰에서 분위기가 좋다고 한 곳이에요",
+            "분위기 좋은", "분위기", "강남역"},
         new String[] {"만원 이하 파스타", null,
             "가격 정보가 없어서 가격으로는 찾을 수 없어요"});
 
@@ -132,6 +140,9 @@ public class SqlPromptMaker {
              + "- 정렬을 말하지 않으면 rating_adj DESC\n"
              + "- '안 돌아가는·덜 돌아가는·가는 길에서 가까운'은 detour_minutes(geom, :route) 작은 순, '가까운'만 말하면 ST_Distance(geom, :me) 작은 순\n"
              + "- '제일·가장' 하나를 물으면 LIMIT 1\n"
+             + "- 내 위치가 아닌 다른 곳(역·건물·동네·구 이름, 예: 강남역·용산구청·한남동·익선동)을 기준으로 찾으면 place에 그 이름을 그대로 적고, "
+             + "위치 빈칸은 :me만 써. 서버가 :me를 그곳 위치로 바꿔. 그때는 :route·:next·:slack을 쓰지 마. "
+             + "'다음 장소'·'가는 길'·'근처'만 말하면 place를 적지 마\n"
              + "- 가격·메뉴·지금 몇 명 있는지(실시간 혼잡도)·웨이팅 시간은 표에 없어. 그런 조건이 핵심이면 supported false. "
              + "'혼자 가도 편한'·'붐비지 않는'처럼 리뷰에 나올 만한 분위기는 혼잡도가 아니라 mood야\n";
     }
@@ -140,6 +151,7 @@ public class SqlPromptMaker {
         return "[답]\n"
              + "{\"supported\": true, \"sql\": \"SELECT …\", \"explain\": \"어떻게 찾았는지 한 줄\"}\n"
              + "분위기가 있으면 {\"supported\": true, \"sql\": \"SELECT …\", \"explain\": \"…\", \"mood\": \"조용한\", \"moodWord\": \"조용\"}\n"
+             + "다른 곳 기준이면 위에 \"place\": \"강남역\"을 더 적어\n"
              + "못 찾으면 {\"supported\": false, \"reason\": \"왜 못 찾는지 한 줄\"}\n";
     }
 
@@ -159,10 +171,14 @@ public class SqlPromptMaker {
             } else {
                 text.append("{\"supported\": true, \"sql\": \"").append(example[1])
                     .append("\", \"explain\": \"").append(example[2]).append('"');
-                boolean hasMood = example.length >= 5;
+                boolean hasMood = example.length >= 5 && example[3] != null;
                 if (hasMood) {
                     text.append(", \"mood\": \"").append(example[3])
                         .append("\", \"moodWord\": \"").append(example[4]).append('"');
+                }
+                boolean hasPlace = example.length >= 6 && example[5] != null;
+                if (hasPlace) {
+                    text.append(", \"place\": \"").append(example[5]).append('"');
                 }
                 text.append("}\n");
             }
