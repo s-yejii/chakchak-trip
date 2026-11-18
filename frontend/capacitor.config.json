@@ -1,0 +1,15 @@
+{
+  "appId": "com.tripbiseo.app",
+  "appName": "착착트립",
+  "webDir": "capacitor-web",
+  "server" : {
+    "url" : "https://tripbiseo.duckdns.org"
+  },
+  "plugins": {
+    "SystemBars": {
+      "insetsHandling": "disable",
+      "hidden": true
+    }
+  }
+
+}

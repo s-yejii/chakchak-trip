@@ -1,5 +1,5 @@
 <script setup>
-// 휴대폰 맨 위 상태바 (PC에서 볼 때만). 잠금화면에서는 흰 글씨, 시간은 숨김
+// 휴대폰 맨 위 상태바 (PC에서 볼 때, 그리고 폰에서는 시연 계정일 때만). 잠금화면에서는 흰 글씨, 시간은 숨김
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { appNow, devMode } from '@/utils/devMode'
@@ -33,7 +33,7 @@ onUnmounted(() => clearInterval(timer))
 </script>
 
 <template>
-  <div class="statusbar" :class="{ 'statusbar--light': isLight }" aria-hidden="true">
+  <div class="statusbar" :class="{ 'statusbar--light': isLight, 'statusbar--demo': isDemo }" aria-hidden="true">
     <span :style="{ visibility: hideTime ? 'hidden' : 'visible' }">{{ time }}</span>
     <span class="statusbar__icons">
       <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1" /><rect x="5" y="5.5" width="3" height="6.5" rx="1" /><rect x="10" y="3" width="3" height="9" rx="1" /><rect x="15" y="0" width="3" height="12" rx="1" /></svg>
