@@ -145,7 +145,8 @@ const plannedPlaceIds = computed(() => {
 const isMoving = computed(() => !!live.position.value && (!!demoRoute.value || (!currentStop.value && !!nextStop.value)) && !adding.value && !asking.value)
 // 지도 시점: 내 위치가 있으면 머무는 중에도 늘 내 위치를 가운데에 고정 (11/09 상재). 근처 찾기·AI 묻기 중에만 풀어요
 // 시연 계정(개발자 모드)에서만 (11/09 상재: 중간발표 시연용). 일반 계정은 원래 지도 동작 그대로
-const isFollowing = computed(() => devMode.isOn && !!live.position.value && !adding.value && !asking.value)
+const isFollowPaused = ref(false) // 11/17 주형: 지도를 손으로 끌면 따라가기를 멈춤 → [내 위치]를 누르면 다시 따라감
+const isFollowing = computed(() => devMode.isOn && !isFollowPaused.value && !!live.position.value && !adding.value && !asking.value)
 const heading = ref(null) // 진행 방향(도, 북=0)
 const HEADING_MIN_MOVE = 0.00004 // 이만큼(약 4m)보다 적게 움직이면 방향을 안 바꿔요 (GPS 떨림에 화살표가 흔들리지 않게)
 let lastPoint = null
@@ -652,6 +653,7 @@ function previewStop(stop) {
 // 지도를 만지면 이름표를 지움
 function onMapTouched() {
   previewId.value = null
+  if (devMode.isOn) isFollowPaused.value = true // 시연 계정: 손으로 지도를 옮기면 따라가기 멈춤
 }
 onUnmounted(() => {
   clearTimeout(scrollTimer)
@@ -717,6 +719,7 @@ const segTo = computed(() => {
 
 // ------------------------------------------------------------ 오른쪽 버튼·칩
 function locate() {
+  isFollowPaused.value = false // 다시 내 위치 따라가기
   if (mapRef.value && mapRef.value.focusMe()) return
   showToast('아직 지금 위치를 받지 못했어요')
 }
