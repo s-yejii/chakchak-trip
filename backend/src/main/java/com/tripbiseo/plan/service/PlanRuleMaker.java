@@ -532,7 +532,7 @@ public class PlanRuleMaker {
             }
             boolean isLunchTime = !isLunchDone && clock >= LUNCH_START_MIN && clock < LUNCH_END_MIN;
             boolean isDinnerTime = !isDinnerDone && clock >= DINNER_START_MIN && clock < DINNER_END_MIN;
-            String slotKinds = isLunchTime ? FOOD_KIND : isDinnerTime ? dinnerKindsOf(conditions) : outingKindsOf(kinds, clock, previous, beforePrevious);
+            String slotKinds = isLunchTime ? FOOD_KIND : isDinnerTime ? dinnerKindsOf(conditions) : outingKindsOf(kinds, clock, previous, beforePrevious, !isOpenEnd);
             if (slotKinds.isEmpty()) {
                 clock += TIME_STEP_MIN; // 넣을 볼거리가 없으면 다음 식사 때까지 기다림
                 continue;
@@ -661,8 +661,9 @@ public class PlanRuleMaker {
      * 식사 때가 아닌 칸의 종류 (앞이 먼저): 밤엔 술집, 식사 뒤엔 카페, 오전엔 볼거리. 카페 다음에 또 카페는 안 넣음.
      * 11/18: 술집은 하루 2차 한 번만(저녁 칸이 술집이었으면 그 뒤 한 번), 볼거리 두 곳 다음엔 카페 먼저 (봉은사 → VR존 → 광장 3곳 연속)
      */
-    String outingKindsOf(List<String> kinds, int clock, String previous, String beforePrevious) {
-        boolean isBarDone = previous.equals(BAR_KIND) || beforePrevious.equals(BAR_KIND);
+    String outingKindsOf(List<String> kinds, int clock, String previous, String beforePrevious, boolean isHardEnd) {
+        // 끝 장소가 없으면 2차가 그날 마지막(끝 시간 없음)이라 3차를 안 넣고, 끝 장소를 정해 시간이 남으면 3차도 (11/18)
+        boolean isBarDone = !isHardEnd && (previous.equals(BAR_KIND) || beforePrevious.equals(BAR_KIND));
         if (kinds.contains(BAR_KIND) && clock >= BAR_FROM_MIN && !isBarDone) {
             return BAR_KIND;
         }

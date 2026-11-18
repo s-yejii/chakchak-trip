@@ -59,15 +59,16 @@ class PlanRuleMakerUsabilityTest {
         assertEquals("bar,food", ruleMaker.dinnerKindsOf(timed("18:00", "23:30", "bar")));
         assertEquals("food", ruleMaker.dinnerKindsOf(timed("11:00", "22:00", "food", "cafe", "bar")));
         List<String> kinds = List.of("bar", "food", "cafe", "tour");
-        assertEquals("bar", ruleMaker.outingKindsOf(kinds, 20 * 60, "food", "")); // 저녁 뒤 2차
-        assertFalse(ruleMaker.outingKindsOf(kinds, 21 * 60 + 30, "bar", "bar,food").contains("bar")); // 3차는 없음 (2차는 끝 시간 없음)
+        assertEquals("bar", ruleMaker.outingKindsOf(kinds, 20 * 60, "food", "", false)); // 저녁 뒤 2차
+        assertFalse(ruleMaker.outingKindsOf(kinds, 21 * 60 + 30, "bar", "bar,food", false).contains("bar")); // 끝 장소가 없으면 3차 없음 (2차는 끝 시간 없음)
+        assertEquals("bar", ruleMaker.outingKindsOf(kinds, 21 * 60 + 30, "bar", "food", true)); // 끝 장소를 정해 시간이 남으면 3차
     }
 
     @Test
     void 볼거리_두_곳_다음엔_카페_먼저() {
         List<String> kinds = List.of("food", "cafe", "tour");
-        assertTrue(ruleMaker.outingKindsOf(kinds, 16 * 60, "tour", "tour,culture").startsWith("cafe"));
-        assertTrue(ruleMaker.outingKindsOf(kinds, 15 * 60, "tour", "cafe").startsWith("tour"));
+        assertTrue(ruleMaker.outingKindsOf(kinds, 16 * 60, "tour", "tour,culture", false).startsWith("cafe"));
+        assertTrue(ruleMaker.outingKindsOf(kinds, 15 * 60, "tour", "cafe", false).startsWith("tour"));
     }
 
     @Test
