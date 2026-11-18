@@ -224,7 +224,13 @@ const lostArriveText = computed(() => {
 })
 const isCardOpen = isLostOpen // 가운데 카드는 놓침 카드 하나뿐 (11/12)
 // 고른 카드가 아직 안 간 식당·카페 예약이면 "못 가게 됐어요" 버튼
-const selectedMealFixed = computed(() => stops.value.find((stop) => stop.id === selected.value && stop.fixed && stop.meal && stop.reach !== 'done' && stop.reach !== 'here') || null)
+const LOST_BUTTON_SLACK_MIN = -1 // 시연 계정: 예약에 늦을 때(여유 -1분 이하)만 [못 가게 됐어요] (11/17 주형: 여유 41분인데 버튼이 보여 대본 밖으로 감. 예약 앞 카페(여유 5분)에서도 안 보이게)
+const selectedMealFixed = computed(() => {
+  const stop = stops.value.find((item) => item.id === selected.value && item.fixed && item.meal && item.reach !== 'done' && item.reach !== 'here') || null
+  if (!stop || !devMode.isOn) return stop // 일반 계정은 그대로
+  const isTight = fixed.value && fixed.value.id === stop.id && fixed.value.slackMin <= LOST_BUTTON_SLACK_MIN
+  return isTight ? stop : null
+})
 
 // 비슷한 근처 가게: 지도 위에 핀으로 (근처 찾기와 같은 자리, 지금 위치 기준)
 function openSimilar() {
