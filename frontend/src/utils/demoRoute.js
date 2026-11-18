@@ -16,3 +16,6 @@ export const boatPending = ref(false)
 // 출발 전 한강버스 카드가 서버에 묻는 중인지 (11/17: 이때 [다음 장소로]를 누르면 막지 않고 대답을 몇 초 기다렸다가 판단)
 export const boatChecking = ref(false)
 
+// 장면 2 (11/17 주형): 순환버스에서 내린 뒤 다음 예약까지 시간이 많이 남으면 가운데 카드 "이대로 갈까요?"
+// DemoDrive가 { name, slackMin }을 넣고 시계를 멈춤 → 여행 중 화면에서 고르면 null (그때 DemoDrive가 시계를 다시 흐르게)
+export const restAsk = ref(null)

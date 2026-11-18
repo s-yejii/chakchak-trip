@@ -46,7 +46,7 @@ import LiveTour from '@/components/live/LiveTour.vue'
 import { isTourDone, markTourDone } from '@/utils/liveTour'
 import LinkAddSheet from '@/components/live/LinkAddSheet.vue'
 import { useReplanStore } from '@/stores/replan'
-import { demoRide, demoRoute } from '@/utils/demoRoute'
+import { demoRide, demoRoute, restAsk } from '@/utils/demoRoute'
 
 const MUTE_AGAIN_MIN = 10 // "그냥 갈게요" 뒤 이만큼 더 늦어지면 다시 알림
 const LEG_MODE = { walk: 'walk', transit: 'subway', car: 'taxi' } // 서버 이동 수단 → 카드 칩 아이콘
@@ -766,6 +766,17 @@ async function onLinkAdded(message) {
   await live.refresh()
 }
 
+// 장면 2 카드 (11/17 주형, 시연 계정만): 버스에서 내린 뒤 예약까지 시간이 남으면 "이대로 갈까요?" → [가는 길 카페 찾기]는 AI에게 묻기를 질문 채워서 열어요
+const REST_QUESTION = '고기집 가는 길에 카페'
+const askDraft = ref('')
+function findRestCafe() {
+  restAsk.value = null
+  askDraft.value = REST_QUESTION
+  openAsk()
+}
+function keepGoing() {
+  restAsk.value = null
+}
 function openAsk() {
   asking.value = true
   adding.value = false
@@ -1009,6 +1020,17 @@ function finishTour() {
         <!-- 중요한 알림: 가운데 카드 (이게 떠 있으면 위쪽 배너는 안 띄움) -->
         <!-- 예약 놓침: 가운데 카드 (11/12) -->
         <LostFixedCard v-if="isLostOpen" :name="lostStop.name" :text="lostText" :arrive-text="lostArriveText" :place-id="lostStop.placeId" :can-find-similar="!!lostStop.placeId && !!lostStop.meal" :is-skipping="isSkipping" @similar="openSimilar" @skip="skipLost" @keep="keepLost" />
+        <!-- 장면 2: 버스에서 내린 뒤 시간이 남으면 가운데 카드 (시연 계정만, 고르기 전엔 시계·[다음 장소로] 멈춤) -->
+        <div v-if="restAsk && !isLostOpen" class="rest-pop" role="alertdialog" aria-modal="true" aria-label="시간이 남아요">
+          <section class="rest-pop__card">
+            <b class="rest-pop__title">시간이 {{ toDuration(restAsk.slackMin) }} 남아요</b>
+            <span class="rest-pop__text">{{ restAsk.name }} 예약까지 여유가 있어요. 이대로 갈까요?</span>
+            <button type="button" class="btn btn--primary btn--lg btn--block" @click="findRestCafe">☕ 가는 길 카페 찾기</button>
+            <button type="button" class="btn btn--secondary btn--lg btn--block" @click="keepGoing">이대로 갈게요</button>
+          </section>
+        </div>
+        <!-- 출발 전 한강버스: 가운데 팝업 (11/17 주형: 시트 안 카드는 버튼에 가려 안 보였음). 권할 배가 없으면(서버 204) 아무것도 안 뜸 -->
+        <HangangBusOption v-if="boatFor && !isLostOpen" :key="boatFor.id" before-leave popup :from-lat="boatFrom.lat" :from-lng="boatFrom.lng" :to-lat="boatFor.lat" :to-lng="boatFor.lng" :arrive-by="boatFor.time" @skip="skippedBoatIds.push(boatFor.id)" />
         <!-- 위쪽 알림 줄: 한 장씩, 닫아야(위로 밀기) 다음 알림 · 저절로 안 사라짐 (11/08 주형) -->
         <AppNoti
           v-if="!isCardOpen && !isAskingEnd && liveBanner.queue.length && !adding"
@@ -1097,7 +1119,7 @@ function finishTour() {
           <!-- AI 채팅(④) -->
           <!-- 자리 고르기 중에는 숨기기만 (AskPanel은 뿌리 요소가 둘이라 v-show를 감싸는 div에) -->
           <div v-if="asking" v-show="!slotPlace">
-            <AskPanel :me="mePoint || { x: 195, y: 300 }" :late="isLate" :trip-id="live.tripId.value" :position="live.position.value" @close="asking = false" @add="onAskAdd" :selected="askPickedId" :chat-key="chatKey(live.trip.value)" :planned="plannedPlaceIds" @choose="openSlotSheet" @found="onAskFound" @pick="askPickedId = $event" />
+            <AskPanel :initial-draft="askDraft" :me="mePoint || { x: 195, y: 300 }" :late="isLate" :trip-id="live.tripId.value" :position="live.position.value" @close="asking = false" @add="onAskAdd" :selected="askPickedId" :chat-key="chatKey(live.trip.value)" :planned="plannedPlaceIds" @choose="openSlotSheet" @found="onAskFound" @pick="askPickedId = $event" />
           </div>
           <div v-else class="quick live-quick" data-sheet-follow role="group" aria-label="트리피에게 묻기와 근처 찾기">
             <button type="button" class="chip chip--sm chip--add live-chip" data-tour="ask" aria-label="어디 갈까? 트리피에게 갈 곳 물어보기" @click="openAsk"><span class="live-chip__ic live-chip__ic--ai" aria-hidden="true"><img src="/img/trippie-favicon.png" alt="" class="live-chip__img" draggable="false" /></span>어디 갈까?</button>
@@ -1120,7 +1142,6 @@ function finishTour() {
               <span v-if="fixedBadge" class="badge" :class="fixedBadge.cls"><i class="ic ic--s i-lock" aria-hidden="true"></i>{{ fixedBadge.text }}</span>
             </div>
 
-            <HangangBusOption v-if="boatFor" :key="boatFor.id" before-leave :from-lat="boatFrom.lat" :from-lng="boatFrom.lng" :to-lat="boatFor.lat" :to-lng="boatFor.lng" :arrive-by="boatFor.time" @skip="skippedBoatIds.push(boatFor.id)" />
             <button v-if="selectedMealFixed && !isLostOpen" type="button" class="btn btn--secondary btn--md" style="align-self: flex-start" @click="manualLostId = selectedMealFixed.id">못 가게 됐어요</button>
             <LiveCards :cards="cards" :selected="selected" :auto-focus="devMode.isOn" :focus="cardFocus" @pick="pickCard" @seg="segCard = $event" @scrolled="onCardScrolled" show-end @end="isAskingEnd = true" />
 
@@ -1139,7 +1160,9 @@ function finishTour() {
             <div v-else class="cta__row">
               <RouterLink v-if="isLate" to="/live/delay" class="btn btn--secondary btn--lg">대안 보기</RouterLink>
               <RouterLink v-else :to="'/plan/edit?id=' + live.tripId.value" class="btn btn--secondary btn--lg"><i class="ic i-edit" aria-hidden="true"></i>일정 변경</RouterLink>
-              <RouterLink to="/live/route" class="btn btn--primary btn--lg"><i class="ic i-route" aria-hidden="true"></i>길 안내</RouterLink>
+              <!-- 11/17 주형: 시연 한강버스 타는 중이면 길 안내(지하철 길로 점이 따로 움직임) 대신 지금 화면에서 배 길을 따라감 -->
+              <button v-if="demoRide" type="button" class="btn btn--primary btn--lg" @click="showToast('한강버스 길로 가는 중이에요 · 지도에서 따라가요')"><i class="ic i-route" aria-hidden="true"></i>길 안내</button>
+              <RouterLink v-else to="/live/route" class="btn btn--primary btn--lg"><i class="ic i-route" aria-hidden="true"></i>길 안내</RouterLink>
             </div>
           </div>
 
@@ -1199,8 +1222,12 @@ function finishTour() {
 .scr-Live .live-chip__ic--pay { background: var(--navy-soft); color: var(--navy); } /* 11/12: 결제 메모까지 칩 3개가 + 버튼 왼쪽에 다 들어가게 */
 .scr-Live .live-quick { position: absolute; top: 392px; left: 0; right: 58px; z-index: 2; gap: 5px; padding-left: 12px; padding-right: 4px; }
 .scr-Live .live-sheet { top: 440px; padding: 8px 0 0; gap: 12px; }
-.scr-Live .live-head { display: flex; align-items: flex-end; gap: 12px; padding: 0 16px; }
+.scr-Live .live-head { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; padding: 0 16px; } /* 11/17: 배지가 길면(스시이세이 롯데백화점…) 왼쪽 글자를 세로로 쌓지 않고 배지가 아래 줄로 */
 /* 11/16 시트 머리: 위 한 줄(어디까지) 회색 작게 → 도착 시각 크게 → '도착 예정'은 회색 보조 글씨 */
+.rest-pop { position: absolute; inset: 0; z-index: 58; display: grid; place-items: center; padding: 24px; background: rgba(15, 20, 35, 0.45); }
+.rest-pop__card { width: 100%; max-width: 320px; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 22px 18px 18px; border-radius: 20px; background: var(--surface-raised); box-shadow: 0 16px 40px -8px rgba(24, 33, 58, 0.45); text-align: center; }
+.rest-pop__title { font-size: 18px; line-height: 26px; color: var(--ink); }
+.rest-pop__text { font-size: 14px; line-height: 20px; color: var(--ink-muted); margin-bottom: 6px; }
 .scr-Live .live-head .t-cap { font-size: 13px; line-height: 18px; color: var(--ink-muted); }
 .scr-Live .live-head .t-big { font-size: 28px; line-height: 36px; letter-spacing: -.03em; }
 .scr-Live .live-head__strong { margin-left: 4px; font-size: 14px; font-weight: 600; letter-spacing: 0; color: var(--ink-muted); }

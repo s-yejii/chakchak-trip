@@ -26,6 +26,7 @@ const props = defineProps({
   position: { type: Object, default: null }, // 지금 GPS { lat, lng } (서버 모드)
   selected: { type: String, default: null }, // 진짜 지도에서 누른 결과 핀 id (LiveView가 알려 줌)
   chatKey: { type: String, default: 'demo' }, // 대화를 남길 이름 (utils/askChat.js chatKey: 여행 id + 시작 날짜)
+  initialDraft: { type: String, default: '' }, // 11/17: 열 때 입력칸에 미리 넣을 질문 (시연 "고기집 가는 길에 카페")
   planned: { type: Array, default: () => [] }, // 지금 있는 곳·남은 일정의 장소 id (이미 일정에 있으면 [일정에 넣기] 대신 '일정에 있어요')
 })
 const SCROLL_END_MS = 120 // 카드 줄을 넘기고 이만큼 멈추면 왼쪽 카드를 고름
@@ -36,7 +37,7 @@ const emit = defineEmits(['close', 'add', 'found', 'pick', 'choose'])
 const router = useRouter()
 // 말풍선 목록: { id, role: 'me' | 'ai', text, places?, band?, question?(이 결과를 찾은 질문), radiusFor?({ category, tags, question }), radiusPicked?, isTyping? }
 const messages = ref(loadChat(props.chatKey))
-const draft = ref('') // 입력칸 글자
+const draft = ref(props.initialDraft) // 입력칸 글자 (미리 넣을 질문이 있으면 그것부터)
 const isBusy = ref(false)
 const activeId = ref(null) // 지금 지도에 핀으로 보이는 답 (말풍선 id)
 const pickedId = ref(null) // 고른 카드 (= 지도에서 강조된 핀)
