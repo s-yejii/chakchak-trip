@@ -1263,7 +1263,7 @@ public class PlanRuleMaker {
         if (hasMealTimeFixed(conditions)) {
             placedKinds.add(FOOD_KIND); // 점심·저녁 시간 예약은 끼니로 셈 (11/18: 점심·저녁 예약이 있는데 "밥집을 못 넣었어요"가 떴어요)
         }
-        for (String kind : kindsOf(conditions)) {
+        for (String kind : warnKindsOf(conditions)) {
             if (placedKinds.contains(kind)) {
                 continue;
             }
@@ -1271,6 +1271,19 @@ public class PlanRuleMaker {
             warnings.add(hasKind(candidates, kind) ? "일정 시간이 모자라거나 영업시간이 안 맞아 " + name + " 장소를 못 넣었어요"
                                                    : "고른 지역 근처에서 " + name + " 장소를 찾지 못해 일정에 못 넣었어요");
         }
+    }
+
+    /**
+     * "못 넣었어요" 안내를 할 종류 (11/18): 사용자가 고른 종류 + 밥집(술만 고른 사람은 빼고).
+     * 고르지 않았는데 끼워 넣는 카페·관광까지 안내하니 술만 고른 사람에게 "카페·관광을 못 넣었어요"가 세 줄씩 떴어요
+     */
+    private List<String> warnKindsOf(PlanConditions conditions) {
+        List<String> kinds = new ArrayList<>(chosenKindsOf(conditions));
+        boolean isFoodAvoided = conditions.getAvoidKinds() != null && conditions.getAvoidKinds().contains(FOOD_KIND);
+        if (!isBarOnly(conditions) && !isFoodAvoided && !kinds.contains(FOOD_KIND)) {
+            kinds.add(FOOD_KIND);
+        }
+        return kinds;
     }
 
     /** 점심·저녁 시간대에 예약이 있는지 (fixedBlocksOfDay와 같은 기준: 식사 시간 예약은 대부분 식당) */
