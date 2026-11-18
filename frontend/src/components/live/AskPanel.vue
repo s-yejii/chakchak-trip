@@ -184,6 +184,12 @@ function select(message, id, scroll) {
   if (scroll) scrollToCard(message.id, id)
 }
 
+// 카드를 눌렀을 때 (마우스로 카드 줄을 끌고 놓은 거면 누른 걸로 안 봄, 11/18)
+function clickCard(message, id) {
+  if (isJustDragged()) return
+  select(message, id, true)
+}
+
 function setCardBox(messageId, el) {
   if (el) cardBoxes[messageId] = el
   else delete cardBoxes[messageId]
@@ -248,10 +254,12 @@ function isLate(place) {
 }
 
 function openDetail(place) {
+  if (isJustDragged()) return
   router.push('/place?id=' + encodeURIComponent(place.id))
 }
 // 일정에 넣기: 서버 모드면 넣을 순서 정하기로 (LiveView의 InsertSlotSheet, 11/13). 가짜 모드는 바로 알림
 function addPlace(message, place) {
+  if (isJustDragged()) return
   select(message, place.id, false)
   if (!isServer.value) return emit('add', place)
   emit('choose', { ...place, distance: distanceOf(place) })
@@ -300,11 +308,13 @@ function distText(m) {
             <div
               v-if="m.places && m.places.length"
               :ref="(el) => setCardBox(m.id, el)"
-              class="lp-cards"
+              class="lp-cards lp-cards--drag"
               :class="{ 'is-past': m.id !== activeId }"
               role="list"
               aria-label="찾은 곳, 옆으로 넘겨 보기"
               @scroll.passive="onCardsScroll(m)"
+              @wheel="scrollSideways"
+              @pointerdown="startChipDrag"
             >
               <article
                 v-for="p in m.places"
@@ -314,7 +324,7 @@ function distText(m) {
                 :data-id="p.id"
                 role="listitem"
               >
-                <button type="button" class="lp-card__main" :aria-pressed="m.id === activeId && p.id === pickedId" @click="select(m, p.id, true)">
+                <button type="button" class="lp-card__main" :aria-pressed="m.id === activeId && p.id === pickedId" @click="clickCard(m, p.id)">
                   <img class="lp-card__img" :src="photoFor(p)" alt="" />
                   <span class="lp-card__body">
                     <b class="lp-card__name">{{ p.name }}</b>
