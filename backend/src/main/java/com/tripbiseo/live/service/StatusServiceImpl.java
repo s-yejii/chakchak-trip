@@ -11,6 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.stereotype.Service;
 
+import com.tripbiseo.common.dev.DevService;
 import com.tripbiseo.common.exception.ApiException;
 import com.tripbiseo.common.external.Route;
 import com.tripbiseo.common.external.RouteClient;
@@ -46,6 +47,7 @@ public class StatusServiceImpl implements StatusService {
 
     private static final int PRECISE_ROUTE_COUNT = 3;   // 가까운 3구간만 진짜 길찾기, 나머지는 거리로 추정
     private static final Set<String> MEAL_KINDS = Set.of("food", "cafe", "bar"); // 놓침 카드를 띄울 장소 종류 (PlaceMapper kindCase 값, 11/12)
+    private static final int DEMO_TAXI_LATE_MIN = 21;   // 시연 계정 놓침 카드: 택시로 가도 예약보다 21분 늦음 (11/17 주형 결정, 일반 계정은 실제 계산)
     private static final int LATE_STEP_MIN = 10;        // late- 알림과 같은 간격: 10분 더 늦어질 때마다만 가장 빠른 방법을 다시 계산
     private static final String CLOSE_WORD = "에 영업이 끝나요"; // ② OpeningHours가 도착 때 닫혀 있으면 붙이는 끝말 ("22:00에 영업이 끝나요")
 
@@ -58,6 +60,7 @@ public class StatusServiceImpl implements StatusService {
     private final LiveWeatherChecker liveWeatherChecker; // 비 소식 + 비 맞을 야외 일정 (④ 도우미)
     private final NotificationService notificationService; // 맨 위 알림을 알림함에도 남김 (①)
     private final RouteGuideClient routeGuideClient;     // 택시 길찾기(TMAP 자동차): 놓침 카드에 택시 도착·요금 (11/17)
+    private final DevService devService;                 // 시연 계정인지 (공통)
     private final TransferFinder transferFinder;         // 가장 빠른 방법 (④ 도우미, 놓침 판단)
     // "칸 id-늦음 단계" → 가장 빠른 방법으로 가도 남는 여유(분). 여러 요청이 동시에 써도 안전한 Map이라 ConcurrentHashMap (TMAP 호출 줄이기)
     private final Map<String, Integer> fastestSlackCache = new ConcurrentHashMap<>();
@@ -100,7 +103,7 @@ public class StatusServiceImpl implements StatusService {
         // 알림은 LiveAlertMaker, 날씨는 LiveWeatherChecker가 (계산 결과를 context 하나로 넘김)
         StatusContext context = toContext(todayStops, current, nextStop, fixedStop, slack, etaMap, openMap);
         context.setFastestSlack(getFastestSlack(fixedStop, slack, lat, lng)); // 어떤 방법으로도 못 닿는지 (lost-·늦음 카드 문구)
-        setTaxi(context, fixedStop, lat, lng); // 놓침 카드 "택시로 가도 12:45 도착 · 약 N원" (11/17)
+        setTaxi(context, fixedStop, lat, lng, devService.isDemoAccount(memberId)); // 놓침 카드 "택시로 가도 12:45 도착 · 약 N원" (11/17)
         context.setFixedMeal(fixedStop != null && mealStopIds.contains(fixedStop.getId())); // 놓침 문구: 식당이면 "예약 시각", 아니면 "약속 시각" (11/12)
         context.setWeather(liveWeatherChecker.check(lat, lng, context)); // 알림(rain-)도 이 값을 씀
         response.setWeather(context.getWeather());
@@ -385,7 +388,7 @@ public class StatusServiceImpl implements StatusService {
     }
 
     /** 어떤 방법으로도 못 닿을 때(놓침)만: 지금 택시로 바로 가면 도착 시각·요금 (TMAP 자동차 길찾기 실제 값, 못 받으면 비워 둠) */
-    private void setTaxi(StatusContext context, Stop fixedStop, double lat, double lng) {
+    private void setTaxi(StatusContext context, Stop fixedStop, double lat, double lng, boolean isDemo) {
         if (fixedStop == null || context.getFastestSlack() == null || context.getFastestSlack() >= 0) {
             return;
         }
@@ -394,7 +397,11 @@ public class StatusServiceImpl implements StatusService {
         if (taxi == null || !taxi.isAvailable()) {
             return;
         }
-        context.setTaxiArrive(Geo.nowMinutes() + taxi.getMinutes());
+        int arrive = Geo.nowMinutes() + taxi.getMinutes();
+        if (isDemo) {
+            arrive = Geo.toMinutes(fixedStop.getTime()) + DEMO_TAXI_LATE_MIN; // 시연 대본: 택시로도 21분 늦음 (요금은 TMAP 값 그대로)
+        }
+        context.setTaxiArrive(arrive);
         context.setTaxiFare(taxi.getFare());
     }
 
