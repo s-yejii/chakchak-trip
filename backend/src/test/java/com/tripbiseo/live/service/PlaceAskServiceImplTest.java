@@ -255,6 +255,8 @@ class PlaceAskServiceImplTest {
         assertNull(situation.getRoute());             // 내 일정에 묶인 값은 지움
         assertNull(situation.getSlack());
         assertNull(result.getPlaces().get(0).getSlackAfter());
+        assertEquals("강남역", result.getArea().getName()); // 화면이 "강남역에서 300m"로 보여 줄 기준
+        assertEquals(127.0276, result.getArea().getLng());
     }
 
     @Test

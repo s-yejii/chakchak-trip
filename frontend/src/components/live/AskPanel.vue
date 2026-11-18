@@ -35,7 +35,7 @@ const THINK_MS = 500 // AI가 생각하는 것처럼 잠깐 기다림 (가짜)
 const emit = defineEmits(['close', 'add', 'found', 'pick', 'choose'])
 
 const router = useRouter()
-// 말풍선 목록: { id, role: 'me' | 'ai', text, places?, band?, question?(이 결과를 찾은 질문), radiusFor?({ category, tags, question }), radiusPicked?, isTyping? }
+// 말풍선 목록: { id, role: 'me' | 'ai', text, places?, band?, area?(다른 곳 기준이면 {name, lat, lng}), question?(이 결과를 찾은 질문), radiusFor?({ category, tags, question }), radiusPicked?, isTyping? }
 const messages = ref(loadChat(props.chatKey))
 const draft = ref(props.initialDraft) // 입력칸 글자 (미리 넣을 질문이 있으면 그것부터)
 const isBusy = ref(false)
@@ -111,6 +111,7 @@ async function sendToServer(message, reply) {
 function handleAssist(res, reply, question) {
   if (res.kind === 'places') {
     showPlaces(reply, res.found.message, res.found.places, res.found.band, question)
+    reply.area = res.found.area || null // "강남역 근처"처럼 다른 곳 기준이면 그곳 (11/18)
   } else if (res.kind === 'ask-radius') {
     finishReply(reply, `${res.category}, 어느 범위에서 찾을까요?`)
     reply.radiusFor = { category: res.category, tags: res.tags || [], question }
@@ -236,8 +237,9 @@ function distanceOf(place) {
   if (props.position) return Math.round(distanceMeters(props.position.lat, props.position.lng, place.lat, place.lng))
   return place.distance || 0
 }
-/** 카드 아래 줄: 가는 길로 찾았으면 몇 분 더·여유, 아니면 지금 위치에서 거리 */
-function infoText(place) {
+/** 카드 아래 줄: 다른 곳 기준이면 그곳에서 거리, 가는 길로 찾았으면 몇 분 더·여유, 아니면 지금 위치에서 거리 */
+function infoText(message, place) {
+  if (message.area) return message.area.name + '에서 ' + distText(Math.round(distanceMeters(message.area.lat, message.area.lng, place.lat, place.lng)))
   if (place.detourMinutes == null) return '지금 위치에서 ' + distText(distanceOf(place))
   let text = '가는 길 +' + toDuration(place.detourMinutes) + (place.isEstimate ? ' (어림)' : '')
   // 11/17: 카페는 다음 예약 5분 전 도착에 맞춰 머무는 시간을 서버가 정해요(CafeStay) → "24분 쉬었다 가면 돼요"
@@ -331,7 +333,7 @@ function distText(m) {
                     <span class="lp-card__meta tn">
                       <template v-if="p.rating != null"><i class="ic ic--s i-star c-warning" aria-hidden="true"></i>{{ p.rating }} · </template>{{ shortCategory(p.category) }}<template v-if="p.closeAt"> · {{ p.closeAt }} 마감</template>
                     </span>
-                    <span class="lp-card__info tn" :class="{ 'is-late': isLate(p) }">{{ infoText(p) }}</span>
+                    <span class="lp-card__info tn" :class="{ 'is-late': isLate(p) }">{{ infoText(m, p) }}</span>
                   </span>
                 </button>
                 <!-- 분위기 질문(리뷰 RAG, 11/16): 서버가 실제 리뷰에 있는지 확인한 근거 문장. 고른 이유는 길게 누르면(title) -->

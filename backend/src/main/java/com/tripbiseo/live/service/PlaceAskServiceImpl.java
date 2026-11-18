@@ -17,6 +17,7 @@ import com.tripbiseo.common.external.FoundLocation;
 import com.tripbiseo.common.external.LocationSearchClient;
 import com.tripbiseo.common.external.RouteClient;
 import com.tripbiseo.common.util.Geo;
+import com.tripbiseo.live.dto.AskArea;
 import com.tripbiseo.live.dto.AskSituation;
 import com.tripbiseo.live.dto.AskedPlace;
 import com.tripbiseo.live.dto.LocationRequest;
@@ -104,7 +105,11 @@ public class PlaceAskServiceImpl implements PlaceAskService {
             log.warn("AI에게 묻기 fallback: SQL 검사 두 번 탈락 - {} / SQL: {}", check.getReason(), answer == null ? null : answer.getSql());
             return makeFallback();
         }
-        return runAndFinish(answer, check, situation);
+        PlaceAskResult result = runAndFinish(answer, check, situation);
+        if (hasPlace(answer) && !result.isFallback()) {
+            result.setArea(toArea(answer.getPlace().trim(), situation)); // 화면이 "강남역에서 300m"처럼 그곳 기준 거리를 보여 줌
+        }
+        return result;
     }
 
     // ---------------------------------------------------------------- 1. 상황 모으기
@@ -402,7 +407,6 @@ public class PlaceAskServiceImpl implements PlaceAskService {
         return result;
     }
 
-    /** 표에 없는 조건(가격·메뉴 등)이라 찾을 수 없음 → 이유만 안내 */
     /** 질문에 나온 곳을 지도에서 못 찾았을 때 (11/18) */
     private PlaceAskResult makePlaceNotFound(String place) {
         PlaceAskResult result = new PlaceAskResult();
@@ -410,6 +414,16 @@ public class PlaceAskServiceImpl implements PlaceAskService {
         return result;
     }
 
+    /** 기준으로 삼은 곳 (moveToPlace가 바꿔 둔 :me 좌표) */
+    private AskArea toArea(String place, AskSituation situation) {
+        AskArea area = new AskArea();
+        area.setName(place);
+        area.setLat(situation.getMeLat());
+        area.setLng(situation.getMeLng());
+        return area;
+    }
+
+    /** 표에 없는 조건(가격·메뉴 등)이라 찾을 수 없음 → 이유만 안내 */
     private PlaceAskResult makeUnsupported(SqlAnswer answer) {
         PlaceAskResult result = new PlaceAskResult();
         result.setMessage(answer.getReason() == null ? "그 조건으로는 찾을 수 없어요." : answer.getReason());
