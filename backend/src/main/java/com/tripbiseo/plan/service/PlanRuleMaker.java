@@ -175,7 +175,7 @@ public class PlanRuleMaker {
             List<Stop> blocks = keptOfDay(conditions, day);
             blocks.addAll(fixedBlocksOfDay(conditions, day));
             blocks.sort((first, second) -> first.getTime().compareTo(second.getTime())); // 시각 글자 순
-            return timedSlotsOf(conditions, start, end, blocks);
+            return timedSlotsOf(conditions, start, end, blocks, !isHardEnd(conditions, day, lastDayOf(conditions)));
         }
         boolean isCafeChosen = conditions.getKinds() != null && conditions.getKinds().contains(CAFE_KIND);
         return slotsOf(kindsOf(conditions), isCafeChosen);
@@ -305,7 +305,8 @@ public class PlanRuleMaker {
             int end = day == days ? Geo.toMinutes(conditions.getEndTime()) : MIDDLE_DAY_END_MIN;
             int stopStart = Geo.toMinutes(stop.getTime());
             int stay = stop.getStay() == null ? 0 : stop.getStay();
-            if (stopStart < start || stopStart + stay > end) {
+            int lastEnd = isHardEnd(conditions, day, days) ? end : end + stay; // 끝 장소가 없으면 끝 시각 전에 시작만 하면 됨
+            if (stopStart < start || stopStart + stay > lastEnd) {
                 outside.add(stop);
             }
         }
@@ -336,7 +337,9 @@ public class PlanRuleMaker {
             }
             int clock = stay.getCheckInTime() == null ? 0 : Geo.toMinutes(stay.getCheckInTime());
             double[] stayPoint = new double[] {stay.getLat(), stay.getLng()};
-            trimLastStopForStay(response.getStops(), day, stayPoint, dayEndOf(conditions, day, days, null));
+            if (isHardEnd(conditions, day, days)) {
+                trimLastStopForStay(response.getStops(), day, stayPoint, dayEndOf(conditions, day, days, null));
+            }
             for (Stop stop : response.getStops()) {
                 if (stop.getDay() == day) {
                     int move = stop.getLat() == null ? STAY_AFTER_LAST_MIN : PlanTravelTime.minutesBetween(new double[] {stop.getLat(), stop.getLng()}, stayPoint);
@@ -345,6 +348,27 @@ public class PlanRuleMaker {
             }
             response.getStops().add(toStayStop(stay, day, Math.min(clock, LATEST_STAY_MIN)));
         }
+    }
+
+    /**
+     * 그날 마지막 칸(뒤가 없거나 숙소뿐)을 "끝 시간 없음"으로 표시 (11/18 주형): 끝 장소가 없으면 뒤에 갈 곳이 없으니 원하는 만큼 머물러도 돼요.
+     * 응답 openEndStops에 "날/시각"("1/20:40")으로 넣음. 예약(고정)·숙소 칸은 빼요
+     */
+    public void markOpenEnds(PlanGenerateResponse response, PlanConditions conditions, int days) {
+        Map<Integer, Stop> lastOfDay = new HashMap<>();
+        for (Stop stop : response.getStops()) {
+            boolean isStay = "숙소".equals(stop.getCategory());
+            Stop last = lastOfDay.get(stop.getDay());
+            if (!isStay && stop.getTime() != null && (last == null || stop.getTime().compareTo(last.getTime()) > 0)) {
+                lastOfDay.put(stop.getDay(), stop);
+            }
+        }
+        for (Stop last : lastOfDay.values()) {
+            if (!isHardEnd(conditions, last.getDay(), days) && !Boolean.TRUE.equals(last.getFixed())) {
+                response.getOpenEndStops().add(last.getDay() + "/" + last.getTime());
+            }
+        }
+        response.getOpenEndStops().sort(null); // 날 순 (글자 순)
     }
 
     /**
@@ -471,6 +495,15 @@ public class PlanRuleMaker {
         return earliest;
     }
 
+    /**
+     * 그날 끝 시각을 꼭 지켜야 하는지 (11/18 주형): 끝 장소(KTX·집에 몇 시까지)를 정한 마지막 날만.
+     * 끝 시각은 화면이 늘 기본값(20:00 등)을 넣어 보내서 사용자가 고른 건지 알 수 없어요 → 끝 장소가 없으면 그날 마지막 칸은 끝 시각에 맞춰 자르지 않음.
+     * 시간을 안 골랐으면(오늘 남은 시간으로 당겨 짠 일정) 23:00은 그대로 지킴
+     */
+    boolean isHardEnd(PlanConditions conditions, int day, int days) {
+        return !hasDayTime(conditions) || (conditions.getFinish() != null && day == days);
+    }
+
     /** 시작·끝 시간을 골랐는지 */
     private boolean hasDayTime(PlanConditions conditions) {
         return conditions.getStartTime() != null && conditions.getEndTime() != null;
@@ -480,7 +513,7 @@ public class PlanRuleMaker {
      * 고른 시간 안에서 하루 칸 만들기 (11/04): 첫 칸은 시작 시각, 마지막 칸은 끝 시각 안에 끝남.
      * 시계를 앞으로 돌리며, 점심(11:30~13:30)·저녁(17:30~19:30) 때가 되면 식사 칸, 그 밖에는 볼거리·카페 칸
      */
-    private List<String[]> timedSlotsOf(PlanConditions conditions, int startMin, int endMin, List<Stop> kept) {
+    private List<String[]> timedSlotsOf(PlanConditions conditions, int startMin, int endMin, List<Stop> kept, boolean isOpenEnd) {
         List<String> kinds = kindsOf(conditions);
         List<String[]> slots = new ArrayList<>();
         boolean hasFood = kinds.contains(FOOD_KIND);
@@ -499,14 +532,17 @@ public class PlanRuleMaker {
             }
             boolean isLunchTime = !isLunchDone && clock >= LUNCH_START_MIN && clock < LUNCH_END_MIN;
             boolean isDinnerTime = !isDinnerDone && clock >= DINNER_START_MIN && clock < DINNER_END_MIN;
-            String slotKinds = isLunchTime ? FOOD_KIND : isDinnerTime ? dinnerKindsOf(conditions) : outingKindsOf(kinds, clock, previous, beforePrevious, isBarOnly(conditions));
+            String slotKinds = isLunchTime ? FOOD_KIND : isDinnerTime ? dinnerKindsOf(conditions) : outingKindsOf(kinds, clock, previous, beforePrevious);
             if (slotKinds.isEmpty()) {
                 clock += TIME_STEP_MIN; // 넣을 볼거리가 없으면 다음 식사 때까지 기다림
                 continue;
             }
             isLunchDone = isLunchDone || isLunchTime;
             isDinnerDone = isDinnerDone || isDinnerTime;
-            int stay = Math.min(stayOfSlot(slotKinds, conditions), limit - clock);
+            int fullStay = stayOfSlot(slotKinds, conditions);
+            boolean isLastSlot = nextKept == null && endMin - roundUp(clock + fullStay + TIMED_GAP_MIN) < MIN_SLOT_MIN;
+            // 11/18: 끝 장소가 없으면 그날 마지막 칸은 끝 시각 넘어도 원래 머무는 시간 그대로 (뒤에 갈 곳이 없어서)
+            int stay = isOpenEnd && isLastSlot ? fullStay : Math.min(fullStay, limit - clock);
             slots.add(new String[] {slotKinds, Geo.toHhmm(clock), String.valueOf(stay)});
             beforePrevious = previous;
             previous = slotKinds;
@@ -625,8 +661,8 @@ public class PlanRuleMaker {
      * 식사 때가 아닌 칸의 종류 (앞이 먼저): 밤엔 술집, 식사 뒤엔 카페, 오전엔 볼거리. 카페 다음에 또 카페는 안 넣음.
      * 11/18: 술집은 하루 2차 한 번만(저녁 칸이 술집이었으면 그 뒤 한 번), 볼거리 두 곳 다음엔 카페 먼저 (봉은사 → VR존 → 광장 3곳 연속)
      */
-    String outingKindsOf(List<String> kinds, int clock, String previous, String beforePrevious, boolean isBarOnly) {
-        boolean isBarDone = !isBarOnly && (previous.equals(BAR_KIND) || beforePrevious.equals(BAR_KIND)); // 술만 고른 사람은 3차도 (술이 여행 목적)
+    String outingKindsOf(List<String> kinds, int clock, String previous, String beforePrevious) {
+        boolean isBarDone = previous.equals(BAR_KIND) || beforePrevious.equals(BAR_KIND);
         if (kinds.contains(BAR_KIND) && clock >= BAR_FROM_MIN && !isBarDone) {
             return BAR_KIND;
         }
@@ -793,7 +829,8 @@ public class PlanRuleMaker {
             if (prevEnd >= 0) {
                 extendLastStay(stops, candidates, day, date, prevEnd, actualStart - travel); // 바로 옆이면 20분 띄우지 않고 앞 곳에 더 머묾 (11/14)
             }
-            int latestEnd = Math.min(dayEnd, nextExtraLimit(extras, candidates, day, actualStart, placePoint));
+            int dayLimit = isHardEnd(conditions, day, days) ? dayEnd : Integer.MAX_VALUE; // 끝 장소가 없으면 하루 끝에 맞춰 자르지 않음 (11/18)
+            int latestEnd = Math.min(dayLimit, nextExtraLimit(extras, candidates, day, actualStart, placePoint));
             int actualStay = Math.min(Math.min(stay, latestEnd - actualStart), minutesUntilClose(place, date, actualStart, stay));
             if (actualStay < SHORTEST_STAY_MIN) {
                 continue; // 이동까지 넣으면 이 칸은 시간이 모자람

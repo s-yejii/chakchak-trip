@@ -241,6 +241,7 @@ public class PlanServiceImpl implements PlanService {
         addKeptAndSort(conditions, response, days);
         planRuleMaker.fixTravelTimes(response); // 순서를 바꾼 뒤 이동 시간이 모자란 칸을 밀거나 줄임 (11/12)
         planRuleMaker.addStayStops(response, conditions, days);
+        planRuleMaker.markOpenEnds(response, conditions, days); // 끝 장소가 없으면 그날 마지막 칸은 끝 시간 없음 (11/18)
         if (response.getStops().isEmpty()) {
             boolean isMissingLocation = isNearMe && request.getLat() == null;
             throw fail(422, isMissingLocation ? "내 위치를 받지 못했어요. 브라우저 위치 권한을 허용하거나 지역 이름을 말해 주세요."

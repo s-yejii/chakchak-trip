@@ -16,6 +16,8 @@ import org.junit.jupiter.api.Test;
 import com.tripbiseo.plan.dto.AiDraftStop;
 import com.tripbiseo.plan.dto.FixedVisit;
 import com.tripbiseo.plan.dto.PlanConditions;
+import com.tripbiseo.plan.dto.PlanGenerateResponse;
+import com.tripbiseo.trip.dto.Stop;
 import com.tripbiseo.trip.dto.Place;
 
 // 11/18 사용성 사전 점검에서 나온 일정 규칙 (일반 계정 = 실제 여행: 입력한 날짜·시각 그대로, 시연 계정은 DemoScenario라 여기를 안 지나감)
@@ -57,16 +59,15 @@ class PlanRuleMakerUsabilityTest {
         assertEquals("bar,food", ruleMaker.dinnerKindsOf(timed("18:00", "23:30", "bar")));
         assertEquals("food", ruleMaker.dinnerKindsOf(timed("11:00", "22:00", "food", "cafe", "bar")));
         List<String> kinds = List.of("bar", "food", "cafe", "tour");
-        assertEquals("bar", ruleMaker.outingKindsOf(kinds, 20 * 60, "food", "", false)); // 저녁 뒤 2차
-        assertFalse(ruleMaker.outingKindsOf(kinds, 21 * 60 + 30, "bar", "food", false).contains("bar")); // 밥·술 고른 사람은 3차 없음
-        assertEquals("bar", ruleMaker.outingKindsOf(kinds, 21 * 60 + 30, "bar", "bar,food", true)); // 술만 고른 사람은 3차도
+        assertEquals("bar", ruleMaker.outingKindsOf(kinds, 20 * 60, "food", "")); // 저녁 뒤 2차
+        assertFalse(ruleMaker.outingKindsOf(kinds, 21 * 60 + 30, "bar", "bar,food").contains("bar")); // 3차는 없음 (2차는 끝 시간 없음)
     }
 
     @Test
     void 볼거리_두_곳_다음엔_카페_먼저() {
         List<String> kinds = List.of("food", "cafe", "tour");
-        assertTrue(ruleMaker.outingKindsOf(kinds, 16 * 60, "tour", "tour,culture", false).startsWith("cafe"));
-        assertTrue(ruleMaker.outingKindsOf(kinds, 15 * 60, "tour", "cafe", false).startsWith("tour"));
+        assertTrue(ruleMaker.outingKindsOf(kinds, 16 * 60, "tour", "tour,culture").startsWith("cafe"));
+        assertTrue(ruleMaker.outingKindsOf(kinds, 15 * 60, "tour", "cafe").startsWith("tour"));
     }
 
     @Test
@@ -137,6 +138,48 @@ class PlanRuleMakerUsabilityTest {
         stop.setDay(day);
         stop.setTime(time);
         stop.setStay(stay);
+        return stop;
+    }
+
+    @Test
+    void 끝_장소가_없으면_마지막_칸은_끝_시각에_안_잘림() {
+        List<String[]> slots = ruleMaker.getSlotList(timed("19:00", "20:00"));
+        assertEquals(1, slots.size());
+        assertEquals("70", slots.get(0)[2]); // 저녁 70분 그대로 (예전엔 60분으로 잘림)
+    }
+
+    @Test
+    void 끝_장소를_정했으면_그_시각에_맞춤() {
+        PlanConditions conditions = timed("19:00", "20:00");
+        FixedVisit finish = new FixedVisit();
+        finish.setName("서울역");
+        finish.setTime("20:00");
+        conditions.setFinish(finish);
+        List<String[]> slots = ruleMaker.getSlotList(conditions);
+        assertEquals("60", slots.get(0)[2]);
+        assertTrue(ruleMaker.isHardEnd(conditions, 1, 1));
+        assertFalse(ruleMaker.isHardEnd(timed("19:00", "20:00"), 1, 1));
+    }
+
+    @Test
+    void 마지막_칸만_끝_시간_없음으로_표시() {
+        PlanGenerateResponse response = new PlanGenerateResponse();
+        response.getStops().add(stop(1, "19:00", "아지양", null, false));
+        response.getStops().add(stop(1, "20:40", "빈티지서울", null, false));
+        response.getStops().add(stop(1, "22:30", "숙소 호텔", "숙소", false));
+        response.getStops().add(stop(2, "12:00", "점심", null, false));
+        response.getStops().add(stop(2, "19:00", "예약 식당", null, true));
+        ruleMaker.markOpenEnds(response, timed("11:00", "22:00"), 2);
+        assertEquals(List.of("1/20:40"), response.getOpenEndStops()); // 숙소 앞 칸만, 마지막이 예약이면 표시 안 함
+    }
+
+    private Stop stop(int day, String time, String name, String category, boolean isFixed) {
+        Stop stop = new Stop();
+        stop.setDay(day);
+        stop.setTime(time);
+        stop.setName(name);
+        stop.setCategory(category);
+        stop.setFixed(isFixed);
         return stop;
     }
 
