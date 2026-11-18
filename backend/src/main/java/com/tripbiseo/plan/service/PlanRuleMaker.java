@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import com.tripbiseo.common.exception.ApiException;
@@ -101,6 +102,14 @@ public class PlanRuleMaker {
     private static final java.util.regex.Pattern NIGHT_VIEW = java.util.regex.Pattern.compile("야경|전망|타워|야시장|루프탑");
     private static final java.util.regex.Pattern MEAL_BAR = java.util.regex.Pattern.compile("요리주점|이자카야|이자까야|포차|주막|선술집|오뎅|전집|막걸리"); // 안주가 밥인 술집
     private static final List<String> SIGHT_KINDS = List.of("tour", "culture", "shop");
+    private static final int SECOND_ROUND_MAX_STAY_MIN = 60;    // 2차를 짧게 할 때 머무는 분
+    private static final String SECOND_ROUND_SKIP = "skip";     // 2차에서 요리주점·이자카야·포차 빼기
+    private static final String SECOND_ROUND_SHORT = "short";   // 2차는 그대로 고르되 1시간 이하로
+
+    // 11/18 저녁 뒤 2차 방식 (주형이 정할 때까지 보류): allow = 예전 그대로, skip = 안주가 밥인 술집 빼기, short = 1시간 이하로
+    // @Value: application.properties 값을 넣어 줌 (없으면 allow). 테스트에서 new로 만들면 아래 기본값
+    @Value("${tripbiseo.plan.second-round:allow}")
+    private String secondRoundMode = "allow";
 
     // 하루 칸: "시각/머무는 분/이 칸에 넣을 종류(앞이 먼저)". 고른 종류가 하나도 없는 칸은 건너뜀
     // 칸 사이는 이동 20~40분을 비워 둠 (10:00~11:30 → 12:00 점심)
@@ -703,6 +712,10 @@ public class PlanRuleMaker {
                 slotKinds = withoutKind(slotKinds, CAFE_KIND); // 11/18: 하루 첫 칸(점심 전)은 카페 말고 볼거리부터
             }
             int stay = Integer.parseInt(slots.get(i)[2]);
+            boolean isSecondRound = slotKinds.get(0).equals(BAR_KIND) && (FOOD_KIND.equals(lastKind) || BAR_KIND.equals(lastKind));
+            if (isSecondRound && SECOND_ROUND_SHORT.equals(secondRoundMode)) {
+                stay = Math.min(stay, SECOND_ROUND_MAX_STAY_MIN);
+            }
             boolean isAfterEnd = dayEndMin != null && start + stay > dayEndMin; // 끝 장소로 가야 해서 못 쓰는 칸
             if (isAfterEnd || overlapsExtra(extras, day, start, stay)) {
                 continue; // 마감 뒤이거나 꼭 갈 곳·고정 일정과 겹치는 칸
@@ -712,7 +725,7 @@ public class PlanRuleMaker {
             Map<String, Place> slotCandidates = candidatesOfSlot(candidates, areas, singleGuOf(conditions), (day - 1) * slots.size() + i, days * slots.size());
             Set<String> blocked = withNearSameKind(used, candidates, stops); // 11/12 같은 곳 다른 이름(남대문·숭례문, DDP·역사문화공원)이 또 안 들어가게
             blockNightOutdoor(blocked, candidates, start);
-            if (slotKinds.get(0).equals(BAR_KIND) && (FOOD_KIND.equals(lastKind) || BAR_KIND.equals(lastKind))) {
+            if (isSecondRound && SECOND_ROUND_SKIP.equals(secondRoundMode)) {
                 blockMealBars(blocked, candidates); // 저녁 뒤 2차는 안주가 밥인 술집 말고 (11/18 타파스 → 이자카야 = 저녁 두 번)
             }
             Place place = pick == null ? null : checkPick(pick, slotKinds, slotCandidates, blocked, conditions, date, start, stay, point, maxWalkMeters);
