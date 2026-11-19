@@ -76,7 +76,7 @@
 | `POST /api/trips/{id}/stops` | 일정 칸 추가 | trip/PlanManualView, trip/PlanEditView | 있음 |
 | `PUT /api/trips/{id}/stops/{stopId}` | 일정 칸 수정 | live/PinEditView (trip/StopEditView는 11/04부터 `PUT /stops`로 한 번에) | 있음 |
 | `DELETE /api/trips/{id}/stops/{stopId}` | 일정 칸 삭제 | (화면은 11/04부터 아래 `PUT /stops`) | 있음 |
-| `PUT /api/trips/{id}/stops` | 일정 칸 전부 한 번에 저장 (순서·수정·빼기) | trip/PlanEditView | 있음 (11/04) |
+| `PUT /api/trips/{id}/stops` | 일정 칸 전부 한 번에 저장 (순서·수정·빼기·추가) | trip/PlanEditView | 있음 (11/04) |
 | `GET /api/trips/{id}/chats` | 이 여행의 대화 기록 | plan/PlanChatView, after/RetroView | 있음 |
 | `POST /api/trips/{id}/chats` | 대화 기록 저장 | plan/PlanChatView, live/LiveView | 있음 |
 | `POST /api/plans/check?day=1` | 하루 일정 점검 (이동시간·영업시간·휴무·고정 일정 여유) | trip/PlanCheckView | 있음 |
@@ -659,12 +659,13 @@
 
 | 규칙 | 설명 |
 |---|---|
-| 칸마다 `id` 필수 | 이 여행 칸 번호만. 새 칸 추가는 `POST /stops` |
+| `id` 있는 칸 | 이 여행 칸 번호만 (다른 여행 칸 번호면 400) |
+| `id` 없는 칸 | 새로 추가해요. 검사는 `POST /stops`와 같아요 (편집 화면 [장소 추가], 11/19) |
 | 목록에 없는 칸 | 지움 (`state: "skipped"` 칸은 여행 중 기록이라 보내지 않아도 남김) |
 | 목록에 있는 칸 | `PUT /stops/{stopId}`와 같은 규칙으로 고침 (`mode`·`memo`는 보낸 값으로 덮어씀) |
 | 순서 | 따로 저장하지 않아요. 상세는 `day → time` 순이라 **바꾼 순서대로 `time`을 채워서** 보내요 (화면은 `/plans/check`로 시각을 채운 뒤 보냄) |
 
-하나라도 실패하면 지운 칸까지 전부 되돌려요 (`@Transactional`).
+하나라도 실패하면 지운 칸·새로 넣은 칸까지 전부 되돌려요 (`@Transactional`).
 
 **응답** 저장 후 `Trip` 전체
 

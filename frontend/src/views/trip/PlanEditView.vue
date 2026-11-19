@@ -12,7 +12,6 @@
 // − 는 바로 빼고 토스트로 되돌려요 (완료 전에는 서버에 안 가요). 지도의 [동선 최적화]는 상세 화면과 같은 함수
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { importance } from '@/data/places'
 import { checkPlan } from '@/api/trips'
 import KakaoMap from '@/components/common/KakaoMap.vue'
 import BottomSheet from '@/components/common/BottomSheet.vue'
@@ -27,12 +26,20 @@ import { toShortDate, tripDetailLink } from '@/utils/tripView'
 import { showToast } from '@/utils/toast'
 import { useStopPhotos } from '@/utils/useStopPhotos'
 import StopThumb from '@/components/trip/StopThumb.vue'
+import AddPlaceSheet from '@/components/trip/AddPlaceSheet.vue'
+import { distanceMeters } from '@/utils/geo'
+import { isStayStop } from '@/utils/mapView'
+
+const NEW_STAY_MIN = 60 // [장소 추가]로 넣는 칸의 머무는 시간 (stores/trip.js addDraftPlace와 같음)
+const SEOUL_CENTER = { lat: 37.5665, lng: 126.978 } // 좌표 있는 칸이 하나도 없을 때 찾는 기준
 
 const route = useRoute()
 const router = useRouter()
 const store = useTripStore()
 const tripId = route.query.id || null // 있으면 저장된 여행 편집, 없으면 새로 짠 초안 편집
 const day = ref(Number(route.query.day || 1))
+// AI로 만든 초안에서 왔으면(?from=ai) 주소에 계속 붙여 둠 → 일정 점검으로 돌아가도 [조건 바꾸기]가 남아요 (11/19)
+const fromQuery = !tripId && route.query.from === 'ai' ? '&from=ai' : ''
 const isLoading = ref(!!tripId)
 const isSaving = ref(false)
 const loadError = ref('')
@@ -64,12 +71,9 @@ const mapPins = computed(() => mapStops.value.map((stop, i) => ({
   cls: selected.value === i ? 'pin--sel' : '',
   label: i + 1 + ' ' + stop.name,
 })))
-// 칸을 누름: 처음엔 핀을 키우고 지도 가운데로, 이미 고른 칸을 또 누르면 한 칸 수정
+// 칸을 누름: 바로 한 칸 수정 창 (시간·중요도 바꾸기, 11/19. 예전엔 한 번 = 핀 강조, 두 번 = 한 칸 수정)
 function pickRow(i) {
-  if (selected.value === i) return openStop(i)
-  selected.value = i
-  const stop = mapStops.value[i]
-  if (mapRef.value && stop.lat != null) mapRef.value.flyTo(stop.lat, stop.lng) // padding을 보고 시트에 안 가리는 칸 가운데로 (moveTo는 지도 한가운데라 핀이 시트 뒤에 숨음)
+  openStop(i)
 }
 // 핀을 누름: 그 칸으로 스크롤
 async function pickPin(pin) {
@@ -161,7 +165,7 @@ function countDays(t) {
 
 // 지금 편집 화면 주소 (한 칸 수정·빼기에서 돌아올 곳)
 function hereLink() {
-  return '/plan/edit?' + (tripId ? 'id=' + tripId + '&' : '') + 'day=' + day.value
+  return '/plan/edit?' + (tripId ? 'id=' + tripId + '&' : '') + 'day=' + day.value + fromQuery
 }
 // 다른 날 고르기: 고른 칸 번호는 "그날 몇 번째"라 다른 날로 가면 비움 (안 비우면 다음 날 같은 번호 칸이 골라진 채로 남음)
 function pickDay(d) {
@@ -250,9 +254,81 @@ function removeRow(i) {
   showToast(name + ' 뺐어요', { actionText: '되돌리기', action: () => { trip.value.stops = backup } })
 }
 
+// [장소 추가] 시트 (11/19): 이 화면 안에서 찾아 넣어요. 저장된 여행도 [완료] 때 한 번에 저장
+const isAddOpen = ref(false)
+// 찾는 기준 위치: 고른 칸이 있으면 그 칸, 없으면 그날 칸들 가운데 (그날 좌표가 없으면 여행 전체 가운데)
+const addBase = computed(() => {
+  const picked = selected.value !== null ? mapStops.value[selected.value] : null
+  if (picked && picked.lat != null) return { lat: picked.lat, lng: picked.lng, name: picked.name }
+  const dayPoints = mapStops.value.filter((stop) => stop.lat != null)
+  const points = dayPoints.length ? dayPoints : trip.value.stops.filter((stop) => stop.lat != null)
+  return { ...centerOf(points), name: '그날 장소들 가운데' }
+})
+// 여러 칸의 가운데 (위도·경도 평균)
+function centerOf(points) {
+  if (!points.length) return SEOUL_CENTER
+  let lat = 0
+  let lng = 0
+  for (const point of points) {
+    lat += point.lat
+    lng += point.lng
+  }
+  return { lat: lat / points.length, lng: lng / points.length }
+}
+// [넣기]: 그날 목록에 넣고 시각을 다시 맞춤. 토스트의 되돌리기로 빼요 (완료 전에는 서버에 안 가요)
+function addPlace(place) {
+  const list = dayStopsOf(trip.value, day.value)
+  const backup = JSON.parse(JSON.stringify(trip.value.stops))
+  const startTime = list.length ? list[0].time : null
+  const stop = toNewStop(place)
+  const next = [...list]
+  next.splice(insertIndexOf(list, stop), 0, stop)
+  retime(next, startTime)
+  setDayStops(trip.value, day.value, next)
+  selected.value = null
+  optimize.reset()
+  isAddOpen.value = false
+  showToast(place.name + ' 넣었어요', { actionText: '되돌리기', action: () => { trip.value.stops = backup } })
+}
+// 새 칸 모양 (stores/trip.js addDraftPlace와 같게. 시각은 비워 두면 점검이 채움)
+function toNewStop(place) {
+  return { day: day.value, placeId: place.id ?? null, name: place.name, category: place.category ?? null, address: place.address ?? null, lat: place.lat, lng: place.lng, time: null, stay: NEW_STAY_MIN, fixed: false, mode: null, memo: null }
+}
+// 넣을 자리(그날 몇 번째 앞): 고른 칸이 있으면 바로 뒤, 없으면 동선(직선거리 합)이 제일 덜 늘어나는 곳
+function insertIndexOf(list, stop) {
+  const range = insertRange(list)
+  if (selected.value !== null) return Math.min(Math.max(selected.value + 1, range.min), range.max)
+  let bestIndex = range.max
+  let bestAdded = Infinity
+  for (let i = range.min; i <= range.max; i++) {
+    // 앞 칸 → 새 칸 → 뒤 칸으로 돌아가면 앞 칸 → 뒤 칸보다 얼마나 늘어나는지 (list[-1]·list[끝]은 없음 → 0)
+    const added = gapMeters(list[i - 1], stop) + gapMeters(stop, list[i]) - gapMeters(list[i - 1], list[i])
+    if (added < bestAdded) {
+      bestAdded = added
+      bestIndex = i
+    }
+  }
+  return bestIndex
+}
+// 넣을 수 있는 자리 범위: 다녀온 칸 뒤부터(그날 첫 칸이 숙소면 그 뒤부터), 그날 마지막이 숙소면 그 앞까지
+function insertRange(list) {
+  let min = list.length && isStayStop(list[0]) ? 1 : 0 // 아침 숙소에서 나오기 전에 다른 곳을 넣지 않게
+  for (let i = 0; i < list.length; i++) {
+    if (list[i].state === 'done') min = i + 1
+  }
+  let max = list.length
+  if (list.length && isStayStop(list[list.length - 1])) max = list.length - 1
+  return { min, max: Math.max(min, max) }
+}
+// 두 칸 사이 직선거리(m). 칸이 없거나 좌표가 없으면 0
+function gapMeters(a, b) {
+  if (!a || !b || a.lat == null || b.lat == null) return 0
+  return distanceMeters(a.lat, a.lng, b.lat, b.lng)
+}
+
 // 저장된 여행이면 상세로, 초안이면 일정 점검으로
 function exitLink() {
-  if (!tripId) return '/plan/check?day=' + day.value
+  if (!tripId) return '/plan/check?day=' + day.value + fromQuery
   return trip.value ? tripDetailLink(trip.value) : '/trips'
 }
 
@@ -317,8 +393,10 @@ async function done() {
           <div v-if="dayList.length > 1" class="pe-days" role="tablist" aria-label="며칠째">
             <button v-for="d in dayList" :key="d.day" type="button" role="tab" class="chip chip--sm" :class="{ 'is-on': d.day === day }" :aria-selected="d.day === day" @click="pickDay(d.day)">{{ d.day }}일차<span class="t-cap tn">{{ d.label }}</span></button>
           </div>
-          <p class="t-cap" style="display: flex; align-items: center; gap: 4px"><i class="ic ic--s i-grip" aria-hidden="true"></i>손잡이를 끌어 순서를 바꿔요 · 시각은 다시 계산해요</p>
+          <p class="t-cap" style="display: flex; align-items: center; gap: 4px"><i class="ic ic--s i-grip" aria-hidden="true"></i>칸을 누르면 시간·중요도를 바꿔요 · 손잡이로 순서를 바꿔요</p>
           <p v-if="firstMove !== null && nowMove !== firstMove" class="t-cap tn" style="margin: 0">이동 {{ firstMove }}분 → {{ nowMove }}분</p>
+          <!-- 장소 추가: 이 화면 위로 "장소 넣기" 시트를 열어요 (초안·저장된 여행 둘 다, 11/19). 시트 머리에 있어서 목록을 내려도 늘 보여요 -->
+          <button type="button" class="btn btn--secondary btn--md btn--block" @click="isAddOpen = true"><i class="ic i-plus" aria-hidden="true"></i>장소 추가</button>
         </div>
         <!-- 시트 몸통: 목록만 스크롤 -->
         <div class="trip-scroll">
@@ -344,7 +422,6 @@ async function done() {
                   <span v-else-if="stop.isStay" class="stop__meta c-navy"><i class="ic ic--s i-home" aria-hidden="true"></i>숙소</span>
                   <span v-else class="stop__meta">{{ stop.time || '시각 다시 계산' }} · {{ toDuration(stop.dur) }}</span>
                 </span>
-                <span v-if="!stop.fixed && !stop.isStay" class="imp" :class="'imp--' + stop.imp">{{ importance[stop.imp] }}</span>
               </span>
             </button>
             <span v-if="!stop.movable" class="grip" style="opacity: 0.35; cursor: default" :aria-label="stop.isDone ? '다녀온 곳은 순서가 그대로예요' : stop.isStay ? '숙소는 순서가 그대로예요' : '고정 일정은 순서가 그대로예요'">
@@ -363,10 +440,9 @@ async function done() {
             </button>
           </li>
         </ol>
-        <!-- 장소 추가는 새로 짜는 초안에만 담겨요 (저장된 여행에 추가는 아직 연결 전이라 숨김) -->
-        <RouterLink v-if="!tripId" to="/plan/manual" class="btn btn--secondary btn--md btn--block" style="margin-top: 4px"><i class="ic i-plus" aria-hidden="true"></i>장소 추가</RouterLink>
         </div>
       </BottomSheet>
+      <AddPlaceSheet v-if="isAddOpen" :base="addBase" :day-stops="mapStops" @add="addPlace" @close="isAddOpen = false" />
       <div v-if="isCancelAsk" class="pe-ask">
         <ConfirmModal title="고친 내용을 버릴까요?" text="지금 나가면 바꾼 순서·시간·뺀 장소가 모두 편집 전으로 돌아가요." ok-text="버리기" cancel-text="계속 고치기" danger @cancel="isCancelAsk = false" @ok="cancel" />
       </div>
@@ -382,6 +458,9 @@ async function done() {
 .scr-PlanEdit .pe-head { display: flex; flex-direction: column; gap: 8px; padding: 0 16px; touch-action: none; } /* 시트 머리: 끌 때 화면이 스크롤되지 않게 */
 .scr-PlanEdit .pe-num { flex: none; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--navy); color: #fff; font-size: 11px; font-weight: 700; }
 .scr-PlanEdit .erow.is-sel .stop__card { border-color: var(--navy); }
+/* 이름·시각 줄이 길면 끝을 …로 (공통 .stop__name·.stop__meta는 display:flex라 …가 안 붙어서 이 화면에서만 block) */
+.scr-PlanEdit .stop__name, .scr-PlanEdit .stop__meta { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.scr-PlanEdit .stop__meta .ic { margin-right: 4px; vertical-align: -3px; } /* block이 되면서 없어진 아이콘·글자 사이 간격 */
 .scr-PlanEdit .elist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .scr-PlanEdit .grip { touch-action: none; }
 .scr-PlanEdit .pe-days { display: flex; gap: 6px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
