@@ -37,7 +37,7 @@ public class DemoScenario {
     private static final double ORIGIN_LNG = 126.9921;
     // 조금씩 어기기 (11/08 주형): 발표자가 [다음 장소로]만 눌러도 이 곳들에서는 계획보다 조금 더 머물다 떠남 → 뒤 일정 밀림·자동 조정 안내
     private static final Object[][] EXTRA_STAYS = {}; // 11/12 새 시나리오는 돌발이 늦잠(2일차 숙소)이라 조금씩 어기기는 안 씀
-    private static final String DEMO_DATE = "2026-11-16"; // 시연 계정의 "오늘" = 촬영 1일차(월). 로그인·[시연 준비]하면 시계를 이 날 START_TIME으로 (11/13 주형: 앱 날짜 = 촬영일 11/16~17)
+    // 11/19 주형: 시연 날짜 고정(11/16)은 없앰. 시연 계정도 진짜 오늘이 기본이고, 어느 날짜로 만들든 [여행 시작]하면 시계를 그 여행 1일차로 옮김
     private static final String DINNER_NAME = "산청숯불가든 을지로";
     private static final String DINNER_TIME = "19:00"; // 1일차 회식 예약
     private static final String LUNCH_NAME = "스시도";
@@ -162,7 +162,7 @@ public class DemoScenario {
         setup.setStayCheckInTime(STAY_CHECK_IN);
         setup.setStayCheckOutTime(STAY_CHECK_OUT);
         setup.setStartTime(START_TIME);
-        setup.setDemoDate(DEMO_DATE);
+        setup.setDemoDate(null); // 날짜 고정 없음 (화면은 null이면 진짜 오늘)
         for (Object[] row : EXTRA_STAYS) {
             Stop extra = new Stop();
             extra.setDay((Integer) row[0]);
@@ -191,7 +191,8 @@ public class DemoScenario {
      * 예보가 없는 날(3일 뒤보다 먼 날)은 그대로 둠
      */
     public void applyWeather(List<DayWeather> list) {
-        LocalDate today = Geo.now().toLocalDate();
+        // 11/19: 시연 시계 날짜가 아니라 여행 1일차 기준 (어느 날짜로 만든 여행이든 1일차 맑음 · 2일차 비 안내)
+        LocalDate today = list.isEmpty() ? Geo.now().toLocalDate() : LocalDate.parse(list.get(0).getDate());
         for (DayWeather day : list) {
             if (!day.isAvailable()) {
                 continue;
