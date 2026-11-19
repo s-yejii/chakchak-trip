@@ -137,7 +137,7 @@ async function makeDraft() {
     draft.value = result
     // 안내(notes)는 토스트로 연달아 띄우면 마지막 하나만 보여서, 아래 목록으로 다 보여 줌 (11/13)
     if (isLeft) {
-      showToast('일정이 완성됐어요', { actionText: '완성본 보기', action: openResult }) // 홈에서 기다려도 점검 화면으로 갈 수 있게 (11/12)
+      showToast('일정이 완성됐어요', { actionText: '일정 보기', action: openResult }) // 홈에서 기다려도 점검 화면으로 갈 수 있게 (11/12)
       markReadyDraft() // 토스트를 놓쳐도 '새 여행' 화면에서 다시 열 수 있게 (11/13)
     }
   } catch (e) {
@@ -230,10 +230,10 @@ function waitAtHome() {
 
       <div class="cta">
         <div class="cta__row">
-          <button type="button" class="btn btn--secondary btn--lg" @click="waitAtHome">홈에서 기다리기</button>
-          <button type="button" class="btn btn--primary btn--lg" style="flex: 1" :disabled="!done" @click="openResult">{{ failed ? '이유 보기' : '완성본 보기' }}</button>
+          <button v-if="!done" type="button" class="btn btn--secondary btn--lg" @click="waitAtHome">홈에서 기다리기</button><!-- 11/19 피드백: 다 만들면 숨김 -->
+          <button type="button" class="btn btn--primary btn--lg" style="flex: 1" :disabled="!done" @click="openResult">{{ failed ? '이유 보기' : '일정 보기' }}</button>
         </div>
-        <p class="cta__hint">다른 화면으로 가도 계속 만들고, 끝나면 알려 드려요</p>
+        <p v-if="!done" class="cta__hint">다른 화면으로 가도 계속 만들고, 끝나면 알려 드려요</p>
       </div>
     </div>
   </div>
