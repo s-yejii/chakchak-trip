@@ -5,20 +5,21 @@
 //   kindText: 이 코스에 들어가는 곳 (kinds를 사람 말로, 테마 화면에 보여 줌)
 //   11/14 디자인 검토: HOT·NEW 딱지는 근거 데이터가 없어서 뺐어요
 //   (DB 장소 수 11/13 확인: 익선동 51 · 을지로 63 · 성수 180)
+//   11/19 피드백: "노포·힙지로" 같은 AI 같은 말 → 쉬운 말로, 테마 화면의 긴 설명 줄은 뺌
 
 export const themeList = [
   {
-    id: 'ikseon', label: '익선동 골목', title: '익선동 한옥 골목 산책', tagline: '한옥 사이 작은 밥집·카페를 천천히 걸어요', img: '/img/alley.jpg', kindText: '밥집 · 카페 · 전시',
+    id: 'ikseon', label: '익선동 골목', title: '익선동 한옥 골목 걷기', tagline: '한옥 골목의 밥집·카페 들르기', img: '/img/alley.jpg', kindText: '밥집 · 카페 · 전시',
     area: { name: '익선동', fullName: '서울 종로구 익선동', type: 'dong', lat: 37.5741, lng: 126.9901 },
     kinds: ['food', 'cafe', 'culture'], tags: ['mood'],
   },
   {
-    id: 'euljiro', label: '을지로 노포', title: '을지로 노포·힙지로 한 바퀴', tagline: '오래된 가게와 새 가게가 섞인 을지로 저녁', img: '/img/euljiro.jpg', kindText: '밥집 · 술집 · 카페',
+    id: 'euljiro', label: '을지로 노포', title: '을지로 오래된 맛집 돌기', tagline: '오래된 밥집·술집에서 저녁 먹기', img: '/img/euljiro.jpg', kindText: '밥집 · 술집 · 카페',
     area: { name: '을지로동', fullName: '서울 중구 을지로동', type: 'dong', lat: 37.5663, lng: 126.9919 },
     kinds: ['food', 'bar', 'cafe'], tags: [],
   },
   {
-    id: 'seongsu', label: '성수 카페', title: '성수 카페·편집숍 거리', tagline: '카페 하나, 편집숍 하나씩 들르는 하루', img: '/img/cafe.jpg', kindText: '카페 · 편집숍 · 밥집',
+    id: 'seongsu', label: '성수 카페', title: '성수 카페·옷가게 거리', tagline: '카페와 옷가게를 번갈아 들르기', img: '/img/cafe.jpg', kindText: '카페 · 옷가게 · 밥집',
     area: { name: '성수동', fullName: '서울 성동구 성수동', type: 'dong', lat: 37.5446, lng: 127.0557 },
     kinds: ['cafe', 'shop', 'food'], tags: ['mood'],
   },

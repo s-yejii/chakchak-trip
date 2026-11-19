@@ -36,7 +36,7 @@ public class PlanVerifier {
     private static final String MUST = "must";
     private static final int MAX_LINES = 6; // 안내 목록이 너무 길어지지 않게
     private static final int MIN_FACT_REVIEWS = 10;
-    private static final String NO_HOURS_TEXT = "영업시간 확인 못 함";
+    private static final String NO_HOURS_TEXT = "영업시간 정보 없음 · 가기 전에 확인해 주세요"; // 11/18 "확인 못 함"이 고장처럼 읽혀서
     private static final String CLOSED_TEXT = "그 시각 영업 안 해요";
     private static final java.util.regex.Pattern BOARDING = java.util.regex.Pattern.compile("역( |$)|역사|터미널|공항|정차역"); // 역·터미널 // 이 이상 리뷰가 있어야 평점을 이유로 씀
 

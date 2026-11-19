@@ -27,19 +27,19 @@ import ChoiceCard from '@/components/plan/ChoiceCard.vue'
 import TimeRangePicker from '@/components/plan/TimeRangePicker.vue'
 import { KIND_CHIPS, MOVE_CODES, TAG_CHIPS } from '@/utils/styleCodes'
 // 서비스 아이콘: Simple Icons (CC0, 상표는 각 회사 소유). 그 서비스 바로가기에만 써요
-import youtubeLogo from '@/assets/brand/youtube.svg'
-import instagramLogo from '@/assets/brand/instagram.svg'
-import naverLogo from '@/assets/brand/naver.svg'
 import { toShortDate } from '@/utils/tripView'
 import { showToast } from '@/utils/toast'
 import { recommendTimeFor } from '@/utils/timeRecommend'
 import { appNow, devMode } from '@/utils/devMode'
 import { getDevScenario } from '@/api/dev'
+import youtubeLogo from '@/assets/brand/youtube.svg'
+import instagramLogo from '@/assets/brand/instagram.svg'
+import naverLogo from '@/assets/brand/naver.svg'
 
 const WORKSHOP_MIN_PEOPLE = 4 // 워크숍을 고르면 인원은 적어도 이만큼
 const DEFAULT_MOVES = ['지하철', '도보', '버스']
 const STEPS = [
-  { id: 'link', title: '가고 싶은 곳이 있나요?', sub: '링크로 넣어보세요' },
+  { id: 'link', title: 'SNS에서 본 가게가 있나요?', sub: '인스타·유튜브·네이버 게시물 링크를 넣으면 나온 가게를 찾아 일정에 넣어요' }, // 11/18 사용성: "무슨 링크인지" 몰랐어요
   { id: 'where', title: '어디로 가요?', sub: '', isRequired: true },
   { id: 'dong', title: '어느 동이 좋아요?', sub: '안 고르면 구 전체' },
   { id: 'when', title: '언제 가요?', sub: '' },
@@ -99,6 +99,12 @@ const isLast = computed(() => store.planStep === STEPS.length - 1)
 const progress = computed(() => Math.round(((store.planStep + 1) / STEPS.length) * 100) + '%')
 // 다음 버튼: 어디로는 지역을 고른 뒤에. 출발지는 안 골라도 돼요 (그러면 첫 장소에서 시작)
 const canNext = computed(() => !step.value.isRequired || !!store.planArea)
+// 다음 버튼 글자: 링크 단계에서 아직 담은 곳이 없으면 "넘어가기" (11/18 사용성: 링크가 없으면 눌러도 되는지 몰랐어요)
+const nextLabel = computed(() => {
+  if (isLast.value) return '일정 만들기'
+  const hasWish = (store.planConditions?.mustVisit || []).length > 0
+  return step.value.id === 'link' && !hasWish ? '링크 없어요, 넘어가기' : '다음'
+})
 
 // 1단계: 플랫폼 검색 바로가기 (새 창). 이 칸에선 아직 지역을 안 골라서 검색어는 늘 서울로 고정 (지난번 지역이 저장소에 남아 있어요)
 const YOUTUBE_WORD = '서울 핫플 브이로그'
@@ -154,6 +160,11 @@ function setAreas(areas) {
 
 // 꼭 지킬 시간: 장소 검색·예약 캡처가 store.planConditions.fixed 에 넣은 { name, time } 목록
 const fixedList = computed(() => store.planConditions?.fixed || [])
+// 다시 짜기로 왔으면 지난 여행의 예약 (11/19 피드백: 자동으로 넣지 않고 눌렀을 때만, 날짜가 다르면 아래 안내로 다시 고르게)
+const oldFixed = computed(() => store.replanFrom?.fixed || [])
+function loadOldFixed() {
+  store.planConditions = { ...(store.planConditions || {}), fixed: [...oldFixed.value] }
+}
 
 const companions = [
   { name: '혼자', icon: 'i-user', desc: '내 속도대로' },
@@ -206,9 +217,9 @@ function isOutside(stay) {
 }
 
 // 시작·끝 시간 기본값: 오늘이면 지금+30분을 30분 단위로 올린 시각부터(22:00 넘으면 내일), 다른 날이면 10:00~20:00
-const TIME_STEP_MIN = 30
+const NOW_STEP_MIN = 10 // 오늘 시작 기본값: 지금을 10분 단위로
 const MIN_SPAN_MIN = 120
-const LAST_START_MIN = 22 * 60
+const LAST_START_MIN = 23 * 60 + 50 // 11/18 주형: 오늘은 지금부터 언제든 (예전 22:00 넘으면 내일로). 23:50 넘으면만 내일
 const LAST_END_MIN = 24 * 60
 const DEFAULT_END_MIN = 20 * 60
 const LATE_NOTE = '오늘은 늦어서 내일로 바꿨어요'
@@ -236,7 +247,7 @@ function moveToTomorrow() {
 }
 function setDefaultTimes() {
   if (isToday()) {
-    const start = Math.ceil((nowMinutes() + TIME_STEP_MIN) / TIME_STEP_MIN) * TIME_STEP_MIN
+    const start = Math.ceil(nowMinutes() / NOW_STEP_MIN) * NOW_STEP_MIN // 지금을 10분 단위로 올림 (11/18)
     if (start <= LAST_START_MIN) {
       store.planFromTime = toTime(start)
       store.planToTime = toTime(Math.min(LAST_END_MIN, Math.max(DEFAULT_END_MIN, start + MIN_SPAN_MIN)))
@@ -256,11 +267,11 @@ watch(() => store.planStartDate, () => {
   timeNote.value = ''
   setDefaultTimes()
 })
-// 오늘인데 이미 지난 시작 시각을 고르면 내일로
+// 오늘인데 이미 지난 시작 시각을 고르면 지금으로 맞춤 (11/18: 예전엔 내일로 넘겼어요)
 //   시연 계정은 빼요: 시나리오 출발 15:00을 [시간 추천]으로 넣을 때 시연 시계가 15:07이면 첫날이 11/11로 밀리던 문제 (11/09)
 watch(() => store.planFromTime, (time) => {
   if (scenario.value) return
-  if (time && isToday() && toMinutes(time) < nowMinutes()) moveToTomorrow()
+  if (time && isToday() && toMinutes(time) < nowMinutes()) store.planFromTime = toTime(Math.min(LAST_START_MIN, Math.ceil(nowMinutes() / NOW_STEP_MIN) * NOW_STEP_MIN))
 })
 if (!store.planFromTime) setDefaultTimes()
 
@@ -426,12 +437,14 @@ onMounted(async () => {
   }
   const setup = scenario.value
   if (!store.planOrigin) store.planOrigin = { name: setup.originName, address: setup.originAddress, category: '출발지', lat: setup.originLat, lng: setup.originLng }
-  // 11/17 주형: 날짜가 진짜 오늘(11/17, 시연 시계를 맞추기 전에 잡힌 기본값)이면 시연 날짜(11/16)로 → 만든 여행이 'D-1'이 되어 [여행 시작]이 안 보이던 문제
+  // 11/19 주형: 날짜 고정 없음. 기본 날짜가 시연 시계 날짜(앞 여행을 시작하며 옮겨 둔 날)면 진짜 오늘로 → 달력·날씨·남은 날이 한 기준
+  //   어느 날짜로 만들든 [여행 시작]하면 시계가 그 여행 1일차로 옮겨져 바로 시작돼요 (devMode.prepareTripStart)
   const realToday = dateText(new Date())
-  if (setup.demoDate && store.planStartDate === realToday && setup.demoDate !== realToday) {
+  const clockToday = dateText(appNow())
+  if (store.planStartDate === clockToday && clockToday !== realToday) {
     const nights = store.planEndDate ? daysBetween(store.planStartDate, store.planEndDate) : 0
-    store.planStartDate = setup.demoDate
-    if (store.planEndDate) store.planEndDate = addDays(setup.demoDate, nights)
+    store.planStartDate = realToday
+    if (store.planEndDate) store.planEndDate = addDays(realToday, nights)
   }
   // 예약(산청숯불가든 회식·스시도)은 미리 넣지 않음. 발표자가 "예약한 곳" 단계에서 장소 검색으로 직접 넣어요 (11/09 상재 제보)
 })
@@ -605,6 +618,7 @@ function useRecommendedTime() {
               <button type="button" class="iconbtn" :aria-label="item.name + ' 빼기'" @click="removeFixed(index)"><i class="ic i-close muted" aria-hidden="true"></i></button>
             </div>
           </div>
+          <button v-if="!fixedList.length && oldFixed.length" type="button" class="btn btn--secondary btn--md" @click="loadOldFixed">지난 여행 예약 {{ oldFixed.length }}개 불러오기</button>
           <button v-if="!fixedList.length" type="button" class="textlink" style="align-self: center" @click="goNext">예약 없어요</button>
         </section>
       </div>
@@ -612,7 +626,7 @@ function useRecommendedTime() {
       <div class="cta">
         <div class="cta__row">
           <button v-if="store.planStep > 0" type="button" class="btn btn--secondary btn--lg" @click="goPrev">이전</button>
-          <button type="button" class="btn btn--primary btn--lg" :class="{ 'is-wait': !canNext }" @click="goNext">{{ isLast ? '일정 만들기' : '다음' }}</button>
+          <button type="button" class="btn btn--primary btn--lg" :class="{ 'is-wait': !canNext }" @click="goNext">{{ nextLabel }}</button>
         </div>
       </div>
     </div>

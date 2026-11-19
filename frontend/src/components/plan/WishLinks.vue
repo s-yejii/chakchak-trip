@@ -114,7 +114,7 @@ function removeWish(name) {
     <form class="wl-form" @submit.prevent="findPlaces">
       <div class="field" :class="{ 'is-error': error }" style="flex: 1; min-width: 0">
         <label for="pa-url" class="sr">게시물 링크</label>
-        <div class="field__box"><input id="pa-url" v-model="url" type="text" inputmode="url" placeholder="링크 붙여넣기" autocomplete="off" autocapitalize="off" @input="error = ''" /></div>
+        <div class="field__box"><input id="pa-url" v-model="url" type="text" inputmode="url" placeholder="예: instagram.com/p/…" autocomplete="off" autocapitalize="off" @input="error = ''" /></div>
       </div>
       <button type="submit" class="btn btn--secondary btn--md" :disabled="loading">{{ loading ? '찾는 중' : '장소 찾기' }}</button>
     </form>
@@ -124,7 +124,7 @@ function removeWish(name) {
       <label for="pa-caption" class="t-cap">게시물 글</label>
       <textarea id="pa-caption" v-model="caption" class="wl-caption" rows="4" maxlength="2200" placeholder="글 붙여넣기"></textarea>
     </div>
-    <button v-else type="button" class="wl-more" @click="showCaption = true">글 붙여넣기</button>
+    <button v-else type="button" class="wl-more" @click="showCaption = true">링크가 안 열리면 글을 붙여 넣어도 돼요</button>
   </template>
 
   <div v-else class="wl-found" role="group" aria-label="찾은 장소">

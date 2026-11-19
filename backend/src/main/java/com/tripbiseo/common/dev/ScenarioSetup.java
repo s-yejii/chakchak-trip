@@ -33,6 +33,8 @@ public class ScenarioSetup {
     private Double busDownLat;     // 버스에서 내리는 곳 (남산 아래 명동 쪽)
     private Double busDownLng;
     private Integer busDownMin;    // 버스로 내려가는 분
+    private String busDownBoard;   // 타는 곳 이름 (11/19)
+    private String busDownAlight;  // 내리는 곳 이름 (11/19)
     private List<Stop> extraStays = new ArrayList<>(); // 사람들이 실제로 그러듯 조금 더 머무는 곳: day·name·stay(더 머무는 분) (11/08)
     private String demoDate;    // 시연 계정의 "오늘" (11/09 주형: 중간 발표에서는 무조건 2026-11-10 화)
     private String startTime;   // 1일차 시작 시각 "15:00": 로그인하면 시연 시계를 오늘 이 시각으로

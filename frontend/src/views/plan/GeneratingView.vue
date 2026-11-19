@@ -29,8 +29,14 @@ const CREEP_MS = 400 // 하는 중인 단계에서 %가 1씩 오르는 간격
 const FIRST_CREEP_TO = 15 // 첫 알림(후보 찾기 끝)이 오기 전까지 올라갈 수 있는 %
 // 단계가 끝날 때의 % (서버 PlanServiceImpl이 보내는 값과 같음) → 하는 중이면 이 값 바로 아래까지만 올라감
 const DONE_PERCENT = { candidates: 20, reviews: 40, ai: 80, rules: 90, finish: 93, walk: 94, fixed: 95 }
-const STEP_ICONS = { candidates: 'i-pin', reviews: 'i-search', ai: 'i-sparkle', rules: 'i-clock', finish: 'i-flag', walk: 'i-walk', fixed: 'i-lock' }
 const MAP_PADDING = { top: 40, right: 30, bottom: 30, left: 30 }
+// 11/18 사용성: 서버 단계 7개를 세 줄로 묶어 보여 줘요 (회색 설명 줄은 아무도 안 읽어서 뺌)
+const SHOWN_STEPS = [
+  { id: 'find', text: '장소 찾기', icon: 'i-pin', members: ['candidates', 'reviews'] },
+  { id: 'pick', text: 'AI가 고르기', icon: 'i-sparkle', members: ['ai'] },
+  { id: 'fit', text: '시간·동선 맞추기', icon: 'i-clock', members: ['rules', 'finish', 'walk', 'fixed'] },
+]
+const MAX_NOTES = 2 // 다 만든 뒤 크게 보여 줄 안내 수
 
 const router = useRouter()
 
@@ -38,9 +44,6 @@ const router = useRouter()
 const NEW_LINE = '\n'
 function firstLine(text) {
   return text.split(NEW_LINE)[0]
-}
-function secondLine(text) {
-  return text.split(NEW_LINE)[1] || ''
 }
 const store = useTripStore()
 const conditions = store.planConditions // 여행 정보 단계에서 모은 조건 (없으면 여행 정보 입력으로)
@@ -57,6 +60,24 @@ let timer = null
 let isLeft = false // 화면을 떠났는지 (떠난 뒤 끝나면 토스트로 알림)
 
 const done = computed(() => draft.value !== null || failed.value)
+// 세 줄 단계: 받은 단계 중 하나라도 하는 중이면 now, 다 끝났으면 done, 아직이면 wait (첫 줄은 처음부터 now)
+const shownSteps = computed(() => SHOWN_STEPS.map((group, index) => {
+  const got = steps.value.filter((item) => group.members.includes(item.step))
+  let state = 'wait'
+  if (done.value || (got.length && got.every((item) => item.state === 'done') && isLaterStarted(index))) state = 'done'
+  else if (got.length || (index === 0 && !steps.value.length)) state = 'now'
+  return { ...group, state }
+}))
+// 뒤 묶음이 시작됐는지 (앞 묶음을 "끝"으로 바꿀 때)
+function isLaterStarted(index) {
+  const later = SHOWN_STEPS.slice(index + 1).flatMap((group) => group.members)
+  return steps.value.some((item) => later.includes(item.step))
+}
+// 다 만든 뒤 안내: 확인 줄(✓ 예약 확인)은 빼고 꼭 알아야 할 것만 2개까지 크게 (나머지는 점검 화면 칸 옆에)
+const importantNotes = computed(() => {
+  const notes = draft.value?.notes || []
+  return notes.filter((note) => !note.text.startsWith('✓')).slice(0, MAX_NOTES)
+})
 const placeName = computed(() => store.planArea?.name || conditions?.region || '여행')
 const dayCount = computed(() => {
   const start = conditions?.startDate || store.planStartDate
@@ -116,7 +137,7 @@ async function makeDraft() {
     draft.value = result
     // 안내(notes)는 토스트로 연달아 띄우면 마지막 하나만 보여서, 아래 목록으로 다 보여 줌 (11/13)
     if (isLeft) {
-      showToast('일정이 완성됐어요', { actionText: '완성본 보기', action: openResult }) // 홈에서 기다려도 점검 화면으로 갈 수 있게 (11/12)
+      showToast('일정이 완성됐어요', { actionText: '일정 보기', action: openResult }) // 홈에서 기다려도 점검 화면으로 갈 수 있게 (11/12)
       markReadyDraft() // 토스트를 놓쳐도 '새 여행' 화면에서 다시 열 수 있게 (11/13)
     }
   } catch (e) {
@@ -197,29 +218,22 @@ function waitAtHome() {
         </div>
         <div class="bar" role="progressbar" aria-label="일정 만드는 중" :aria-valuenow="percent" aria-valuemin="0" aria-valuemax="100"><i :style="{ width: percent + '%' }"></i></div>
         <ol class="gen-steps" aria-live="polite">
-          <li v-for="item in steps" :key="item.step" class="step" :class="item.state">
-            <span class="dotc"><i class="ic ic--s" :class="item.state === 'done' ? 'i-check' : STEP_ICONS[item.step]" aria-hidden="true"></i></span>
-            <span class="gen-step__body">
-              <span class="t-strong">{{ item.text }}{{ item.state === 'now' ? '…' : '' }}</span>
-              <span v-if="item.detail" class="t-cap">{{ item.detail }}</span>
-            </span>
-          </li>
-          <li v-if="!steps.length && !done" class="step now">
-            <span class="dotc"><i class="ic ic--s i-pin" aria-hidden="true"></i></span><span class="t-strong">장소 후보 찾는 중…</span>
+          <li v-for="item in shownSteps" :key="item.id" class="step" :class="item.state">
+            <span class="dotc"><i class="ic ic--s" :class="item.state === 'done' ? 'i-check' : item.icon" aria-hidden="true"></i></span>
+            <span class="t-strong">{{ item.text }}{{ item.state === 'now' && !done ? '…' : '' }}</span>
           </li>
         </ol>
-        <ul v-if="draft && draft.notes && draft.notes.length" class="gen-notes" aria-label="일정 안내">
-          <!-- 11/14: 확인 줄은 두 줄(제목 / 확인한 것)로 와요 → 첫 줄은 진하게, 둘째 줄은 회색 -->
-          <li v-for="(note, i) in draft.notes" :key="i" class="t-cap"><i class="ic ic--s i-info" aria-hidden="true"></i><span class="gen-note"><span>{{ firstLine(note.text) }}</span><span v-if="secondLine(note.text)" class="gen-note__sub">{{ secondLine(note.text) }}</span></span></li>
+        <ul v-if="importantNotes.length" class="gen-notes" aria-label="일정 안내">
+          <li v-for="(note, i) in importantNotes" :key="i" class="gen-note"><i class="ic i-info c-warning" aria-hidden="true"></i><span>{{ firstLine(note.text) }}</span></li>
         </ul>
       </div>
 
       <div class="cta">
         <div class="cta__row">
-          <button type="button" class="btn btn--secondary btn--lg" @click="waitAtHome">홈에서 기다리기</button>
-          <button type="button" class="btn btn--primary btn--lg" style="flex: 1" :disabled="!done" @click="openResult">{{ failed ? '이유 보기' : '완성본 보기' }}</button>
+          <button v-if="!done" type="button" class="btn btn--secondary btn--lg" @click="waitAtHome">홈에서 기다리기</button><!-- 11/19 피드백: 다 만들면 숨김 -->
+          <button type="button" class="btn btn--primary btn--lg" style="flex: 1" :disabled="!done" @click="openResult">{{ failed ? '이유 보기' : '일정 보기' }}</button>
         </div>
-        <p class="cta__hint">다른 화면으로 가도 계속 만들고, 끝나면 알려 드려요</p>
+        <p v-if="!done" class="cta__hint">다른 화면으로 가도 계속 만들고, 끝나면 알려 드려요</p>
       </div>
     </div>
   </div>
@@ -231,7 +245,6 @@ function waitAtHome() {
 .scr-Generating .gen-map__badge{position:absolute;left:10px;top:10px;background:#fff;z-index:1}
 .scr-Generating .gen-body{position:absolute;top:328px;left:16px;right:16px;bottom:128px;display:flex;flex-direction:column;gap:16px;overflow:auto}
 .scr-Generating .gen-steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
-.scr-Generating .gen-step__body{display:flex;flex-direction:column;gap:2px;min-width:0}
 .scr-Generating .step{display:flex;align-items:center;gap:12px;min-height:40px;padding:4px 0}
 .scr-Generating .step .dotc{width:24px;height:24px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center}
 .scr-Generating .step.done .dotc{background:var(--navy);color:#fff}
@@ -239,7 +252,5 @@ function waitAtHome() {
 .scr-Generating .step.wait .dotc{border:2px solid var(--line-strong)}
 .scr-Generating .step.wait .t-strong{color:var(--ink-subtle)}
 .scr-Generating .gen-notes{list-style:none;margin:0;padding:12px;display:flex;flex-direction:column;gap:6px;background:var(--surface);border-radius:var(--radius-md, 12px)}
-.scr-Generating .gen-notes li{display:flex;gap:6px;align-items:flex-start;color:var(--ink)}
-.scr-Generating .gen-note{display:flex;flex-direction:column;gap:2px;min-width:0}
-.scr-Generating .gen-note__sub{color:var(--ink-muted)}
+.scr-Generating .gen-note{display:flex;gap:8px;align-items:flex-start;color:var(--ink);font-size:15px;line-height:22px;font-weight:600}
 </style>

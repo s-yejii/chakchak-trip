@@ -242,7 +242,8 @@ public class TripWeatherServiceImpl implements TripWeatherService {
     }
 
     private LocalDate today() {
-        return Geo.now().toLocalDate(); // 시연 시계가 생기면 그 날짜를 따라가요
+        // 11/19: 예보가 있는 날인지는 진짜 오늘로 판단 (시연 시계를 여행 날짜로 옮겨도 "지난 날짜예요"·없는 예보를 지어내지 않게)
+        return java.time.ZonedDateTime.now(Geo.KST).toLocalDate();
     }
 
     private static Integer round(Double value) {
