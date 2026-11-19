@@ -19,7 +19,7 @@ export const themeList = [
     kinds: ['food', 'bar', 'cafe'], tags: [],
   },
   {
-    id: 'seongsu', label: '성수 카페', title: '성수 카페·옷가게 거리', tagline: '카페와 옷가게를 번갈아 들르기', img: '/img/cafe.jpg', kindText: '카페 · 편집숍 · 밥집',
+    id: 'seongsu', label: '성수 카페', title: '성수 카페·옷가게 거리', tagline: '카페와 옷가게를 번갈아 들르기', img: '/img/cafe.jpg', kindText: '카페 · 옷가게 · 밥집',
     area: { name: '성수동', fullName: '서울 성동구 성수동', type: 'dong', lat: 37.5446, lng: 127.0557 },
     kinds: ['cafe', 'shop', 'food'], tags: ['mood'],
   },
