@@ -39,7 +39,11 @@ public class LiveAlertMaker {
             return null; // 11/08 주형: 시간을 꼭 지킬 곳은 예약(고정) 일정뿐. 식당·카페·공원은 늦어도 뒤 일정이 밀릴 뿐이라 출발 알림을 안 냄
         }
         if (current != null) {
-            return toLeave(current, context.getLeaveAt(), context.getLeaveAt() - now, nextStop.getName(), true);
+            int left = context.getLeaveAt() - now;
+            if (CafeStay.isCafe(current.getCategory()) && (left <= 0 || left > LEAVE_SOON_MIN)) {
+                return null; // 11/19 주형: 예약 앞 카페에선 나갈 시각 5분 전에 한 번만 (10분 전·지금·지남 알림은 안 냄)
+            }
+            return toLeave(current, context.getLeaveAt(), left, nextStop.getName(), true);
         }
         if (context.getMissedStops().contains(nextStop)) {
             return null;

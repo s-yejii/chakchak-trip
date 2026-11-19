@@ -1,6 +1,8 @@
 package com.tripbiseo.live.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -56,6 +58,27 @@ class LiveAlertTextTest {
         assertFalse(maker.isMustLeaveNow(context));
         context.setNow(Geo.toMinutes("18:54"));
         assertTrue(maker.isMustLeaveNow(context));
+    }
+
+    // 11/19 주형: 예약 앞 카페에선 출발 알림을 5분 전 한 번만
+    @Test
+    void 카페에선_출발_알림이_5분_전_한_번만() {
+        Stop cafe = new Stop();
+        cafe.setName("공간갑");
+        cafe.setCategory("카페,디저트");
+        Stop dinner = sushi();
+        dinner.setId(7L);
+        dinner.setFixed(true);
+        StatusContext context = new StatusContext();
+        context.setCurrent(cafe);
+        context.setNextStop(dinner);
+        context.setLeaveAt(Geo.toMinutes("18:54"));
+        context.setNow(Geo.toMinutes("18:45")); // 9분 전
+        assertNull(maker.makeLeave(context));
+        context.setNow(Geo.toMinutes("18:50")); // 4분 전
+        assertNotNull(maker.makeLeave(context));
+        context.setNow(Geo.toMinutes("18:54")); // 지금
+        assertNull(maker.makeLeave(context));
     }
 
     @Test
