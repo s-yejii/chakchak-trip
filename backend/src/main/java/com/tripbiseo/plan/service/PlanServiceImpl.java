@@ -72,6 +72,7 @@ public class PlanServiceImpl implements PlanService {
     private static final java.util.regex.Pattern SOLO_WORDS = java.util.regex.Pattern.compile("혼밥|혼자|1인");
     private static final int MAX_REASON_LENGTH = 40;      // Gemini 이유 한 줄
     private static final int MIDNIGHT_MIN = 24 * 60;       // 오늘 일정은 자정까지 (11/18)
+    private static final String MIDNIGHT_TEXT = "24:00";
     private static final int TEN_MIN = 10;
     private static final int HOUR_MIN = 60;
     private static final int LATE_NIGHT_MIN = 21 * 60;     // 이 뒤에 시작하면 "지금 열린 곳 위주로" 안내
@@ -372,7 +373,7 @@ public class PlanServiceImpl implements PlanService {
         }
         int startMin = Geo.toMinutes(conditions.getStartTime());
         if (!hasText(conditions.getEndTime()) || Geo.toMinutes(conditions.getEndTime()) - startMin < HOUR_MIN) {
-            conditions.setEndTime(Geo.toHhmm(MIDNIGHT_MIN));
+            conditions.setEndTime(MIDNIGHT_TEXT); // Geo.toHhmm(24:00)은 "00:00"이 돼서 끝이 시작보다 빨라졌어요 (11/19 점검)
         }
         return startMin >= LATE_NIGHT_MIN;
     }
