@@ -764,12 +764,14 @@ async function onLinkAdded(message) {
 
 // 장면 2 카드 (11/17 주형, 시연 계정만): 버스에서 내린 뒤 예약까지 시간이 남으면 "이대로 갈까요?" → [가는 길 카페 찾기]는 AI에게 묻기를 질문 채워서 열어요
 // 11/19 주형: [어디 갈까?]가 지금 자리 근처 펍을 추천해서 → 예약 가게 근처 카페로 물어요 (AI에게 묻기의 "다른 곳 기준 찾기")
-const REST_QUESTION_TAIL = ' 근처 카페'
 const askDraft = ref('')
+const askCafeNear = ref(null) // 열면 바로 이 예약 가게 근처 카페를 찾음 (AskPanel cafeNear)
 function findRestCafe() {
   const name = restAsk.value ? restAsk.value.name : ''
+  const stop = (live.trip.value.stops || []).find((item) => item.name === name && item.lat != null)
   restAsk.value = null
-  askDraft.value = name + REST_QUESTION_TAIL
+  askCafeNear.value = stop ? { name: stop.name, lat: stop.lat, lng: stop.lng } : null
+  askDraft.value = stop ? '' : name + ' 근처 카페'
   openAsk()
 }
 function keepGoing() {
@@ -1109,7 +1111,7 @@ function finishTour() {
           <!-- AI 채팅(④) -->
           <!-- 자리 고르기 중에는 숨기기만 (AskPanel은 뿌리 요소가 둘이라 v-show를 감싸는 div에) -->
           <div v-if="asking" v-show="!slotPlace">
-            <AskPanel :initial-draft="askDraft" :me="mePoint || { x: 195, y: 300 }" :late="isLate" :trip-id="live.tripId.value" :position="live.position.value" @close="asking = false" @add="onAskAdd" :selected="askPickedId" :chat-key="chatKey(live.trip.value)" :planned="plannedPlaceIds" @choose="openSlotSheet" @found="onAskFound" @pick="askPickedId = $event" />
+            <AskPanel :initial-draft="askDraft" :cafe-near="askCafeNear" :me="mePoint || { x: 195, y: 300 }" :late="isLate" :trip-id="live.tripId.value" :position="live.position.value" @close="asking = false; askCafeNear = null" @add="onAskAdd" :selected="askPickedId" :chat-key="chatKey(live.trip.value)" :planned="plannedPlaceIds" @choose="openSlotSheet" @found="onAskFound" @pick="askPickedId = $event" />
           </div>
           <div v-else class="quick live-quick" data-sheet-follow role="group" aria-label="트리피에게 묻기와 결제 메모">
             <button type="button" class="chip chip--sm chip--add live-chip" data-tour="ask" aria-label="어디 갈까? 트리피에게 갈 곳 물어보기" @click="openAsk"><span class="live-chip__ic live-chip__ic--ai" aria-hidden="true"><img src="/img/trippie-favicon.png" alt="" class="live-chip__img" draggable="false" /></span>어디 갈까?</button>
