@@ -6,17 +6,18 @@
 import { computed, ref } from 'vue'
 import { upload } from '@/api/http'
 import { isEditedPhoto, editedOriginalIds } from '@/utils/webJournal'
+import { withoutTakenInfo } from '@/utils/photoUpload' // 사진 속 찍은 시각 지우기 (11/19 공통 파일로 옮김)
 import PhotoEditor from './PhotoEditor.vue'
 
 const props = defineProps({
   retro: { type: Object, required: true },   // GET /trips/{id}/retro 응답
   photos: { type: Array, required: true },   // GET /trips/{id}/photos 응답 (부모가 읽음)
   journal: { type: Object, required: true }, // 웹 메모 (reactive). covers·tripCover·editedFrom을 여기서 고침
+  isEditorOnly: { type: Boolean, default: false }, // 11/19: true면 카드(올리기·목록)는 안 보이고 꾸미기 편집기만 (사진은 '장소' 블럭에서 봄)
 })
 const emit = defineEmits(['reload', 'view'])  // reload: 사진을 다시 읽어 달라 / view: 영상 크게 보기
 
 const UPLOAD_GAP_MINUTES = 3     // 장소를 골라 여러 장 올리면 이만큼씩 시각을 띄움
-const REENCODE_QUALITY = 0.95    // 촬영 정보를 지우려고 다시 저장할 때 화질
 
 const editingPhoto = ref(null)
 const uploadTarget = ref('file')  // 'file' = 파일에 적힌 시각 그대로, 아니면 일정 칸 id
@@ -183,23 +184,6 @@ function fileTakenAt(file) {
   return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate()) + 'T' + pad(date.getHours()) + ':' + pad(date.getMinutes())
 }
 
-// 사진을 한 번 다시 그려서 저장: 파일 안의 찍은 시각(EXIF)이 지워져서 서버가 우리가 보낸 시각을 써요
-// 브라우저가 못 여는 사진(HEIC 등)이나 영상은 그대로 올려요
-async function withoutTakenInfo(file) {
-  if (!file.type.startsWith('image/') || file.type === 'image/heic') return file
-  try {
-    const bitmap = await createImageBitmap(file) // 파일을 그림으로 읽기
-    const canvas = document.createElement('canvas')
-    canvas.width = bitmap.width
-    canvas.height = bitmap.height
-    canvas.getContext('2d').drawImage(bitmap, 0, 0)
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', REENCODE_QUALITY))
-    return new File([blob], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' })
-  } catch (e) {
-    return file
-  }
-}
-
 async function uploadFiles(event) {
   const files = Array.from(event.target.files)
   event.target.value = '' // 같은 파일을 다시 골라도 올라가게
@@ -238,6 +222,7 @@ async function toUploadForm(files) {
 
 <template>
   <section class="rp">
+    <template v-if="!isEditorOnly">
     <h2>사진 <small>{{ photos.length }}장 · 누르면 꾸미기</small></h2>
     <div class="rp-upload">
       <label class="rp-upload__btn" :class="{ 'is-busy': isUploading }">
@@ -267,6 +252,7 @@ async function toUploadForm(files) {
         </button>
       </div>
     </div>
+    </template>
 
     <PhotoEditor
       v-if="editingPhoto"
