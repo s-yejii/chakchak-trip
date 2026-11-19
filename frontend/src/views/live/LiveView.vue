@@ -15,8 +15,7 @@ import { useLiveTrip } from '@/utils/useLiveTrip'
 import { imageFor } from '@/utils/mapView'
 import { toDuration, toMinutes, toTime } from '@/utils/time'
 import { showToast } from '@/utils/toast'
-import { shareToKakao } from '@/utils/kakaoShare'
-import { createShareLink } from '@/api/members'
+import { shareTrip } from '@/utils/tripShare'
 import { goBack } from '@/utils/back'
 import { rememberAlert, shouldOpenAlert } from '@/utils/alertMemory'
 import { finishTrip, getTripPhotos, skipStop, updateStop } from '@/api/trips'
@@ -40,7 +39,6 @@ import { isBoardingPlace, missTrainTitle } from '@/utils/departure'
 import SegSheet from '@/components/live/SegSheet.vue'
 import AskPanel from '@/components/live/AskPanel.vue'
 import InsertSlotSheet from '@/components/live/InsertSlotSheet.vue'
-import NearSearch from '@/components/after/NearSearch.vue'
 import SimilarSearch from '@/components/live/SimilarSearch.vue'
 import LiveTour from '@/components/live/LiveTour.vue'
 import { isTourDone, markTourDone } from '@/utils/liveTour'
@@ -215,12 +213,12 @@ const isLostOpen = computed(() => {
   return manualLostId.value !== null || (!isAlertMuted.value && laterKey.value !== currentAlert.value.key)
 })
 const lostText = computed(() => (manualLostId.value ? '예약한 곳에 못 가게 됐나요?' : currentAlert.value.text))
-// 놓침 카드 한 줄: "13:05 도착 (35분 늦음)" (도착 예상이 예약 시각보다 늦을 때만, 11/16 ③)
+// 놓침 카드 한 줄: "13:05 도착 · 35분 늦음" (도착 예상이 예약 시각보다 늦을 때만, 11/16 ③. 11/19 PPT 14장 문구)
 const lostArriveText = computed(() => {
   const stop = lostStop.value
   if (!stop || !stop.eta || !stop.time) return ''
   const late = toMinutes(stop.eta) - toMinutes(stop.time)
-  return late > 0 ? stop.eta + ' 도착 (' + toDuration(late) + ' 늦음)' : ''
+  return late > 0 ? stop.eta + ' 도착 · ' + toDuration(late) + ' 늦음' : ''
 })
 const isCardOpen = isLostOpen // 가운데 카드는 놓침 카드 하나뿐 (11/12)
 // 고른 카드가 아직 안 간 식당·카페 예약이면 "못 가게 됐어요" 버튼
@@ -710,6 +708,8 @@ async function changeSegMode(mode) {
   try {
     await updateStop(live.tripId.value, stop.id, { mode: mode, memo: stop.memo ?? null })
     await live.refresh()
+    // 11/19 PPT 9장: 시트는 처음 누른 카드(이동 분·거리)를 들고 있어서 [닫기]를 눌러야 새 시간이 보였어요 → 다시 계산한 카드로 바로 바꿈
+    segCard.value = cards.value.find((card) => card.stopId === stop.id) || segCard.value
     showToast(mode ? MODE_DONE_TEXT[mode] + ' 바꿨어요 · 도착 시간을 다시 계산했어요' : '거리에 맞춰 자동으로 골라요')
   } catch (e) {
     showToast(e.message)
@@ -731,19 +731,13 @@ function locate() {
   showToast('아직 지금 위치를 받지 못했어요')
 }
 
-// 공유 링크 앞주소: 폰에서 열리게 터널 주소(frontend/.env.local의 VITE_SHARE_BASE_URL)가 있으면 그것, 없으면 지금 주소
-const SHARE_BASE_URL = import.meta.env.VITE_SHARE_BASE_URL || location.origin
-// 카톡 카드 사진: 트리피 깃발(800×400, public/img/share-card.png). 카카오는 인터넷 주소 사진만 가져가서
-//   카카오 서버에 올려 둔 주소를 기본값으로 써요 (localhost에서도 사진이 나옴). 바꾸려면 .env.local의 VITE_SHARE_IMAGE_URL
-const KAKAO_SHARE_IMAGE = 'https://k.kakaocdn.net/dn/b1Y1c5/dJMcacyzq5v/b2FTQQoOkwVRXEqo7MQyA0/kakaolink40_original.png'
-const SHARE_IMAGE_URL = import.meta.env.VITE_SHARE_IMAGE_URL || KAKAO_SHARE_IMAGE
 // 같이 간 사람에게 일정 보내기 (11/16 ① 상재): 공유 링크(/s/코드, 로그인 없이 열림)를 카카오톡 피드로. 카카오를 못 쓰면 링크 복사
+//   11/19: 바뀐 일정 화면도 같은 공유를 쓰게 utils/tripShare.js로 옮김
 async function share() {
   const next = remainingStops.value.slice(0, 2).map((stop) => stop.eta + ' ' + stop.name)
   try {
-    const link = await createShareLink(live.tripId.value)
-    const result = await shareToKakao({ title: live.trip.value ? live.trip.value.title : '여행 일정', description: next.join(' · ') || '착착트립 일정',
-      imageUrl: SHARE_IMAGE_URL, imageWidth: 800, imageHeight: 400, link: SHARE_BASE_URL + link.path, buttonTitle: '일정 보기' })
+    const title = live.trip.value ? live.trip.value.title : '여행 일정'
+    const result = await shareTrip(live.tripId.value, title, next.join(' · ') || '착착트립 일정', '일정 보기')
     if (result === 'copied') showToast('일정 링크를 복사했어요 · 메신저에 붙여 넣어 보내세요')
   } catch (e) {
     showToast('공유하지 못했어요 · ' + e.message)
@@ -783,11 +777,7 @@ function openAsk() {
   adding.value = false
   info.value = null
 }
-function openNear() {
-  adding.value = true
-  asking.value = false
-  info.value = null
-}
+// 11/19 PPT 10장: "어디 갈까?"(AI 채팅)와 같은 일을 해서 [근처 찾기] 버튼은 뺌. 아래 near… 값은 비슷한 가게 찾기(놓침 카드)가 계속 써요
 function closeNear() {
   adding.value = false
   similarStop.value = null
@@ -878,6 +868,13 @@ async function finish() {
 const endStop = ref(null) // 끝 시트를 띄운 칸 { name, eta }
 let isEndShown = false // 닫아도 다시 안 띄움
 const isAskingEnd = ref(false) // [여행 끝내기] 카드를 눌러 한 번 더 묻는 중
+
+// 끝 카드를 누름 (11/19 PPT 11장): 여러 날 여행의 마지막 날이 아니면 마무리 창 없이 내일로 이어진다고만 알려 줌
+//   날짜가 바뀌면 서버 상황(오늘 = 2일차)이 30초 안에 2일차 칸으로 바뀌어서 따로 넘길 필요가 없어요
+function onEndCard() {
+  if (nextDayNo.value) return showToast('오늘 일정은 여기까지예요 · 내일 아침 ' + nextDayNo.value + '일차 일정으로 이어져요')
+  isAskingEnd.value = true
+}
 
 // [여행 끝내기] 확인: 여행을 끝내고 회고로
 function confirmEnd() {
@@ -1091,7 +1088,7 @@ function finishTour() {
           @added="onSlotAdded"
           @close="closeSlotSheet"
         />
-        <!-- 놓친 예약과 비슷한 근처 가게 (④ 11/12): 근처 찾기와 같은 자리·같은 지도 핀 -->
+        <!-- 놓친 예약과 비슷한 근처 가게 (④ 11/12): 지도 아래 패널 + 지도 핀 -->
         <SimilarSearch
           v-if="adding && similarStop"
           v-model:picked-id="nearPickedId"
@@ -1104,18 +1101,6 @@ function finishTour() {
           @added="onAdded"
           @close="closeNear"
         />
-        <NearSearch
-          v-else-if="adding"
-          v-show="!slotPlace"
-          v-model:picked-id="nearPickedId"
-          :planned="plannedPlaceIds"
-          :trip-id="live.tripId.value"
-          :position="live.position.value"
-          @choose="openSlotSheet"
-          @results="onNearResults"
-          @added="onAdded"
-          @close="closeNear"
-        />
 
         <template v-else>
           <!-- AI 채팅(④) -->
@@ -1123,9 +1108,8 @@ function finishTour() {
           <div v-if="asking" v-show="!slotPlace">
             <AskPanel :initial-draft="askDraft" :me="mePoint || { x: 195, y: 300 }" :late="isLate" :trip-id="live.tripId.value" :position="live.position.value" @close="asking = false" @add="onAskAdd" :selected="askPickedId" :chat-key="chatKey(live.trip.value)" :planned="plannedPlaceIds" @choose="openSlotSheet" @found="onAskFound" @pick="askPickedId = $event" />
           </div>
-          <div v-else class="quick live-quick" data-sheet-follow role="group" aria-label="트리피에게 묻기와 근처 찾기">
+          <div v-else class="quick live-quick" data-sheet-follow role="group" aria-label="트리피에게 묻기와 결제 메모">
             <button type="button" class="chip chip--sm chip--add live-chip" data-tour="ask" aria-label="어디 갈까? 트리피에게 갈 곳 물어보기" @click="openAsk"><span class="live-chip__ic live-chip__ic--ai" aria-hidden="true"><img src="/img/trippie-favicon.png" alt="" class="live-chip__img" draggable="false" /></span>어디 갈까?</button>
-            <button type="button" class="chip chip--sm chip--add live-chip" data-tour="near" @click="openNear"><span class="live-chip__ic live-chip__ic--near" aria-hidden="true"><i class="ic ic--s i-search"></i></span>근처 찾기</button>
             <!-- 결제 메모 입구 (11/12): 화면은 ⑤ PayMemoView (/live/pay) -->
             <RouterLink to="/live/pay" class="chip chip--sm chip--add live-chip" data-tour="pay"><span class="live-chip__ic live-chip__ic--pay" aria-hidden="true"><i class="ic ic--s i-receipt"></i></span>결제 메모</RouterLink>
           </div>
@@ -1145,7 +1129,7 @@ function finishTour() {
             </div>
 
             <button v-if="selectedMealFixed && !isLostOpen" type="button" class="btn btn--secondary btn--md" style="align-self: flex-start" @click="manualLostId = selectedMealFixed.id">못 가게 됐어요</button>
-            <LiveCards :cards="cards" :selected="selected" :auto-focus="devMode.isOn" :focus="cardFocus" @pick="pickCard" @seg="segCard = $event" @scrolled="onCardScrolled" show-end @end="isAskingEnd = true" />
+            <LiveCards :cards="cards" :selected="selected" :auto-focus="devMode.isOn" :focus="cardFocus" @pick="pickCard" @seg="segCard = $event" @scrolled="onCardScrolled" show-end :is-day-end="!!nextDayNo" @end="onEndCard" />
 
             <p v-if="status.weather" class="t-cap live-event"><i class="ic ic--s i-info" aria-hidden="true"></i>{{ status.weather.time }}부터 비</p>
           </BottomSheet>
@@ -1220,7 +1204,6 @@ function finishTour() {
 /* AI에게 묻기 = 트리피 얼굴 (11/16, 예전 보라 ✨ 대신. AI 채팅창 프로필과 같은 그림) */
 .scr-Live .live-chip__ic--ai { overflow: hidden; background: var(--sky-soft); box-shadow: inset 0 0 0 1px var(--sky-line); }
 .scr-Live .live-chip__img { width: 100%; height: 100%; object-fit: cover; -webkit-user-drag: none; }
-.scr-Live .live-chip__ic--near { background: var(--coral-soft); color: var(--coral-ink); }
 .scr-Live .live-chip__ic--pay { background: var(--navy-soft); color: var(--navy); } /* 11/12: 결제 메모까지 칩 3개가 + 버튼 왼쪽에 다 들어가게 */
 .scr-Live .live-quick { position: absolute; top: 392px; left: 0; right: 58px; z-index: 2; gap: 5px; padding-left: 12px; padding-right: 4px; }
 .scr-Live .live-sheet { top: 440px; padding: 8px 0 0; gap: 12px; }

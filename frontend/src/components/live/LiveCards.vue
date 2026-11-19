@@ -12,6 +12,7 @@ const props = defineProps({
   autoFocus: { type: Boolean, default: false }, // 시연 계정(11/09): 지금 장소·다음 갈 곳이 바뀌면 그 카드로 자동으로 넘김
   focus: { type: Object, default: null },       // 지도 핀을 눌렀을 때 { no, at }: 그 카드를 가운데로 (11/12). at은 같은 핀을 다시 눌러도 바뀌게 하는 값
   showEnd: { type: Boolean, default: false },   // 맨 끝에 "여행 끝내기" 카드 (11/12)
+  isDayEnd: { type: Boolean, default: false },  // 여러 날 여행의 마지막 날이 아니면 끝 카드를 "내일 계속해요"로 (11/19 PPT 11장)
 })
 const emit = defineEmits(['pick', 'seg', 'scrolled', 'end'])
 
@@ -228,8 +229,9 @@ onMounted(() => {
     <!-- 여행 끝내기 (11/12): 마지막 카드 뒤 점선 끝에서 트리피가 말풍선으로 말해요(말풍선 왼쪽, 깃발 든 트리피 오른쪽). 누르면 부모가 한 번 더 물어봐요 -->
     <template v-if="showEnd">
       <span class="end-trail" aria-hidden="true"></span>
-      <button type="button" class="trippie-end" aria-label="여행 끝내기" @click="emit('end')">
-        <span class="trippie-end__bubble"><span class="trippie-end__sub">여행을 마쳤으면</span><b class="trippie-end__main">나를 눌러줘!</b></span>
+      <button type="button" class="trippie-end" :aria-label="isDayEnd ? '오늘 일정 끝, 내일 계속해요' : '여행 끝내기'" @click="emit('end')">
+        <span v-if="isDayEnd" class="trippie-end__bubble"><span class="trippie-end__sub">오늘 일정 끝!</span><b class="trippie-end__main">내일 계속해요</b></span>
+        <span v-else class="trippie-end__bubble"><span class="trippie-end__sub">여행을 마쳤으면</span><b class="trippie-end__main">나를 눌러줘!</b></span>
         <img src="/img/trippie-flag.webp" alt="" class="trippie-end__img" aria-hidden="true" />
       </button>
     </template>
