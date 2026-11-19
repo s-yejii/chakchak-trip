@@ -833,6 +833,7 @@ function shownNo(stop) {
 }
 const SLOT_MAP_PADDING = { top: 110, right: 56, bottom: 440, left: 56 } // 아래 자리 고르기 시트만큼 비움
 function openSlotSheet(place) {
+  askCafeNear.value = null // 11/19: 자리 고르기에서 뒤로 오면 찾았던 카페 목록 그대로 (카페를 다시 찾느라 화면이 바뀌던 문제)
   slotPlace.value = place
   slotPath.value = []
   slotIndex.value = 0

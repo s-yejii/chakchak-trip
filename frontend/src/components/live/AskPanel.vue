@@ -30,7 +30,8 @@ const props = defineProps({
   planned: { type: Array, default: () => [] }, // 지금 있는 곳·남은 일정의 장소 id (이미 일정에 있으면 [일정에 넣기] 대신 '일정에 있어요')
   cafeNear: { type: Object, default: null }, // 11/19 ③: 열자마자 이 곳({ name, lat, lng }) 근처 카페를 바로 찾아 보여 줌 ("시간이 남아요" 카드)
 })
-const CAFE_NEAR_M = 500 // 예약 가게 근처 카페 반경 (걸어서 7분쯤)
+const CAFE_NEAR_M = 200 // 예약 가게 근처 카페 반경 (걸어서 3분쯤, 11/19 주형: 더 가까운 곳으로)
+const CAFE_WIDE_M = 500 // 그 안에 없으면 이만큼 (걸어서 7분쯤)
 const CAFE_CATEGORY = '카페'
 // 예약 가게 근처 카페: AI 말 이해를 거치지 않고 바로 반경 추천 (11/19 주형: "가는 길에 들를 곳"이 펍을 골랐어요)
 async function showCafesNear(place) {
@@ -38,7 +39,8 @@ async function showCafesNear(place) {
   const reply = addMessage({ role: 'ai', text: '', isTyping: true })
   isBusy.value = true
   try {
-    const res = await api.askRecommend(props.tripId, place.lat, place.lng, CAFE_NEAR_M, CAFE_CATEGORY, [])
+    let res = await api.askRecommend(props.tripId, place.lat, place.lng, CAFE_NEAR_M, CAFE_CATEGORY, [])
+    if (!res.places.length) res = await api.askRecommend(props.tripId, place.lat, place.lng, CAFE_WIDE_M, CAFE_CATEGORY, [])
     const text = res.places.length ? place.name + ' 근처 카페 ' + res.places.length + '곳이에요 · 골라서 일정에 넣으면 예약 5분 전에 도착하게 맞춰요'
                                    : place.name + ' 근처에 지금 열려 있는 카페를 찾지 못했어요'
     showPlaces(reply, text, res.places, null, place.name + ' 근처 카페')
