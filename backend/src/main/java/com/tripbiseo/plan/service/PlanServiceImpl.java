@@ -513,6 +513,9 @@ public class PlanServiceImpl implements PlanService {
     /** 만든 일정 이름은 짧게: "문래동 하루", "영등포구 1박 2일". 지역을 모르면 Gemini가 지은 이름 그대로 */
     private void setShortTitle(PlanConditions conditions, PlanGenerateResponse response, int days) {
         String region = conditions.getRegion();
+        if ((region == null || region.isBlank()) && conditions.getAreas() != null && !conditions.getAreas().isEmpty()) {
+            region = conditions.getAreas().get(0).getName(); // 11/19: 지도로 구만 고르면 region이 비어 "새 여행 여행은 어땠나요?"가 됐어요
+        }
         if (region == null || region.isBlank()) {
             return;
         }
