@@ -12,7 +12,6 @@
 // − 는 바로 빼고 토스트로 되돌려요 (완료 전에는 서버에 안 가요). 지도의 [동선 최적화]는 상세 화면과 같은 함수
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { importance } from '@/data/places'
 import { checkPlan } from '@/api/trips'
 import KakaoMap from '@/components/common/KakaoMap.vue'
 import BottomSheet from '@/components/common/BottomSheet.vue'
@@ -70,12 +69,9 @@ const mapPins = computed(() => mapStops.value.map((stop, i) => ({
   cls: selected.value === i ? 'pin--sel' : '',
   label: i + 1 + ' ' + stop.name,
 })))
-// 칸을 누름: 처음엔 핀을 키우고 지도 가운데로, 이미 고른 칸을 또 누르면 한 칸 수정
+// 칸을 누름: 바로 한 칸 수정 창 (시간·중요도 바꾸기, 11/19. 예전엔 한 번 = 핀 강조, 두 번 = 한 칸 수정)
 function pickRow(i) {
-  if (selected.value === i) return openStop(i)
-  selected.value = i
-  const stop = mapStops.value[i]
-  if (mapRef.value && stop.lat != null) mapRef.value.flyTo(stop.lat, stop.lng) // padding을 보고 시트에 안 가리는 칸 가운데로 (moveTo는 지도 한가운데라 핀이 시트 뒤에 숨음)
+  openStop(i)
 }
 // 핀을 누름: 그 칸으로 스크롤
 async function pickPin(pin) {
@@ -395,7 +391,7 @@ async function done() {
           <div v-if="dayList.length > 1" class="pe-days" role="tablist" aria-label="며칠째">
             <button v-for="d in dayList" :key="d.day" type="button" role="tab" class="chip chip--sm" :class="{ 'is-on': d.day === day }" :aria-selected="d.day === day" @click="pickDay(d.day)">{{ d.day }}일차<span class="t-cap tn">{{ d.label }}</span></button>
           </div>
-          <p class="t-cap" style="display: flex; align-items: center; gap: 4px"><i class="ic ic--s i-grip" aria-hidden="true"></i>손잡이를 끌어 순서를 바꿔요 · 시각은 다시 계산해요</p>
+          <p class="t-cap" style="display: flex; align-items: center; gap: 4px"><i class="ic ic--s i-grip" aria-hidden="true"></i>칸을 누르면 시간·중요도를 바꿔요 · 손잡이로 순서를 바꿔요</p>
           <p v-if="firstMove !== null && nowMove !== firstMove" class="t-cap tn" style="margin: 0">이동 {{ firstMove }}분 → {{ nowMove }}분</p>
           <!-- 장소 추가: 이 화면 위로 "장소 넣기" 시트를 열어요 (초안·저장된 여행 둘 다, 11/19). 시트 머리에 있어서 목록을 내려도 늘 보여요 -->
           <button type="button" class="btn btn--secondary btn--md btn--block" @click="isAddOpen = true"><i class="ic i-plus" aria-hidden="true"></i>장소 추가</button>
@@ -424,7 +420,6 @@ async function done() {
                   <span v-else-if="stop.isStay" class="stop__meta c-navy"><i class="ic ic--s i-home" aria-hidden="true"></i>숙소</span>
                   <span v-else class="stop__meta">{{ stop.time || '시각 다시 계산' }} · {{ toDuration(stop.dur) }}</span>
                 </span>
-                <span v-if="!stop.fixed && !stop.isStay" class="imp" :class="'imp--' + stop.imp">{{ importance[stop.imp] }}</span>
               </span>
             </button>
             <span v-if="!stop.movable" class="grip" style="opacity: 0.35; cursor: default" :aria-label="stop.isDone ? '다녀온 곳은 순서가 그대로예요' : stop.isStay ? '숙소는 순서가 그대로예요' : '고정 일정은 순서가 그대로예요'">
@@ -461,6 +456,9 @@ async function done() {
 .scr-PlanEdit .pe-head { display: flex; flex-direction: column; gap: 8px; padding: 0 16px; touch-action: none; } /* 시트 머리: 끌 때 화면이 스크롤되지 않게 */
 .scr-PlanEdit .pe-num { flex: none; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--navy); color: #fff; font-size: 11px; font-weight: 700; }
 .scr-PlanEdit .erow.is-sel .stop__card { border-color: var(--navy); }
+/* 이름·시각 줄이 길면 끝을 …로 (공통 .stop__name·.stop__meta는 display:flex라 …가 안 붙어서 이 화면에서만 block) */
+.scr-PlanEdit .stop__name, .scr-PlanEdit .stop__meta { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.scr-PlanEdit .stop__meta .ic { margin-right: 4px; vertical-align: -3px; } /* block이 되면서 없어진 아이콘·글자 사이 간격 */
 .scr-PlanEdit .elist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .scr-PlanEdit .grip { touch-action: none; }
 .scr-PlanEdit .pe-days { display: flex; gap: 6px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
