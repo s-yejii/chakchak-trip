@@ -15,6 +15,7 @@ import { goBack } from '@/utils/back'
 import { showToast } from '@/utils/toast'
 import { withEulReul } from '@/utils/josa'
 import { kindOf } from '@/utils/budget'
+import { addMyPlace, findMyPlace, loadMyPlaces, removeMyPlace } from '@/utils/myPlaces'
 
 // 종류별 보통 머무는 분 (PlanRuleMaker와 같은 값)
 const STAY_MIN_OF_KIND = { food: 70, cafe: 60, bar: 90 }
@@ -35,7 +36,10 @@ const loadError = ref('') // 불러오기 실패 글 (없는 id, 서버 꺼짐)
 const isFromTrip = !isFake && (!!route.query.trip || route.query.from === 'plan')
 // 가짜 장소는 여기서 확인. 여행 상세에서 온 실제 장소는 담겨 있는 것으로 보고, 그 밖의 실제 장소는 담을 일정을 고르는 시트 안에서 일정마다 확인
 const inPlan = (isFake && concertTrip.stops.some((stop) => stop.id === id)) || isFromTrip
-const saved = ref(false)
+// 내 장소에 저장한 곳이면 그 줄, 아니면 null. 진짜 장소는 id로, 시연용 가짜 장소는 이름으로 찾아요 (③ 내 장소)
+const savePlaceId = isFake ? null : route.query.id
+const saved = computed(() => findMyPlace(savePlaceId, place.value && place.value.name))
+const isSaving = ref(false) // 저장·빼기 하는 중 (두 번 눌리지 않게)
 const isSheetOpen = ref(false) // "어디에 담을까요?" 시트
 
 // 진짜 사진 찾기. 실패해도 상세는 보여야 해서 여기서만 잡고 빈 목록으로
@@ -49,6 +53,7 @@ async function findPhotos(placeId) {
 
 onMounted(() => {
   if (!isFake) loadPlace()
+  loadMyPlaces().catch(() => {}) // 못 읽어도 상세는 보여요 (누를 때 서버가 답해요)
 })
 
 // 실제 장소 불러오기 (처음 열 때와 [다시 시도])
@@ -97,9 +102,23 @@ async function copyText(text, doneMessage) {
   showToast(doneMessage)
 }
 
-function toggleSave() {
-  saved.value = !saved.value
-  showToast(saved.value ? '저장했어요' : '저장을 취소했어요')
+// 북마크: 저장 안 했으면 내 장소에 저장, 저장했으면 빼기 (서버 /api/my/places)
+async function toggleSave() {
+  if (isSaving.value) return
+  isSaving.value = true
+  try {
+    if (saved.value) {
+      const name = saved.value.name
+      await removeMyPlace(saved.value.placeId)
+      showToast(name + ' 내 장소에서 뺐어요')
+    } else {
+      const myPlace = await addMyPlace({ placeId: savePlaceId, name: place.value.name })
+      showToast(myPlace.name + ' 내 장소에 저장했어요')
+    }
+  } catch (e) {
+    showToast(e.message)
+  }
+  isSaving.value = false
 }
 function addToPlan() {
   if (isFake) {
@@ -138,7 +157,7 @@ function onAddClick() {
       <header class="topbar topbar--float">
         <button type="button" class="iconbtn iconbtn--float" aria-label="뒤로가기" @click="goBack('/')"><i class="ic ic--l i-back" aria-hidden="true"></i></button>
         <span style="flex: 1"></span>
-        <button type="button" class="iconbtn iconbtn--float" :class="{ 'is-bm': saved }" :aria-label="saved ? '저장 취소' : '저장'" :aria-pressed="saved" @click="toggleSave"><i class="ic i-bookmark" aria-hidden="true"></i></button>
+        <button type="button" class="iconbtn iconbtn--float" :class="{ 'is-bm': saved }" :aria-label="saved ? '저장 취소' : '저장'" :aria-pressed="!!saved" :disabled="isSaving" @click="toggleSave"><i class="ic i-bookmark" aria-hidden="true"></i></button>
         <button type="button" class="iconbtn iconbtn--float" aria-label="가게 링크 복사" title="가게 링크 복사" @click="copyText(naverLink, '가게 링크를 복사했어요')"><i class="ic i-link" aria-hidden="true"></i></button>
       </header>
 

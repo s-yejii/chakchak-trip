@@ -23,6 +23,8 @@ public class LiveAlertMaker {
     private static final int LEAVE_WINDOW_MIN = 10;  // 출발 시각 앞뒤 10분 안이면 출발 알림
     private static final int TIGHT_SLACK_MIN = 10;   // 고정 일정 여유가 이 이하면 "여유가 얼마 없어요"
     private static final int LEAVE_NOW_SLACK_MIN = 5; // 나갈 시간이 지났는데 고정 일정 여유가 이 이하면 "지금 안 나가면 늦어요" (늦기 전에 먼저)
+    private static final int LEAVE_SOON_MIN = 5;      // 출발 알림은 10분 전·5분 전·지금 세 번만 (11/19 PPT 14장)
+    private static final int LEAVE_PASSED_STEP = -1;  // 출발 시각이 지난 뒤 묶음
 
     /**
      * 출발 알림: 출발 시각 앞뒤 10분 안일 때만 (아니면 null)
@@ -202,7 +204,10 @@ public class LiveAlertMaker {
             return "가장 빠른 방법으로 가도 " + toTimeWord(context) + "(" + fixedStop.getTime() + ")보다 " + Geo.toDuration(-context.getFastestSlack()) + " 늦어요";
         }
         int late = taxiArrive - Geo.toMinutes(fixedStop.getTime());
-        String lateText = late > 0 ? Geo.toDuration(late) + " 늦음" : "제시간";
+        if (late > 0) {
+            return "택시로 가도 늦어요"; // 11/19 PPT 14장: 시각·분·요금 대신 한마디로 (늦는 시각은 카드 첫 줄 "13:05 도착 · 35분 늦음")
+        }
+        String lateText = "제시간";
         String fare = context.getTaxiFare() == null || context.getTaxiFare() <= 0 ? "" : " · 약 " + String.format("%,d", context.getTaxiFare()) + "원";
         return "택시로 가도 " + Geo.toHhmm(taxiArrive) + " 도착 (" + lateText + fare + ")";
     }
@@ -275,7 +280,7 @@ public class LiveAlertMaker {
         return Boolean.TRUE.equals(open.getOpen()) && open.getMinutesLeft() != null && open.getMinutesLeft() < stay;
     }
 
-    /** 출발 알림: 남은 분을 key에 넣어 1분마다 새로 울리게 함 (repeat = true) */
+    /** 출발 알림: 10분 전·5분 전·지금·지남 묶음을 key에 넣어 묶음이 바뀔 때만 새로 울리게 함 (11/19: 예전엔 1분마다) */
     private LiveAlert makeLeaveAlert(LeaveInfo leave) {
         int left = leave.getMinutesLeft();
         String title = Geo.toDuration(left) + " 뒤 출발해야 해요";
@@ -288,9 +293,20 @@ public class LiveAlertMaker {
         if (leave.isAtStop()) {
             text = leave.getName() + " 출발 " + leave.getLeaveAt() + (leave.getTo() == null ? "" : " → " + leave.getTo());
         }
-        LiveAlert alert = newAlert("leave-" + leave.getStopId() + "-" + left, left > 0 ? "warn" : "danger", title, text);
+        LiveAlert alert = newAlert("leave-" + leave.getStopId() + "-" + toLeaveStep(left), left > 0 ? "warn" : "danger", title, text);
         alert.setRepeat(true);
         return alert;
+    }
+
+    /** 출발 알림 묶음: 6~10분 전 = 10, 1~5분 전 = 5, 지금 = 0, 지남 = -1 (같은 묶음 안에서는 같은 알림이라 다시 안 울림) */
+    private int toLeaveStep(int left) {
+        if (left > LEAVE_SOON_MIN) {
+            return LEAVE_WINDOW_MIN;
+        }
+        if (left > 0) {
+            return LEAVE_SOON_MIN;
+        }
+        return left == 0 ? 0 : LEAVE_PASSED_STEP;
     }
 
     /** 알림 하나 만들기 */

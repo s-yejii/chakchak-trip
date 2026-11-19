@@ -24,21 +24,14 @@ class LiveAlertTextTest {
         return stop;
     }
 
+    // 11/19 PPT 14장: 택시로도 늦으면 시각·요금 대신 한마디로 (늦는 시각은 카드 첫 줄 "13:05 도착 · 35분 늦음")
     @Test
-    void 택시_도착과_요금이_있으면_쉽게() {
+    void 택시로도_늦으면_한마디로() {
         StatusContext context = new StatusContext();
         context.setFastestSlack(-15);
         context.setTaxiArrive(Geo.toMinutes("12:45"));
         context.setTaxiFare(20300);
-        assertEquals("택시로 가도 12:45 도착 (15분 늦음 · 약 20,300원)", maker.makeLostText(context, sushi()));
-    }
-
-    @Test
-    void 요금을_모르면_요금만_뺌() {
-        StatusContext context = new StatusContext();
-        context.setFastestSlack(-15);
-        context.setTaxiArrive(Geo.toMinutes("12:45"));
-        assertEquals("택시로 가도 12:45 도착 (15분 늦음)", maker.makeLostText(context, sushi()));
+        assertEquals("택시로 가도 늦어요", maker.makeLostText(context, sushi()));
     }
 
     @Test
