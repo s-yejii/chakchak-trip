@@ -277,8 +277,9 @@ async function save() {
       </template>
       <template #cta>
         <div class="cta__row">
-          <!-- 편집: 지금 고른 일차를 편집 화면에서 고쳐요 (장소 추가·빼기·순서·시간). [완료]·✕면 이 화면으로 돌아와요 -->
-          <RouterLink :to="'/plan/edit?day=' + day" class="btn btn--secondary btn--lg"><i class="ic i-edit" aria-hidden="true"></i>편집</RouterLink>
+          <!-- 편집: 지금 고른 일차를 편집 화면에서 고쳐요 (장소 추가·빼기·순서·시간). [완료]·✕면 이 화면으로 돌아와요
+               AI 일정(?from=ai)이면 같이 넘겨서, 돌아와도 [조건 바꾸기]가 남게 -->
+          <RouterLink :to="'/plan/edit?day=' + day + (route.query.from === 'ai' ? '&from=ai' : '')" class="btn btn--secondary btn--lg"><i class="ic i-edit" aria-hidden="true"></i>편집</RouterLink>
           <button type="button" class="btn btn--primary btn--lg" :disabled="saving" @click="save">이 일정으로 저장</button>
         </div>
       </template>

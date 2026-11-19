@@ -38,6 +38,8 @@ const router = useRouter()
 const store = useTripStore()
 const tripId = route.query.id || null // 있으면 저장된 여행 편집, 없으면 새로 짠 초안 편집
 const day = ref(Number(route.query.day || 1))
+// AI로 만든 초안에서 왔으면(?from=ai) 주소에 계속 붙여 둠 → 일정 점검으로 돌아가도 [조건 바꾸기]가 남아요 (11/19)
+const fromQuery = !tripId && route.query.from === 'ai' ? '&from=ai' : ''
 const isLoading = ref(!!tripId)
 const isSaving = ref(false)
 const loadError = ref('')
@@ -163,7 +165,7 @@ function countDays(t) {
 
 // 지금 편집 화면 주소 (한 칸 수정·빼기에서 돌아올 곳)
 function hereLink() {
-  return '/plan/edit?' + (tripId ? 'id=' + tripId + '&' : '') + 'day=' + day.value
+  return '/plan/edit?' + (tripId ? 'id=' + tripId + '&' : '') + 'day=' + day.value + fromQuery
 }
 // 다른 날 고르기: 고른 칸 번호는 "그날 몇 번째"라 다른 날로 가면 비움 (안 비우면 다음 날 같은 번호 칸이 골라진 채로 남음)
 function pickDay(d) {
@@ -326,7 +328,7 @@ function gapMeters(a, b) {
 
 // 저장된 여행이면 상세로, 초안이면 일정 점검으로
 function exitLink() {
-  if (!tripId) return '/plan/check?day=' + day.value
+  if (!tripId) return '/plan/check?day=' + day.value + fromQuery
   return trip.value ? tripDetailLink(trip.value) : '/trips'
 }
 
