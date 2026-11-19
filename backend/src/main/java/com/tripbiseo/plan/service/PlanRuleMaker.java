@@ -211,6 +211,7 @@ public class PlanRuleMaker {
         }
         clampToHours(conditions, days, extras);
         moveToOpenTimes(extras, candidates, startDate, conditions, days);
+        moveOutOfDinner(extras, candidates, conditions, days);
         List<AiDraftStop> stops = new ArrayList<>(extras);
         Set<String> used = new HashSet<>();
         for (AiDraftStop extra : extras) {
@@ -963,6 +964,48 @@ public class PlanRuleMaker {
         return replaced;
     }
 
+    /**
+     * 꼭 갈 곳(예약 말고)이 밥집이 아닌데 그날 저녁 칸과 겹치면 저녁 뒤로 미룸 (11/19 점검: 다시 짜기로 저녁 7시 반에 만들었더니
+     * 꼭 갈 카페가 19:40에 들어가 저녁 칸을 밀어내 밥이 없었어요). 끝 장소가 있으면 그 시각 안에서만
+     */
+    void moveOutOfDinner(List<AiDraftStop> extras, Map<String, Place> candidates, PlanConditions conditions, int days) {
+        if (!hasDayTime(conditions)) {
+            return;
+        }
+        for (AiDraftStop extra : extras) {
+            Place place = findPlaceOf(extra, candidates);
+            boolean isMeal = place != null && (FOOD_KIND.equals(place.getKind()) || BAR_KIND.equals(place.getKind()));
+            if (Boolean.TRUE.equals(extra.getFixed()) || place == null || isMeal || !isTimeText(extra.getTime())) {
+                continue;
+            }
+            String[] dinner = dinnerSlotOf(getSlotList(conditions, dayOf(extra)));
+            int stay = extra.getStay() == null ? DEFAULT_EXTRA_STAY_MIN : extra.getStay();
+            if (dinner == null || !isOverlap(Geo.toMinutes(extra.getTime()), stay, Geo.toMinutes(dinner[1]), Integer.parseInt(dinner[2]))) {
+                continue;
+            }
+            int after = roundUp(Geo.toMinutes(dinner[1]) + Integer.parseInt(dinner[2]) + TIMED_GAP_MIN);
+            boolean isTooLate = isHardEnd(conditions, dayOf(extra), days) && after + SHORTEST_STAY_MIN > dayEndOf(conditions, dayOf(extra), days, null);
+            if (!isTooLate) {
+                extra.setTime(Geo.toHhmm(after));
+            }
+        }
+    }
+
+    /** 칸 목록 중 저녁 칸(17:30 뒤 밥집 칸, 술만 고르면 술집 겸) 하나. 없으면 null */
+    private String[] dinnerSlotOf(List<String[]> slots) {
+        for (String[] slot : slots) {
+            boolean isMealSlot = slot[0].startsWith(FOOD_KIND) || slot[0].equals(BAR_KIND + "," + FOOD_KIND);
+            if (isMealSlot && Geo.toMinutes(slot[1]) >= DINNER_START_MIN) {
+                return slot;
+            }
+        }
+        return null;
+    }
+
+    private boolean isOverlap(int start, int stay, int otherStart, int otherStay) {
+        return start < otherStart + otherStay && otherStart < start + stay;
+    }
+
     /** 그날 예약·꼭 갈 곳 중 카페 수 (11/18) */
     private int countExtraCafes(List<AiDraftStop> extras, Map<String, Place> candidates, int day) {
         int count = 0;
@@ -1403,7 +1446,7 @@ public class PlanRuleMaker {
     private void addMissingKindWarnings(PlanConditions conditions, Map<String, Place> candidates, List<AiDraftStop> stops, List<String> warnings) {
         Set<String> placedKinds = new HashSet<>();
         for (AiDraftStop stop : stops) {
-            Place place = stop.getId() == null ? null : candidates.get(stop.getId());
+            Place place = findPlaceOf(stop, candidates); // 11/19: 번호 없이 이름만 온 꼭 갈 곳도 셈 (카페를 넣었는데 "카페를 못 넣었어요"가 떴어요)
             if (place != null) {
                 placedKinds.add(place.getKind());
             }

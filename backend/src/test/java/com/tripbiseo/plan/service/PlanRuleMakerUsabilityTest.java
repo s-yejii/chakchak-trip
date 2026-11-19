@@ -239,6 +239,22 @@ class PlanRuleMakerUsabilityTest {
         assertEquals(20 * 60, ruleMaker.chosenDayEndMin(timed("10:00", "12:00"), 2, 3)); // 가운데 날은 20:00
     }
 
+    @Test
+    void 꼭_갈_카페가_저녁_시간이면_저녁_뒤로() {
+        PlanRuleMaker maker = new PlanRuleMaker(null, new PlanCandidateFinder(null, null, null, null));
+        PlanConditions conditions = timed("19:40", "21:40");
+        Map<String, Place> candidates = new LinkedHashMap<>();
+        candidates.put("c1", place("c1", "테디뵈르하우스", "cafe", "카페"));
+        AiDraftStop cafe = new AiDraftStop();
+        cafe.setDay(1);
+        cafe.setId("c1");
+        cafe.setName("테디뵈르하우스");
+        cafe.setTime("19:40");
+        cafe.setStay(90);
+        maker.moveOutOfDinner(new ArrayList<>(List.of(cafe)), candidates, conditions, 1);
+        assertEquals("21:10", cafe.getTime()); // 저녁 19:40~20:50 뒤 (끝 장소가 없으면 끝 시각을 넘어도 됨)
+    }
+
     private int toMin(String time) {
         return Integer.parseInt(time.substring(0, 2)) * 60 + Integer.parseInt(time.substring(3));
     }
