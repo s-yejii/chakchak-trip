@@ -146,7 +146,8 @@ async function moveToNext() {
   const departDate = isNextDay ? dateOf(next.day) : dateText(appNow())
   const plan = planDeparture({
     nowMin: minutesOf(appNow()),
-    stayEndMin: current ? stayEndOf(current) : null,
+    // 11/19 주형: 예약 앞 카페에서 [다음 장소로]를 누르면 나갈 시각까지 기다리지 않고 바로 출발 (도착 뒤 남는 시간은 그냥 남음)
+    stayEndMin: current ? (isCafeStop(current) && next.fixed ? minutesOf(appNow()) : stayEndOf(current)) : null,
     extraMin: current ? extraStayOf(current) : 0,
     travelMin,
     nextTimeMin: toMinutes(next.time),
