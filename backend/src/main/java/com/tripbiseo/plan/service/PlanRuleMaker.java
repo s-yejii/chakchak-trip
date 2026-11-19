@@ -211,7 +211,7 @@ public class PlanRuleMaker {
         }
         clampToHours(conditions, days, extras);
         moveToOpenTimes(extras, candidates, startDate, conditions, days);
-        moveOutOfDinner(extras, candidates, conditions, days);
+        moveOutOfDinner(extras, candidates, conditions, days, startDate);
         List<AiDraftStop> stops = new ArrayList<>(extras);
         Set<String> used = new HashSet<>();
         for (AiDraftStop extra : extras) {
@@ -968,7 +968,7 @@ public class PlanRuleMaker {
      * 꼭 갈 곳(예약 말고)이 밥집이 아닌데 그날 저녁 칸과 겹치면 저녁 뒤로 미룸 (11/19 점검: 다시 짜기로 저녁 7시 반에 만들었더니
      * 꼭 갈 카페가 19:40에 들어가 저녁 칸을 밀어내 밥이 없었어요). 끝 장소가 있으면 그 시각 안에서만
      */
-    void moveOutOfDinner(List<AiDraftStop> extras, Map<String, Place> candidates, PlanConditions conditions, int days) {
+    void moveOutOfDinner(List<AiDraftStop> extras, Map<String, Place> candidates, PlanConditions conditions, int days, String startDate) {
         if (!hasDayTime(conditions)) {
             return;
         }
@@ -985,7 +985,9 @@ public class PlanRuleMaker {
             }
             int after = roundUp(Geo.toMinutes(dinner[1]) + Integer.parseInt(dinner[2]) + TIMED_GAP_MIN);
             boolean isTooLate = isHardEnd(conditions, dayOf(extra), days) && after + SHORTEST_STAY_MIN > dayEndOf(conditions, dayOf(extra), days, null);
-            if (!isTooLate) {
+            LocalDate date = LocalDate.parse(startDate).plusDays(dayOf(extra) - 1);
+            boolean isClosedAfter = placeService != null && !isOpenFor(place, date, after, SHORTEST_STAY_MIN); // 저녁 뒤엔 문 닫으면 옮기지 않음 (백화점 카페 22:40)
+            if (!isTooLate && !isClosedAfter) {
                 extra.setTime(Geo.toHhmm(after));
             }
         }

@@ -251,7 +251,7 @@ class PlanRuleMakerUsabilityTest {
         cafe.setName("테디뵈르하우스");
         cafe.setTime("19:40");
         cafe.setStay(90);
-        maker.moveOutOfDinner(new ArrayList<>(List.of(cafe)), candidates, conditions, 1);
+        maker.moveOutOfDinner(new ArrayList<>(List.of(cafe)), candidates, conditions, 1, "2026-11-19");
         assertEquals("21:10", cafe.getTime()); // 저녁 19:40~20:50 뒤 (끝 장소가 없으면 끝 시각을 넘어도 됨)
     }
 
