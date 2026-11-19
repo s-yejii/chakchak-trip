@@ -1,11 +1,10 @@
 <script setup>
-// S11 여행 상세 · 여행 전 (②): 다가오는 여행(?id=)의 일정과 챙길 것
+// S11 여행 상세 · 여행 전 (②): 다가오는 여행(?id=)의 일정
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouteSim } from '@/utils/useRouteSim'
 import RouteSimButton from '@/components/trip/RouteSimButton.vue'
 import { useRoute } from 'vue-router'
 import TripPage from '@/components/trip/TripPage.vue'
-import PackList from '@/components/trip/PackList.vue'
 import PageMessage from '@/components/common/PageMessage.vue'
 import TopBar from '@/components/common/TopBar.vue'
 import { useTripDetail } from '@/utils/useTripDetail'
@@ -91,10 +90,6 @@ watch(view, sim.reset)
           </button>
         </ChipScroller>
         <TripWeather :date="dayDate" :stops="dayStops" />
-      </template>
-      <template #below>
-        <!-- 챙길 것: API가 아직 "확인 필요"라 이 화면에서만 적어 둬요 (새로고침하면 사라짐) -->
-        <PackList :items="[]" />
       </template>
       <template #cta>
         <RouterLink :to="'/plan/edit?id=' + view.id" class="btn btn--primary btn--lg btn--block"><i class="ic i-edit" aria-hidden="true"></i>일정 편집하기</RouterLink>
