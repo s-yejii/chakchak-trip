@@ -1,5 +1,5 @@
 <script setup>
-// S11-b 여행 상세 · 여행 날 (②): 오늘 여행의 일정, 미리 확인할 것(일정 점검), 챙길 것
+// S11-b 여행 상세 · 여행 날 (②): 오늘 여행의 일정, 미리 확인할 것(일정 점검)
 // 주소의 ?id= 여행, 없으면 진행 중·오늘 여행을 서버에서 읽어요. 둘 다 없으면 안내.
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -8,7 +8,6 @@ import { addDays, daysBetween, todayText } from '@/utils/dates'
 import { devMode, syncClock } from '@/utils/devMode'
 import { toMinutes, toTime } from '@/utils/time'
 import TripPage from '@/components/trip/TripPage.vue'
-import PackList from '@/components/trip/PackList.vue'
 import PageMessage from '@/components/common/PageMessage.vue'
 import TopBar from '@/components/common/TopBar.vue'
 import { useTripStore } from '@/stores/trip'
@@ -98,10 +97,6 @@ async function continueTrip() {
             {{ d.day }}일차<span class="t-cap tn" style="margin-left: 4px">{{ d.label }}</span>
           </button>
         </ChipScroller>
-      </template>
-      <template #below>
-        <!-- 챙길 것: API가 아직 "확인 필요"라 이 화면에서만 적어 둬요 (새로고침하면 사라짐) -->
-        <PackList :items="[]" />
       </template>
       <template #cta>
         <button v-if="saved.status === 'ongoing'" type="button" class="btn btn--primary btn--lg btn--block" @click="continueTrip">여행 이어가기</button>
