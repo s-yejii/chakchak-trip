@@ -3,7 +3,8 @@
 const STYLE_KEY = 'myStyle'
 const ALARM_KEY = 'myAlarms'
 
-export const DEFAULT_STYLE = { pace: 'mid', likes: ['카페', '맛집', '쇼핑'], walk: 20, moves: ['지하철'], rainIndoor: true }
+// dayFrom·dayTo: 하루 활동 시간대 'HH:mm' (11/19 ①, 일정 만들기 기본값과 같은 10:00~20:00). 예전에 저장한 값에 없으면 load가 기본값으로 채워요
+export const DEFAULT_STYLE = { pace: 'mid', likes: ['카페', '맛집', '쇼핑'], walk: 20, moves: ['지하철'], rainIndoor: true, dayFrom: '10:00', dayTo: '20:00' }
 export const DEFAULT_ALARMS = { depart: true, delay: true, weather: true, departBefore: 10 }
 
 function load(key, fallback) {
@@ -23,7 +24,7 @@ function save(key, value) {
   }
 }
 
-// 내 여행 스타일 { pace, likes, walk, moves, rainIndoor }
+// 내 여행 스타일 { pace, likes, walk, moves, rainIndoor, dayFrom, dayTo }
 export const readStyle = () => load(STYLE_KEY, DEFAULT_STYLE)
 export const saveStyle = (style) => save(STYLE_KEY, style)
 
