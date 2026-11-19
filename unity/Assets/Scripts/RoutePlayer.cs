@@ -12,15 +12,19 @@ public class RoutePlayer : MonoBehaviour
     private const float EYE_M = 2.4f;            // 내비게이션에서 눈높이 (땅에서). 경로 선이 땅에서 0.75m 위라 그 위로 사람 눈높이 1.6m
                                                  //   (1.6이었을 때는 눈이 경로 선 바로 위에 있어서 선이 화면 아래를 다 덮었음)
     private const float FOLLOW_SMOOTH = 3f;      // 카메라가 따라붙는 빠르기 (클수록 바로 붙음)
-    private const float TURN_SMOOTH = 2f;        // 내비게이션에서 고개를 돌리는 빠르기
+    private const float TURN_SMOOTH = 1.2f;      // 내비게이션에서 고개를 돌리는 빠르기 (11/19 멀미 피드백: 2 → 1.2)
+    private const float CAMERA_SMOOTH_TIME = 1.2f; // 위에서 보기: 카메라가 목표 자리까지 가는 데 걸리는 시간(초). 천천히 출발·멈춤 (11/19)
+    private const float LOOK_SMOOTH = 1.5f;      // 위에서 보기: 사람 쪽으로 고개를 돌리는 빠르기 (11/19: 6 → 1.5)
+    private const float WEB_SMOOTH_SECONDS = 0.15f; // 웹이 보낸 재생 시각을 이 시간 동안 부드럽게 따라감 (웹 화면이 잠깐 버벅여도 걷는 사람이 덜컥거리지 않게, 11/19)
+    private const float WEB_JUMP_MINUTES = 30f;  // 웹 시각이 이보다 멀리 건너뛰면(장소 누르기·막대 끌기) 부드럽게 말고 바로 옮김
     private const float STAY_MOVE_M = 30f;       // 두 점 사이를 이보다 적게 움직였으면 "머문 것"
     private const float STAY_LONG_MINUTES = 20f; // 이보다 오래 머문 구간은 빨리 감기
     private const float STAY_NIGHT_MINUTES = 180f; // 이보다 오래(밤잠 등)면 훨씬 빨리
     private const float FAST = 12f;              // 오래 머문 구간 빨리 감기 배수 (점심 80분 → 약 1.7초)
     private const float FASTER = 80f;            // 밤잠 빨리 감기 배수 (14시간 → 약 2.6초)
     private const float BUS_EYE_M = 2.6f;        // 내비게이션에서 버스 안 눈높이
-    private const float TOP_TURN_DEGREES = 20f;  // 위에서 보기: 카메라가 1초에 돌 수 있는 최대 각도 (GPS가 흔들려도 빙빙 돌지 않게)
-    private const float NAV_TURN_DEGREES = 35f;  // 내비: 1초에 돌 수 있는 최대 각도
+    private const float TOP_TURN_DEGREES = 0f;   // 위에서 보기: 카메라가 1초에 돌 수 있는 최대 각도. 11/19 멀미 피드백: 20 → 0 = 방향 고정 (화면이 돌면 가장 어지러움)
+    private const float NAV_TURN_DEGREES = 20f;  // 내비: 1초에 돌 수 있는 최대 각도 (11/19: 35 → 20)
     private const float ZOOM_STEP = 1.2f;        // 가까이·멀리 한 번에 거리를 이만큼 곱하거나 나눔
     private const float ZOOM_MIN = 0.3f;         // 가장 가까이 (기본 거리의 30%)
     private const float ZOOM_MAX = 6f;           // 가장 멀리 (기본 거리의 6배. 3배였을 때는 잠실 롯데타워 옆에서 더 물러날 수 없었음)
@@ -34,7 +38,8 @@ public class RoutePlayer : MonoBehaviour
                                                  //   (롯데월드타워 500m 위로 올라가면 사람이 점처럼 작아짐. 타워에 가리는지는 IsSightBlocked가 따로 봄)
     // 따라갈 때 카메라 자리 { 뒤로 물러난 거리, 높이 }: 걷기 · 택시 · 배 · 지하철(땅속이라 높이 올라가 건너뜀) · 버스
     //   "위에서"는 동네가 한눈에 보이게 높이·멀리 (내비 = 사람 눈높이와 확실히 다르게)
-    private static readonly Vector2[] FOLLOW_BACK_UP = { new Vector2(90, 75), new Vector2(110, 85), new Vector2(140, 80), new Vector2(220, 170), new Vector2(110, 85) };
+    //   11/19 멀미 피드백: 더 높이·더 가파르게 (높을수록 땅이 화면에서 천천히 흐름). 걷기 90·75 → 110·120
+    private static readonly Vector2[] FOLLOW_BACK_UP = { new Vector2(110, 120), new Vector2(130, 130), new Vector2(160, 120), new Vector2(220, 170), new Vector2(130, 130) };
 
     private Ground ground;
     private BuildingFinder buildings; // 카메라 둘레 가장 높은 건물을 물어봄
@@ -56,6 +61,8 @@ public class RoutePlayer : MonoBehaviour
     private int startClock;     // 경로 0분이 첫날 몇 시 몇 분인지 (화면 시계용)
     private int segment;        // 지금 몇 번째 점과 다음 점 사이인지
     private float cameraYaw;    // 카메라가 바라보는 방향(도). 가는 쪽으로 천천히 따라 돎
+    private Vector3 cameraVelocity; // SmoothDamp가 기억하는 카메라 속도 (그래야 다음 프레임에 부드럽게 이어짐)
+    private float webMinute = -1;   // 웹이 마지막으로 보낸 재생 시각 (경로 0분부터, 없으면 -1). Update가 이 시각으로 부드럽게 따라감
     private float zoom = 1;     // 위에서 보기 거리 배수 (1 = 기본)
     private bool isWebDriven;   // 웹 회고 화면이 재생을 조종하는지 (그러면 화면 시계는 웹이 보여 주니 숨김)
 
@@ -141,7 +148,10 @@ public class RoutePlayer : MonoBehaviour
     {
         isPlaying = false; // 3D 혼자 재생하지 않음 (속도는 웹의 배속 버튼이 정함)
         isWebDriven = true;
-        Seek(minutesFromFirstMidnight - startClock);
+        float target = minutesFromFirstMidnight - startClock;
+        // 처음이거나 멀리 건너뛰면 바로 옮기고, 아니면 Update가 부드럽게 따라감
+        if (webMinute < 0 || Mathf.Abs(target - minute) > WEB_JUMP_MINUTES) Seek(target);
+        webMinute = target;
     }
 
     // 웹의 [위에서 / 내비] 버튼: "top" = 뒤쪽 위에서 따라감, "street" = 사람 눈높이 내비게이션
@@ -189,15 +199,21 @@ public class RoutePlayer : MonoBehaviour
     private void Update()
     {
         if (route == null) return;
-        if (Input.GetKeyDown(KeyCode.Space)) isPlaying = !isPlaying;
-        if (Input.GetKeyDown(KeyCode.F)) SetFollowing(!isFollowing);
-        if (Input.GetKeyDown(KeyCode.V))
+        // 유니티 자체 키는 혼자 볼 때만. 웹이 조종할 때 스페이스바를 받으면 웹은 멈추는데 3D만 혼자 달려서 화면이 튀었음 (11/19)
+        if (!isWebDriven && Input.GetKeyDown(KeyCode.Space)) isPlaying = !isPlaying;
+        if (!isWebDriven && Input.GetKeyDown(KeyCode.F)) SetFollowing(!isFollowing);
+        if (!isWebDriven && Input.GetKeyDown(KeyCode.V))
         {
             isNavigation = !isNavigation;
             if (!isFollowing) SetFollowing(true);
             ShowSubwayLines(!isNavigation);
         }
 
+        if (isWebDriven && webMinute >= 0 && webMinute != minute)
+        {
+            // 남은 차이를 매 프레임 조금씩 줄임 (Exp: 화면이 느려도 빨라도 0.15초쯤에 거의 따라잡게)
+            Seek(Mathf.Lerp(minute, webMinute, 1 - Mathf.Exp(-Time.deltaTime / WEB_SMOOTH_SECONDS)));
+        }
         if (isPlaying)
         {
             Seek(minute + Time.deltaTime * MINUTES_PER_SECOND * SpeedHere());
@@ -304,8 +320,9 @@ public class RoutePlayer : MonoBehaviour
         Vector3 forward = mode == RouteData.BOAT ? boat.right : walker.forward; // 배는 뱃머리가 +x(right) 쪽
         forward = SmoothForward(forward, TOP_TURN_DEGREES);
         Vector3 wanted = FollowPosition(target.position, forward);
-        eye.position = Vector3.Lerp(eye.position, wanted, Time.deltaTime * FOLLOW_SMOOTH);
-        eye.rotation = Quaternion.Slerp(eye.rotation, Quaternion.LookRotation(target.position + Vector3.up * 2 - eye.position), Time.deltaTime * FOLLOW_SMOOTH * 2);
+        // SmoothDamp: 자동차처럼 천천히 출발해서 천천히 멈춤 (Lerp는 매 프레임 남은 거리의 일정 비율이라 출발이 확 튐 → 멀미)
+        eye.position = Vector3.SmoothDamp(eye.position, wanted, ref cameraVelocity, CAMERA_SMOOTH_TIME);
+        eye.rotation = Quaternion.Slerp(eye.rotation, Quaternion.LookRotation(target.position + Vector3.up * 2 - eye.position), Time.deltaTime * LOOK_SMOOTH);
     }
 
     // 위에서 보기 카메라가 있을 자리: 사람(at)의 뒤쪽 위
