@@ -280,7 +280,7 @@ async function save() {
             {{ d.day }}일차<span v-if="d.label" class="t-cap tn" style="margin-left: 4px">{{ d.label }}</span>
           </button>
         </ChipScroller>
-        <TripWeather :date="dayDate" :stops="dayStopsOf(store.draft, day)" />
+        <TripWeather compact :date="dayDate" :stops="dayStopsOf(store.draft, day)" />
         <ScenarioRainNotice :draft="store.draft" @applied="runCheck" /><!-- 시연 계정만: 비 예보를 일정 짤 때 알려 주고 반영 (③ 11/08) -->
       </template>
       <template v-if="error" #below>

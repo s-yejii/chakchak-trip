@@ -90,7 +90,7 @@ watch(view, sim.reset)
             {{ d.day }}일차<span class="t-cap tn" style="margin-left: 4px">{{ d.label }}</span>
           </button>
         </ChipScroller>
-        <TripWeather :date="dayDate" :stops="dayStops" />
+        <TripWeather compact :date="dayDate" :stops="dayStops" />
       </template>
       <template #below>
         <!-- 챙길 것: API가 아직 "확인 필요"라 이 화면에서만 적어 둬요 (새로고침하면 사라짐) -->
