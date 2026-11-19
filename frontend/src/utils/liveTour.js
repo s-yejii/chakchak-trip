@@ -12,7 +12,6 @@ export const TOUR_STEPS = [
   { target: 'noti', shape: 'card', demoNoti: true, title: '출발 알림', text: '늦기 전에 위에서 먼저 알려 줄게' },
   { target: 'sheet', shape: 'card', title: '오늘 일정', text: '다음 갈 곳과 도착 시간이 여기 떠' },
   { target: 'ask', shape: 'pill', title: '어디 갈까?', text: "'조용한 카페'처럼 물어보면 찾아 줄게" },
-  { target: 'near', shape: 'pill', title: '근처 찾기', text: '주변 카페·음식점을 지도에 띄워 줘' },
   { target: 'pay', shape: 'pill', title: '결제 메모', text: '영수증 찍으면 어디서 얼마 썼는지 정리해 줘' },
   { target: 'fab', shape: 'circle', title: '더 보기', text: '링크 추가·내 일정·공유는 여기' },
 ]
