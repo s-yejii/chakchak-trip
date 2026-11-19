@@ -5,14 +5,12 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import TopBar from '@/components/common/TopBar.vue'
 import PageMessage from '@/components/common/PageMessage.vue'
-import { getLiveStatus } from '@/api/trips'
+import { getLiveStatus, getTrip, getTripPhotos } from '@/api/trips'
 import { useReplanStore } from '@/stores/replan'
 import { imageFor } from '@/utils/mapView'
 import { toDuration } from '@/utils/time'
 import { showToast } from '@/utils/toast'
-import KakaoShareDemo from '@/components/live/KakaoShareDemo.vue'
-import { shareToKakao } from '@/utils/kakaoShare'
-import { devMode } from '@/utils/devMode'
+import { shareTrip } from '@/utils/tripShare'
 
 const UNDO_CHECK_MS = 15000 // 되돌리기 버튼을 숨길지 다시 보는 간격
 
@@ -21,11 +19,13 @@ const replan = useReplanStore()
 const after = ref(null) // 적용 뒤 지금 상황
 const isUndoing = ref(false)
 const canUndo = ref(replan.canUndo())
+const photos = ref({}) // 칸 이름 → 장소 사진 (여행 중 화면과 같은 사진, 11/19)
 let undoTimer = null
 
 onMounted(async () => {
   undoTimer = setInterval(() => (canUndo.value = replan.canUndo()), UNDO_CHECK_MS)
   if (!replan.applied) return
+  loadPhotos()
   try {
     after.value = await getLiveStatus(replan.tripId, replan.position.lat, replan.position.lng)
   } catch (e) {
@@ -33,6 +33,21 @@ onMounted(async () => {
   }
 })
 onUnmounted(() => clearInterval(undoTimer))
+
+// 장소 사진 (11/19 PPT 8장: 예전엔 종류별 기본 그림만 보여서 사진이 다 달라 보였어요)
+//   여행 중 화면처럼 POST /places/photos/trip. 새로 넣은 칸까지 들어 있게 적용한 뒤 여행을 다시 읽어서 보냄
+async function loadPhotos() {
+  try {
+    const trip = await getTrip(replan.tripId)
+    photos.value = await getTripPhotos(trip.stops)
+  } catch (e) {
+    photos.value = {} // 사진을 못 받으면 기본 그림
+  }
+}
+// 칸 사진: 받은 사진이 없으면 종류별 기본 그림
+function photoOf(stop) {
+  return photos.value[stop.name] || imageFor(stop.category)
+}
 
 // 적용 전 칸 (id → 칸)
 function beforeOf(id) {
@@ -95,31 +110,18 @@ const banner = computed(() => {
   }
 })
 
-// 팀원 공유 (11/08 DEMO.md 8번 → 주형: 카카오톡 공유): 바뀐 일정을 카카오톡 피드 메시지로
-//   시연 계정은 발표장에서 카카오 로그인이 뜨거나 진짜 사람에게 가지 않게 앱 안의 공유 화면(KakaoShareDemo)으로
-const isShared = ref(false)
-const isDemoShareOpen = ref(false)
-const shareMessage = computed(() => {
+// 같이 간 사람에게 바뀐 일정 보내기 (11/19 PPT 8장): 여행 중 화면 [일정 공유]와 같은 ① 공유 링크를 카카오톡으로
+//   예전엔 앱 안 가짜 공유 창이라 실제로 안 보내져도 "공유했어요"가 떴어요. 카톡 창에서 보냈는지는 앱이 알 수 없어서 버튼 글자는 그대로 둬요
+const shareText = computed(() => {
   const fixed = after.value && after.value.fixed
   const method = (replan.plan && replan.plan.title) || '' // 고른 대안 이름 (예: 지하철로 바로 가기)
   const arrive = fixed ? `${fixed.name} ${fixed.eta} 도착` : banner.value.title
-  const current = rows.value.find((row) => row.isCurrent) || rows.value[0]
-  return {
-    title: '일정이 바뀌었어요',
-    description: arrive + (method ? ' · ' + method : '') + (fixed && fixed.slackMin >= 0 ? ' · 여유 ' + toDuration(fixed.slackMin) : ''),
-    imageUrl: current ? location.origin + imageFor(current.category) : '',
-    link: location.origin + '/live',
-  }
+  return arrive + (method ? ' · ' + method : '') + (fixed && fixed.slackMin >= 0 ? ' · 여유 ' + toDuration(fixed.slackMin) : '')
 })
 async function share() {
-  if (devMode.isOn) {
-    isDemoShareOpen.value = true
-    return
-  }
   try {
-    const result = await shareToKakao(shareMessage.value)
-    if (result === 'copied') showToast('카카오톡을 쓸 수 없어서 링크를 복사했어요')
-    isShared.value = true
+    const result = await shareTrip(replan.tripId, '일정이 바뀌었어요', shareText.value, '바뀐 일정 보기')
+    if (result === 'copied') showToast('일정 링크를 복사했어요 · 메신저에 붙여 넣어 보내세요')
   } catch (e) {
     showToast('공유하지 못했어요 · ' + e.message)
   }
@@ -177,7 +179,7 @@ async function undo() {
               <span class="stop__time">{{ row.time }}</span>
               <span class="stop__card">
                 <span v-if="(row.tag !== 'done' || row.isCurrent) && isStation(row.category)" class="thumb thumb--station" aria-hidden="true"><i class="ic i-subway"></i></span>
-                <img v-else-if="row.tag !== 'done' || row.isCurrent" class="thumb" :src="imageFor(row.category)" alt="" />
+                <img v-else-if="row.tag !== 'done' || row.isCurrent" class="thumb" :src="photoOf(row)" alt="" />
                 <span class="stop__body">
                   <span class="stop__name">
                     <i v-if="row.tag === 'done' && !row.isCurrent" class="ic ic--s i-check c-success" aria-hidden="true"></i>
@@ -194,7 +196,7 @@ async function undo() {
           <li v-for="stop in gone" :key="'gone' + stop.id" class="stop is-gone">
             <span class="stop__time"></span>
             <span class="stop__card">
-              <img class="thumb" :src="imageFor(stop.category)" alt="" />
+              <img class="thumb" :src="photoOf(stop)" alt="" />
               <span class="stop__body"><span class="stop__name"><s>{{ stop.name }}</s></span><span class="stop__meta">일정에서 뺐어요</span></span>
               <span class="badge badge--neutral">뺌</span>
             </span>
@@ -212,12 +214,11 @@ async function undo() {
         <!-- 카카오톡 공유 버튼: 카카오 디자인 가이드처럼 노란 바탕(#FEE500) + 검은 말풍선 심볼 + 검은 글씨. 말풍선은 파일을 받지 않고 SVG로 그림 (11/08) -->
         <button type="button" class="btn btn--lg kakao-share" style="flex: 1" @click="share">
           <svg class="kakao-share__bubble" viewBox="0 0 24 22" aria-hidden="true"><path d="M12 1C5.9 1 1 4.9 1 9.7c0 3.1 2 5.8 5.1 7.3l-1.1 4c-.1.4.3.7.6.5l4.7-3.1c.6.1 1.1.1 1.7.1 6.1 0 11-3.9 11-8.7S18.1 1 12 1z" fill="#191919"/></svg>
-          {{ isShared ? '공유했어요' : '카카오톡으로 공유' }}
+          카카오톡으로 공유
         </button>
         <RouterLink to="/live" class="btn btn--primary btn--lg" style="flex: 1"><i class="ic i-trip" aria-hidden="true"></i>지도로 돌아가기</RouterLink>
       </div>
       </template>
-      <KakaoShareDemo v-if="isDemoShareOpen" :message="shareMessage" @close="isDemoShareOpen = false; isShared = true" />
     </div>
   </div>
 </template>

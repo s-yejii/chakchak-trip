@@ -6,9 +6,10 @@
 // 새로고침해도 기억하게 sessionStorage(이 탭이 열려 있는 동안만 남는 브라우저 저장소)에 둬요
 const AGAIN_AFTER_MS = 10 * 60 * 1000 // 같은 종류 알림을 다시 펼치는 간격 (10분)
 const STORAGE_KEY = 'live-alert-shown'
-// 서버 알림 key 끝에 붙는 숫자(늦는 분·남은 분 묶음)는 상황이 조금씩 바뀌어도 같은 종류로 봐요
-//   예: "late-12-1" → "late-12", "leave-7-3" → "leave-7" (늦는 고정 일정·떠날 장소가 같으면 같은 종류)
-const KIND_WITH_NUMBER = /^(overdue|late|leave|next)-(\d+)-/
+// 서버 알림 key 끝에 붙는 숫자(늦는 분 묶음)는 상황이 조금씩 바뀌어도 같은 종류로 봐요
+//   예: "late-12-1" → "late-12" (늦는 고정 일정이 같으면 같은 종류)
+// 11/19 PPT 14장: 출발 알림(leave-)은 서버가 10분 전·5분 전·지금에만 key를 바꿔서 묶지 않아요 → 10분 전·5분 전이 둘 다 펼쳐짐
+const KIND_WITH_NUMBER = /^(overdue|late|next)-(\d+)-/
 
 // 알림 종류 이름
 function kindOf(alert) {
