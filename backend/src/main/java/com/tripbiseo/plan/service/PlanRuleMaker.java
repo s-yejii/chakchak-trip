@@ -930,6 +930,9 @@ public class PlanRuleMaker {
             if (place == null && !slotKinds.contains(FOOD_KIND)) {
                 // 11/12 빈 칸 채우기: 볼거리 칸에 넣을 곳이 없으면 산책·카페 중 아직 안 쓴 곳으로 (끼니 칸은 그대로)
                 List<String> fallback = withoutExtraCafe(FALLBACK_KINDS, lastKind, cafeCount);
+                if (lastKind.isEmpty() && start < LUNCH_START_MIN) {
+                    fallback = withoutKind(fallback, CAFE_KIND); // 11/19 점검: 빈 칸 채우기에서도 하루 첫 칸(점심 전)은 카페 말고 (중구 11:00 카페부터)
+                }
                 for (int k = 0; place == null && k < fallback.size(); k++) {
                     place = pickBest(candidates, scores, blocked, fallback.get(k), point, firstPoint, date, start, stay, null);
                 }
