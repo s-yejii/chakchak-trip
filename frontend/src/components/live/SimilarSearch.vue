@@ -181,7 +181,7 @@ async function addPicked() {
         <div class="lp-actions">
           <button type="button" class="btn btn--secondary btn--md" @click="router.push('/place?id=' + encodeURIComponent(picked.id))">자세히</button>
           <!-- 11/17 주형: 네이버 가게 페이지 (주소가 있을 때만). 11/19 PPT 15장: 예약 페이지가 아니라 네이버 지도가 열려서 이름을 바꿈 -->
-          <a v-if="picked.naverUrl" :href="picked.naverUrl" target="_blank" rel="noopener" class="btn btn--secondary btn--md">네이버 지도에서 보기</a>
+          <a v-if="picked.naverUrl" :href="picked.naverUrl" target="_blank" rel="noopener" class="btn btn--secondary btn--md" style="padding-left: 8px; padding-right: 8px">네이버 지도에서 보기</a><!-- 글자가 길어져 칸 밖으로 나가서 옆 여백만 줄임 -->
           <button type="button" class="btn btn--primary btn--md" :disabled="isAdding" @click="addPicked">
             <i class="ic ic--s i-plus" aria-hidden="true"></i>{{ isAdding ? '담는 중…' : isReserved ? (reservedTime ? reservedTime + ' 예약으로 담기' : '예약 시각을 골라 주세요') : '담기 · 다음 목적지로' }}
           </button>
