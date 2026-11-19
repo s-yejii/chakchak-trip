@@ -763,11 +763,13 @@ async function onLinkAdded(message) {
 }
 
 // 장면 2 카드 (11/17 주형, 시연 계정만): 버스에서 내린 뒤 예약까지 시간이 남으면 "이대로 갈까요?" → [가는 길 카페 찾기]는 AI에게 묻기를 질문 채워서 열어요
-const REST_QUESTION = '가는 길에 들를 곳'
+// 11/19 주형: [어디 갈까?]가 지금 자리 근처 펍을 추천해서 → 예약 가게 근처 카페로 물어요 (AI에게 묻기의 "다른 곳 기준 찾기")
+const REST_QUESTION_TAIL = ' 근처 카페'
 const askDraft = ref('')
 function findRestCafe() {
+  const name = restAsk.value ? restAsk.value.name : ''
   restAsk.value = null
-  askDraft.value = REST_QUESTION
+  askDraft.value = name + REST_QUESTION_TAIL
   openAsk()
 }
 function keepGoing() {
@@ -1023,9 +1025,9 @@ function finishTour() {
         <!-- 장면 2: 버스에서 내린 뒤 시간이 남으면 가운데 카드 (시연 계정만, 고르기 전엔 시계·[다음 장소로] 멈춤) -->
         <div v-if="restAsk && !isLostOpen" class="rest-pop" role="alertdialog" aria-modal="true" aria-label="시간이 남아요">
           <section class="rest-pop__card">
-            <b class="rest-pop__title">시간이 {{ toDuration(restAsk.slackMin) }} 남아요</b>
-            <span class="rest-pop__text">{{ restAsk.name }} 예약까지 여유가 있어요. 가는 길에 들를 곳을 찾아볼까요?</span>
-            <button type="button" class="btn btn--primary btn--lg btn--block" @click="findRestCafe">어디 갈까?</button><!-- 11/19 주형: [어디 갈까?]를 누르게 유도 -->
+            <b class="rest-pop__title">{{ restAsk.name }}까지 {{ toDuration(restAsk.slackMin) }} 남아요</b>
+            <span class="rest-pop__text">예약 시각까지 시간이 남아요. 근처 카페에서 쉬었다 갈까요?</span>
+            <button type="button" class="btn btn--primary btn--lg btn--block" @click="findRestCafe">근처 카페 보기</button><!-- 11/19 주형: 예약 가게 근처 카페를 골라 넣기 -->
             <button type="button" class="btn btn--secondary btn--lg btn--block" @click="keepGoing">이대로 갈게요</button>
           </section>
         </div>
