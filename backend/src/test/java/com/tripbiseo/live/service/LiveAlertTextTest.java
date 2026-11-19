@@ -62,7 +62,7 @@ class LiveAlertTextTest {
 
     // 11/19 주형: 예약 앞 카페에선 출발 알림을 5분 전 한 번만
     @Test
-    void 카페에선_출발_알림이_5분_전_한_번만() {
+    void 시연_계정_카페에선_출발_알림이_5분_전_한_번만() {
         Stop cafe = new Stop();
         cafe.setName("공간갑");
         cafe.setCategory("카페,디저트");
@@ -74,6 +74,8 @@ class LiveAlertTextTest {
         context.setNextStop(dinner);
         context.setLeaveAt(Geo.toMinutes("18:54"));
         context.setNow(Geo.toMinutes("18:45")); // 9분 전
+        assertNotNull(maker.makeLeave(context)); // 일반 계정은 예전처럼 10분 전부터
+        context.setDemo(true);
         assertNull(maker.makeLeave(context));
         context.setNow(Geo.toMinutes("18:50")); // 4분 전
         assertNotNull(maker.makeLeave(context));

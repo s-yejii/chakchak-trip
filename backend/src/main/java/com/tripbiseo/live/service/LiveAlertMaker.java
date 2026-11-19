@@ -40,8 +40,8 @@ public class LiveAlertMaker {
         }
         if (current != null) {
             int left = context.getLeaveAt() - now;
-            if (CafeStay.isCafe(current.getCategory()) && (left <= 0 || left > LEAVE_SOON_MIN)) {
-                return null; // 11/19 주형: 예약 앞 카페에선 나갈 시각 5분 전에 한 번만 (10분 전·지금·지남 알림은 안 냄)
+            if (context.isDemo() && CafeStay.isCafe(current.getCategory()) && (left <= 0 || left > LEAVE_SOON_MIN)) {
+                return null; // 11/19 주형: 시연 계정만, 예약 앞 카페에선 나갈 시각 5분 전에 한 번만 (10분 전·지금·지남 알림은 안 냄)
             }
             return toLeave(current, context.getLeaveAt(), left, nextStop.getName(), true);
         }
