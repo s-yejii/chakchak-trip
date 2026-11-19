@@ -41,6 +41,23 @@ class LiveAlertTextTest {
         assertEquals("가장 빠른 방법으로 가도 약속 시각(12:30)보다 15분 늦어요", maker.makeLostText(context, sushi()));
     }
 
+    // 11/19 주형: 예약 49m 앞 카페 (1분 거리, 계획은 18:54에 나가 18:55 도착) → 18:09엔 "늦어요" 없음, 18:54엔 있음
+    @Test
+    void 바로_앞_카페면_나갈_때가_돼야_지금_나가라고() {
+        Stop dinner = sushi();
+        dinner.setId(7L);
+        dinner.setTime("19:00");
+        StatusContext context = new StatusContext();
+        context.setFixedStop(dinner);
+        context.setLeaveAt(Geo.toMinutes("18:54"));
+        context.getEtaMap().put(7L, Geo.toMinutes("18:55"));
+        context.setSlack(5);
+        context.setNow(Geo.toMinutes("18:09"));
+        assertFalse(maker.isMustLeaveNow(context));
+        context.setNow(Geo.toMinutes("18:54"));
+        assertTrue(maker.isMustLeaveNow(context));
+    }
+
     @Test
     void 앞_칸을_떠났으면_이동_중() {
         Stop cafe = new Stop();

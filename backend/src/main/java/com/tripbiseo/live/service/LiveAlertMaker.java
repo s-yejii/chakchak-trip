@@ -75,7 +75,7 @@ public class LiveAlertMaker {
                     "지금대로면 " + fixedStop.getName() + " 도착 목표(" + fixedStop.getTime() + ")보다 " + Geo.toDuration(-slack) + " 늦어요",
                     "누르면 늦지 않는 대안을 볼 수 있어요");
         }
-        if (isAtStopBeforeFixed(context) && slack != null && slack <= LEAVE_NOW_SLACK_MIN) {
+        if (isAtStopBeforeFixed(context) && slack != null && isMustLeaveNow(context)) {
             // 11/09: 나갈 시각 전이라도 여유가 5분 이하면 출발 알림 대신 이 알림 (시연 [다음 장소로]의 출발 전 검사와 같은 기준)
             // 11/08 주형: 이미 늦은 뒤에 알리면 늦어서, 여유가 조금 남았을 때 먼저 경고 (key가 late-로 시작 → 위에 크게 다시 뜸)
             return newAlert("late-soon-" + fixedStop.getId(), "danger",
@@ -173,6 +173,22 @@ public class LiveAlertMaker {
     }
 
     /** 지금 어떤 칸에 있고, 다음 칸이 예약(고정)인지 */
+    /**
+     * "지금 나가지 않으면 늦어요"는 지금 바로 나가도 여유가 5분 이하일 때만 (11/19 주형: 예약 49m 앞 카페에 18:09 도착하자마자 떴어요.
+     * 계획대로 18:54에 나가면 18:55 도착인데, 여유 5분만 보고 50분 전부터 경고했어요).
+     * 지금 나가면 도착 = 지금 + 이동 분(예약 도착 예상 − 떠날 시각). 그 전에는 출발 알림("N분 뒤 출발해요")만
+     */
+    boolean isMustLeaveNow(StatusContext context) {
+        Stop fixedStop = context.getFixedStop();
+        Integer eta = fixedStop == null || fixedStop.getId() == null ? null : context.getEtaMap().get(fixedStop.getId());
+        if (eta == null || context.getLeaveAt() == null || fixedStop.getTime() == null) {
+            return context.getSlack() != null && context.getSlack() <= LEAVE_NOW_SLACK_MIN; // 이동 분을 모르면 예전 기준
+        }
+        int travel = Math.max(0, eta - context.getLeaveAt());
+        int slackIfLeaveNow = Geo.toMinutes(fixedStop.getTime()) - (context.getNow() + travel);
+        return slackIfLeaveNow <= LEAVE_NOW_SLACK_MIN;
+    }
+
     private boolean isAtStopBeforeFixed(StatusContext context) {
         Stop nextStop = context.getNextStop();
         return context.getCurrent() != null && nextStop != null && isFixed(nextStop);
