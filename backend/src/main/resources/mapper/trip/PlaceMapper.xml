@@ -136,4 +136,18 @@
     ORDER BY COALESCE(sc.score, 0) DESC, <include refid="adjustedRating"/> DESC
     LIMIT #{limit}
   </select>
+
+  <!-- 장소 여러 곳의 방문자 키워드 상위 limit개씩 (11/19 ①). ROW_NUMBER: 장소마다 표 많은 순으로 1, 2, 3… 번호를 매김 -->
+  <select id="selectTopKeywordList" resultType="com.tripbiseo.trip.dto.PlaceKeyword">
+    SELECT place_id, keyword, cnt
+    FROM (
+      SELECT place_id, keyword, cnt,
+             ROW_NUMBER() OVER (PARTITION BY place_id ORDER BY cnt DESC, keyword) AS rank_no
+      FROM place_keyword
+      WHERE place_id IN
+      <foreach collection="placeIds" item="id" open="(" separator="," close=")">#{id}</foreach>
+    ) ranked
+    WHERE rank_no &lt;= #{limit}
+    ORDER BY place_id, rank_no
+  </select>
 </mapper>

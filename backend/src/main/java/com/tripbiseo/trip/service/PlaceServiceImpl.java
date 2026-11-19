@@ -20,6 +20,7 @@ import com.tripbiseo.trip.dto.OpenInfo;
 import com.tripbiseo.trip.dto.Place;
 import com.tripbiseo.trip.dto.PlaceCard;
 import com.tripbiseo.trip.dto.PlaceDetail;
+import com.tripbiseo.trip.dto.PlaceKeyword;
 import com.tripbiseo.trip.mapper.PlaceMapper;
 
 import lombok.RequiredArgsConstructor;
@@ -39,6 +40,7 @@ public class PlaceServiceImpl implements PlaceService {
     private static final int NEARBY_SEARCH_LIMIT = 200;
     private static final int NAME_SEARCH_RADIUS_M = 2000;
     private static final int DETAIL_REVIEW_COUNT = 10;
+    private static final int DETAIL_KEYWORD_COUNT = 3; // 장소 상세 "추천하는 이유"에 보여 줄 방문자 키워드 수 (11/19 ①)
     // 이 말이 분류에 들어가면 야외 (비 올 때 판단)
     // 검색어가 묶음 말일 때 (11/03: "음식점"으로 찾으면 분류가 "돈가스"·"국밥"처럼 세세해서 아무것도 안 나오던 문제)
     private static final List<String> FOOD_WORDS = List.of("음식점", "음식", "식당", "맛집", "밥집", "밥", "먹을곳");
@@ -115,7 +117,17 @@ public class PlaceServiceImpl implements PlaceService {
         detail.setOpenNow(openingHours.isOpenNow(place, today, Geo.nowMinutes()));
         detail.setAmenities(splitAmenities(place.getAmenities()));
         detail.setReviews(placeMapper.selectReviewList(placeId, DETAIL_REVIEW_COUNT));
+        detail.setKeywords(findKeywords(placeId));
         return detail;
+    }
+
+    /** 추천 이유: 방문자 키워드 상위 몇 개 (표 많은 순, 11/19 ①) */
+    private List<String> findKeywords(String placeId) {
+        List<String> keywords = new ArrayList<>();
+        for (PlaceKeyword keyword : placeMapper.selectTopKeywordList(List.of(placeId), DETAIL_KEYWORD_COUNT)) {
+            keywords.add(keyword.getKeyword());
+        }
+        return keywords;
     }
 
     /** 반경 안 장소, 가까운 순 (PostGIS ST_DWithin + 거리 정렬) */

@@ -6,6 +6,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 import com.tripbiseo.trip.dto.Place;
+import com.tripbiseo.trip.dto.PlaceKeyword;
 
 /**
  * ② 장소 (retrip_place, retrip_review 읽기만). SQL은 resources/mapper/trip/PlaceMapper.xml
@@ -51,4 +52,10 @@ public interface PlaceMapper {
      */
     List<Place> selectPopularPlaceList(@Param("memberId") long memberId, @Param("lat") Double lat, @Param("lng") Double lng,
                                        @Param("radius") Integer radius, @Param("limit") int limit);
+
+    /**
+     * 장소 여러 곳의 방문자 키워드 상위 limit개씩 (11/19 ①). 장소마다 표 많은 순.
+     * 홈 인기 장소의 "왜 인기인지" 한 줄과 장소 상세의 추천 이유에 같이 씀
+     */
+    List<PlaceKeyword> selectTopKeywordList(@Param("placeIds") List<String> placeIds, @Param("limit") int limit);
 }

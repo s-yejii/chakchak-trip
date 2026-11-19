@@ -25,4 +25,5 @@ public class PlaceDetail {
     private Boolean openNow;    // 오늘 휴무면 false, 정보 없으면 null
     private List<String> amenities = new ArrayList<>();
     private List<String> reviews = new ArrayList<>(); // 긴 순 최대 10개
+    private List<String> keywords = new ArrayList<>(); // 추천 이유: 방문자 키워드 상위 3개 "디저트가 맛있어요" (없으면 [], 11/19 ①)
 }

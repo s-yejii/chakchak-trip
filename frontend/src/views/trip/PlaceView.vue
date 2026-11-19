@@ -177,6 +177,14 @@ function onAddClick() {
           </a>
         </div>
 
+        <!-- 이런 점이 좋았어요: 방문자 키워드 상위 3개 (GET /api/places/{id} keywords, 숫자는 안 보여 줌, 11/19 ①) -->
+        <section v-if="place.keywords && place.keywords.length" class="pl-why" aria-label="이런 점이 좋았어요">
+          <h2 class="t-sub" style="margin: 0">이런 점이 좋았어요</h2>
+          <div class="chips">
+            <span v-for="keyword in place.keywords" :key="keyword" class="chip chip--sm">{{ keyword }}</span>
+          </div>
+        </section>
+
         <div class="group">
           <div class="row">
             <i class="ic i-clock muted" aria-hidden="true"></i>
@@ -219,4 +227,6 @@ function onAddClick() {
 .scr-Place .pl-naver:hover{border-color:#03C75A;background:#F2FBF5}
 .scr-Place .pl-naver__mark{width:20px;height:20px;border-radius:5px;background:#03C75A;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center}
 .scr-Place .pl-naver .ic{width:14px;height:14px;color:var(--ink-muted)}
+.scr-Place .pl-why{display:flex;flex-direction:column;gap:8px}
+.scr-Place .pl-why .chips{flex-wrap:wrap}
 </style>
