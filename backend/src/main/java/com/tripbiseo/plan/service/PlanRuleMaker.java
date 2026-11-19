@@ -212,6 +212,7 @@ public class PlanRuleMaker {
         clampToHours(conditions, days, extras);
         moveToOpenTimes(extras, candidates, startDate, conditions, days);
         moveOutOfDinner(extras, candidates, conditions, days, startDate);
+        removeClosedExtras(extras, candidates, startDate, warnings);
         List<AiDraftStop> stops = new ArrayList<>(extras);
         Set<String> used = new HashSet<>();
         for (AiDraftStop extra : extras) {
@@ -991,6 +992,26 @@ public class PlanRuleMaker {
                 extra.setTime(Geo.toHhmm(after));
             }
         }
+    }
+
+    /**
+     * 꼭 갈 곳(예약 말고)이 잡힌 시각에 문을 닫았으면 빼고 알림 (11/19 점검: 밤 9시에 다시 짜기 → 이미 닫은 백화점 카페가
+     * 22:09에 들어가 저녁 자리까지 막았어요). 영업시간을 모르면 그대로 둠
+     */
+    void removeClosedExtras(List<AiDraftStop> extras, Map<String, Place> candidates, String startDate, List<String> warnings) {
+        List<AiDraftStop> closed = new ArrayList<>();
+        for (AiDraftStop extra : extras) {
+            Place place = findPlaceOf(extra, candidates);
+            if (Boolean.TRUE.equals(extra.getFixed()) || place == null || placeService == null || !isTimeText(extra.getTime())) {
+                continue;
+            }
+            LocalDate date = LocalDate.parse(startDate).plusDays(dayOf(extra) - 1);
+            if (!isOpenFor(place, date, Geo.toMinutes(extra.getTime()), SHORTEST_STAY_MIN)) {
+                closed.add(extra);
+                warnings.add(extra.getName() + "은(는) 그날 남은 시간에 문을 안 열어서 일정에 못 넣었어요");
+            }
+        }
+        extras.removeAll(closed);
     }
 
     /** 칸 목록 중 저녁 칸(17:30 뒤 밥집 칸, 술만 고르면 술집 겸) 하나. 없으면 null */
