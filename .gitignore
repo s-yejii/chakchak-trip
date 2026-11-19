@@ -42,6 +42,8 @@ uploads/
 ### ⑤ 3D 지도 큰 파일 (용량이 커서 각자 PC에서 만듦, 11/13 박석진)
 #   유니티 WebGL 빌드(60MB): 유니티에서 Tools > Retro > 웹으로 내보내기 → frontend/public/unity3d/
 frontend/public/unity3d/
+#   세슘 넣은 유니티 WebGL 빌드(80MB, 11/19 시험) → frontend/public/unity3d-cesium/
+frontend/public/unity3d-cesium/
 #   건물 자료(58MB): db/geo/make_buildings_seoul.py로 만듦
 frontend/public/geo/buildings/
 #   바닥 자료(10MB, 도로·보도·횡단보도 면): db/geo/make_ground_seoul.py로 만듦

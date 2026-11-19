@@ -164,7 +164,7 @@ export async function buildMapData({ center, halfM, tileUrl, dateText, forest, g
   }
   const sun = makeSunTable(center, dateText, startClock, dayCount)
   delete route.hints // 유니티에는 modes만 보냄
-  return { sizeM: halfM * 2, gridCount: gridCount, heights: smooth, buildings: buildings, roads: roads, areas: areas, trees: trees, route: route, stops: pins, landmarks: landmarks, water: water, sun: sun, startClock: startClock }
+  return { sizeM: halfM * 2, gridCount: gridCount, heights: smooth, buildings: buildings, roads: roads, areas: areas, trees: trees, route: route, stops: pins, landmarks: landmarks, water: water, sun: sun, startClock: startClock, centerLng : center[0], centerLat : center[1] }
 }
 
 // 여행 시각마다 해 위치 (유니티가 하늘 색·햇빛 방향·밤 불빛을 정함). 날짜·시각·위경도로 천문 공식 계산(utils/sun.js)

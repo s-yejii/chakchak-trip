@@ -10,11 +10,15 @@ const props = defineProps({
   tripUrl: { type: String, default: '' }, // 여행 지도 자료 주소 (확장자 빼고). 예: '/trips3d/1722'
   tripData: { type: Object, default: null }, // 웹이 만든 지도 자료 { json, photo(base64) }
   statusText: { type: String, default: '' }, // 지도 자료를 만드는 중이면 그 안내 글
+  isCesium: { type: Boolean, default: false }, // 세슘 빌드(public/unity3d-cesium/)를 띄울지 (11/19부터 기본)
 })
-const emit = defineEmits(['ready']) // 3D가 다 뜨면 알려 줌 (부모가 지금 재생 시각·시점을 넘기게)
+const emit = defineEmits(['ready', 'fail']) // ready: 3D가 다 뜸 (부모가 재생 시각·시점을 넘기게) / fail: 못 띄움 (부모가 기본 3D로 바꾸게)
 
-const BUILD_URL = '/unity3d/Build/webgl'
-const STREAMING_URL = '/unity3d/StreamingAssets'
+const LOAD_TIMEOUT_MS = 90000 // 이만큼 지나도 3D가 안 뜨면 실패로 봄 (세슘 빌드 82MB, 느린 인터넷도 생각해서 넉넉히)
+
+const BUILD_FOLDER = props.isCesium ? '/unity3d-cesium' : '/unity3d'
+const BUILD_URL = BUILD_FOLDER + '/Build/webgl'
+const STREAMING_URL = BUILD_FOLDER + '/StreamingAssets'
 const canvas = ref(null)
 const progress = ref(0)       // 불러오기 진행률 (0 ~ 100)
 const isReady = ref(false)
@@ -32,7 +36,12 @@ function loadScript(src) {
   })
 }
 
+let failTimer = null
+
 onMounted(async () => {
+  failTimer = setTimeout(() => {
+    if (!isReady.value) emit('fail') // 너무 오래 걸림
+  }, LOAD_TIMEOUT_MS)
   try {
     if (!window.createUnityInstance) await loadScript(BUILD_URL + '.loader.js')
     const config = {
@@ -44,14 +53,18 @@ onMounted(async () => {
       productName: 'retro3d',
       productVersion: '1',
     }
+    if (props.isCesium) config.workerUrl = BUILD_URL + '.worker.js' // 세슘 빌드는 여러 스레드를 써서 일꾼(worker) 파일이 하나 더 있음
     unity = await window.createUnityInstance(canvas.value, config, (rate) => {
       progress.value = Math.round(rate * 100)
     })
     isReady.value = true
+    clearTimeout(failTimer)
     if (props.tripUrl) unity.SendMessage('RetroMap', 'LoadTrip', props.tripUrl)
     sendTripData()
   } catch (e) {
+    clearTimeout(failTimer)
     errorText.value = e.message
+    emit('fail') // 파일을 못 받았거나 브라우저가 못 돌림
   }
 })
 
@@ -67,6 +80,7 @@ function sendTripData() {
 watch(() => props.tripData, sendTripData)
 
 onBeforeUnmount(() => {
+  clearTimeout(failTimer)
   if (unity) unity.Quit() // 화면을 떠나면 유니티를 끄고 메모리를 돌려줌
 })
 
