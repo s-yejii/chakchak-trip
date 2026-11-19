@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice">
+  <!-- 사진 없는 장소(종류 모름) 칸 기본 그림 (11/19 ①): 위치 핀 -->
+  <rect width="400" height="300" fill="#E8EEF7"/>
+  <g fill="none" stroke="#1F3A68" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M200 220s-55-55-55-95a55 55 0 0 1 110 0c0 40-55 95-55 95z"/>
+    <circle cx="200" cy="125" r="18"/>
+  </g>
+</svg>
