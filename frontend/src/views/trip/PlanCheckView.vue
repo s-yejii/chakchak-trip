@@ -184,12 +184,13 @@ function markHoursChecked(id) {
 }
 const hoursCheckedIds = computed(() => dayStopsOf(store.draft, day.value).filter((stop) => stop.hoursChecked).map(hoursKeyOf))
 
-// 저장 끝: 초안·조건을 비우고 새 여행으로 (오늘·여행 중이면 여행 날 화면, 다음에 갈 여행이면 여행 전 화면)
+// 저장 끝: 초안·조건을 비우고 내 여행 목록으로 (11/19). 다시 짜기(replaceOld·둘 다 두기)도 여기를 거쳐요
+//   시연 계정은 시연 흐름대로 새 여행 상세로 (오늘·여행 중이면 여행 날 화면, 다음에 갈 여행이면 여행 전 화면)
 function finishSave(trip) {
   store.resetDraft()
   store.resetPlan()
   showToast('일정을 저장했어요')
-  router.replace(tripDetailLink(trip))
+  router.replace(devMode.isOn ? tripDetailLink(trip) : '/trips')
 }
 
 // 다시 짜기로 저장한 뒤: 옛 여행을 지우고 바꾸기 (지우기 실패해도 새 일정은 이미 저장됨)
