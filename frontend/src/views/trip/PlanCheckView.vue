@@ -166,16 +166,6 @@ function markHoursChecked(id) {
 }
 const hoursCheckedIds = computed(() => dayStopsOf(store.draft, day.value).filter((stop) => stop.hoursChecked).map(hoursKeyOf))
 
-// 고른 칸 편집 버튼: "성내동 카페 편집" → 그 칸 수정 (칸을 안 고르면 버튼이 없어요)
-function editLabel(selected) {
-  const stop = trip.value.stops[selected]
-  if (!stop) return '' // 고른 칸이 목록에 없음 (일차를 바꿨거나 칸을 뺌)
-  return stop.name.replace('천호 ', '') + ' 편집'
-}
-function editLink(selected) {
-  return `/plan/edit/stop?day=${day.value}&idx=${selected}&back=${encodeURIComponent(route.fullPath)}` // 돌아올 곳 = 지금 주소 그대로
-}
-
 // 저장 끝: 초안·조건을 비우고 새 여행으로 (오늘·여행 중이면 여행 날 화면, 다음에 갈 여행이면 여행 전 화면)
 function finishSave(trip) {
   store.resetDraft()
@@ -256,7 +246,7 @@ async function save() {
 
 <template>
   <div class="scr scr-PlanCheck">
-    <!-- 담은 장소가 없을 때: 안내만 (지도·저장·장소 추가·편집 버튼은 안 보여요) -->
+    <!-- 담은 장소가 없을 때: 안내만 (지도·저장·편집 버튼은 안 보여요) -->
     <div v-if="!hasDraft" class="app">
       <TopBar title="일정 점검" back="/trips" />
       <div class="scroll">
@@ -267,7 +257,6 @@ async function save() {
       <template #right="{ selected }">
         <button v-if="isFromAi && selected === null && !sim.isOn.value" type="button" class="btn btn--sm btn--float" @click="isConditionsAsk = true"><i class="ic ic--s i-settings" aria-hidden="true"></i>조건 바꾸기</button>
         <RouteSimButton v-if="hasDraft" :sim="sim" />
-        <RouterLink v-if="selected !== null && trip.stops[selected] && !sim.isOn.value" :to="editLink(selected)" class="btn btn--sm btn--float"><i class="ic ic--s i-edit" aria-hidden="true"></i>{{ editLabel(selected) }}</RouterLink>
       </template>
       <template v-if="hasDraft" #head>
         <div v-if="missedList.length" class="pc-missed">
@@ -288,7 +277,8 @@ async function save() {
       </template>
       <template #cta>
         <div class="cta__row">
-          <RouterLink to="/plan/manual" class="btn btn--secondary btn--lg"><i class="ic i-plus" aria-hidden="true"></i>장소 추가</RouterLink>
+          <!-- 편집: 지금 고른 일차를 편집 화면에서 고쳐요 (장소 추가·빼기·순서·시간). [완료]·✕면 이 화면으로 돌아와요 -->
+          <RouterLink :to="'/plan/edit?day=' + day" class="btn btn--secondary btn--lg"><i class="ic i-edit" aria-hidden="true"></i>편집</RouterLink>
           <button type="button" class="btn btn--primary btn--lg" :disabled="saving" @click="save">이 일정으로 저장</button>
         </div>
       </template>
