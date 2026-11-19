@@ -610,6 +610,9 @@ public class PlanServiceImpl implements PlanService {
             progress.accept(makeProgress(step[0], "done", Integer.parseInt(step[1]), step[2], null));
         }
         PlanGenerateResponse demo = demoScenario.makeDraft(conditions);
+        // 11/19 피드백: 고정 제목("아카데미 동기 서울 1박 2일")이 짜고 친 것처럼 보여서, 일반 계정과 같은 규칙(지역 + 기간)으로
+        int demoDays = (int) ChronoUnit.DAYS.between(LocalDate.parse(demo.getStartDate()), LocalDate.parse(demo.getEndDate())) + 1;
+        setShortTitle(conditions, demo, demoDays);
         planVerifier.addVerifyNotes(demo); // 시연 일정도 진짜 DB 값으로 확인 줄 (11/13)
         return demo;
     }

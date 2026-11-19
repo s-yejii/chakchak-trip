@@ -26,7 +26,7 @@ import com.tripbiseo.trip.dto.Stop;
 @Component
 public class DemoScenario {
 
-    private static final String TITLE = "아카데미 동기 서울 1박 2일";
+    private static final String TITLE = "새 여행"; // 지역을 모를 때만 (지역이 있으면 PlanServiceImpl.setShortTitle이 "중구 1박 2일"처럼 바꿈, 11/19)
     private static final int DEFAULT_PEOPLE = 5;
     private static final int NIGHTS = 1;
 
