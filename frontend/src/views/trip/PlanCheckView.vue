@@ -11,7 +11,7 @@ import ChipScroller from '@/components/common/ChipScroller.vue'
 import PageMessage from '@/components/common/PageMessage.vue'
 import TopBar from '@/components/common/TopBar.vue'
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import TripPage from '@/components/trip/TripPage.vue'
 import { SHOW_PRICE_ESTIMATE, stopWon, toWonText } from '@/utils/budget'
 import { useStopPhotos } from '@/utils/useStopPhotos'
@@ -78,6 +78,24 @@ onMounted(() => {
   router.replace({ query: { ...route.query, from: 'ai' } })
 })
 const isFromAi = computed(() => hasDraft.value && route.query.from === 'ai')
+// 저장 안 하고 나가기 전에 묻기 (11/19): 위 ← 버튼·폰 뒤로가기 모두 이 화면을 떠나기 직전에 여기를 거쳐요
+//   onBeforeRouteLeave: 이 화면에서 다른 화면으로 가기 직전에 불려요. false를 돌려주면 이동을 멈춰요 (폰 뒤로가기면 주소도 되돌림)
+//   안 묻는 경우: 초안이 없을 때, 저장하고 넘어갈 때, /plan/ 화면(편집·조건 바꾸기 등 일정 만들기 안)으로 갈 때
+const leaveTo = ref(null) // 나가려던 곳 (값이 있으면 묻는 창이 떠 있음)
+let isLeaveOk = false // [나가기]를 눌렀거나 저장을 마쳤으면 다시 묻지 않음
+onBeforeRouteLeave((to) => {
+  if (isLeaveOk || !hasDraft.value || to.path.startsWith('/plan/')) return true
+  leaveTo.value = to.fullPath
+  return false
+})
+// [나가기]: 원래 가려던 곳으로
+function leaveCheck() {
+  const to = leaveTo.value
+  leaveTo.value = null
+  isLeaveOk = true
+  router.push(to)
+}
+
 // [조건 바꾸기]: 조건 화면 1단계부터 (고른 값은 그대로라 [다음]만 눌러도 돼요)
 //   조건 화면은 저장된 단계(store.planStep)로 열려서, 주소만 ?step=0 으로 주면 마지막 단계가 떠요 → 단계도 0으로
 const isConditionsAsk = ref(false) // [조건 바꾸기]를 누르면 먼저 묻는 창 (다시 만들면 지금 일정이 바뀌어서)
@@ -228,6 +246,7 @@ async function save() {
   try {
     await fillEmptyTimes()
     const saved = await createTrip(store.draft)
+    isLeaveOk = true // 저장했으니 나갈 때 안 물어봄 (다시 짜기에서 "지금 여행 바꿀까요?"가 떠 있을 때도)
     store.tripId = saved.id
     if (devMode.isOn) await trashOverlappingTrips(saved) // 시연 계정: 날짜가 겹치는 예전 여행은 휴지통으로
     if (store.replanFrom) {
@@ -284,6 +303,11 @@ async function save() {
         </div>
       </template>
     </TripPage>
+    <Teleport v-if="leaveTo" to=".scr-PlanCheck .app">
+      <div class="pc-ask">
+        <ConfirmModal title="저장 안 하고 나갈까요?" text="지금 나가면 만든 일정이 저장되지 않아요." ok-text="나가기" cancel-text="계속 보기" danger @cancel="leaveTo = null" @ok="leaveCheck" />
+      </div>
+    </Teleport>
     <Teleport v-if="isConditionsAsk" to=".scr-PlanCheck .app">
       <div class="pc-ask">
         <ConfirmModal title="조건을 바꿔 다시 만들까요?" text="다시 만들면 조건이 같아도 장소가 바뀔 수 있어요. 지금 일정과 직접 바꾼 순서·이동 수단도 새 일정으로 바뀌어요." ok-text="조건 바꾸기" @cancel="isConditionsAsk = false" @ok="openConditions" />
