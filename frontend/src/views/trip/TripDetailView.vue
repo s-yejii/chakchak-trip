@@ -89,7 +89,7 @@ watch(view, sim.reset)
             {{ d.day }}일차<span class="t-cap tn" style="margin-left: 4px">{{ d.label }}</span>
           </button>
         </ChipScroller>
-        <TripWeather :date="dayDate" :stops="dayStops" />
+        <TripWeather compact :date="dayDate" :stops="dayStops" />
       </template>
       <template #cta>
         <RouterLink :to="'/plan/edit?id=' + view.id" class="btn btn--primary btn--lg btn--block"><i class="ic i-edit" aria-hidden="true"></i>일정 편집하기</RouterLink>
