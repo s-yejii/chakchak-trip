@@ -122,3 +122,13 @@ ALTER TABLE member ADD COLUMN IF NOT EXISTS email VARCHAR(100) UNIQUE;
 
 -- 11/07 ① 이상재: 업종 큰 묶음 칸 (채우는 건 db/10 맨 끝)
 ALTER TABLE retrip_place ADD COLUMN IF NOT EXISTS biz_group VARCHAR(20);
+
+-- 11/19 ① 이상재: 시연 2일차 마지막 고정 일정 "동서울종합터미널" 장소 한 줄 (사진 없던 칸에 터미널 사진)
+--  주소·좌표: 강변역로 50 (DemoScenario BUS_LAT·LNG와 같은 좌표). 사진: 위키미디어 공용 Eastern_Seoul_Bus_Terminal.jpg (Hnc197, CC BY-SA 3.0)
+--  일정 칸이 이 사진을 쓰려면 ③ DemoScenario의 동서울종합터미널 칸에 장소 번호 'demo-dongseoul-terminal'을 이어야 해요. 같은 이름이 있으면 넣지 않아요
+INSERT INTO retrip_place (id, source, source_id, name, category, address, longitude, latitude, use_time, biz_type, image_url, created_at, updated_at)
+SELECT 'demo-dongseoul-terminal', 'demo', 'dongseoul-terminal', '동서울종합터미널', '버스터미널', '서울특별시 광진구 강변역로 50',
+       127.0940622, 37.5343935, '상시 개방', '버스터미널',
+       'https://upload.wikimedia.org/wikipedia/commons/thumb/3/37/Eastern_Seoul_Bus_Terminal.jpg/960px-Eastern_Seoul_Bus_Terminal.jpg',
+       '2026-11-19T00:00:00.000Z', '2026-11-19T00:00:00.000Z'
+WHERE NOT EXISTS (SELECT 1 FROM retrip_place WHERE name = '동서울종합터미널');
