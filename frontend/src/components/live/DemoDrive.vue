@@ -159,7 +159,7 @@ async function moveToNext() {
   await showNotice(next, travelMin)
 
   // 이동: 경로선을 따라 움직이고, 그동안 시계는 이동 시간만큼 흐름
-  const path = demoPathFor(next) || (route && route.coords && route.coords.length > 1 ? route.coords : [[from.lat, from.lng], [next.lat, next.lng]])
+  const path = (await demoPathFor(next, from)) || (route && route.coords && route.coords.length > 1 ? route.coords : [[from.lat, from.lng], [next.lat, next.lng]])
   demoRoute.value = path // 이동하는 동안 지도의 남색 점선도 이 길로 고정 (11/09 ①: 중간에 다시 받은 길과 어긋나지 않게)
   await wait(FOLLOW_START_MS) // 지도가 내 위치로 다가가며 확대하는 동안 점은 출발점에서 기다림 (11/09 ①)
   // 떠나는 그 시각에 서버에 "떠났다"를 먼저 알림 (점 두 개가 칸 밖이어야 출발로 봄) → 늦게 떠났으면 서버가 뒤 일정을 밀거나 줄임
@@ -207,9 +207,26 @@ const NADEULGIL_PATH = [
   [37.5559, 126.9856],
   [37.55522, 126.98656], // 나들길 (와룡묘 앞)
 ]
-/** 시연에서 길을 정해 둔 칸이면 그 길 (없으면 null → 길찾기 길) */
-function demoPathFor(next) {
-  return next && next.name === NADEULGIL_NAME ? NADEULGIL_PATH : null
+const CABLE_CAR_POINT = { lat: 37.5576, lng: 126.9836 } // 남산 케이블카 타는 곳 앞 (나들길 가는 길에 들르는 점)
+/**
+ * 시연에서 길을 정해 둔 칸이면 그 길 (없으면 null → 길찾기 길).
+ * 11/19 주형: 손으로 찍은 점이 건물을 가로질러 "제대로 안 간다" → 숙소 → 케이블카 앞 → 나들길을 TMAP 도보 길로 이어 붙임 (실패하면 예전 점)
+ */
+async function demoPathFor(next, from) {
+  if (!next || next.name !== NADEULGIL_NAME) return null
+  const first = await walkPath(from, CABLE_CAR_POINT)
+  const second = await walkPath(CABLE_CAR_POINT, next)
+  return first && second ? [...first, ...second] : NADEULGIL_PATH
+}
+// 걸어가는 길 점들 (TMAP 도보). 실패하면 null
+async function walkPath(from, to) {
+  try {
+    const guide = await getRouteGuide(from.lat, from.lng, to.lat, to.lng, 'walk')
+    if (guide.available && guide.coords && guide.coords.length > 1) return [[from.lat, from.lng], ...guide.coords, [to.lat, to.lng]]
+  } catch (e) {
+    // 길찾기 실패면 예전 점으로
+  }
+  return null
 }
 
 // 출발 전 확인 (11/08 주형: 대안을 고른 다음에 움직여야지): 예약까지 여유 5분 이하·늦음 알림(late-)이면 시계를 멈추고 출발 안 함
@@ -292,7 +309,9 @@ async function busDown(current, from) {
   const date = dateText(appNow())
   const departMin = Math.max(minutesOf(appNow()), stayEndOf(current))
   if (departMin > minutesOf(appNow())) await setClock(date, departMin)
-  showLiveNotice({ key: 'busdown-' + current.id, at: hhmm(appNow()), title: '순환버스로 내려가요', body: '걸어서 내려가는 대신 버스 · 약 ' + setup.busDownMin + '분', warn: false })
+  // 11/19 주형: 어디서 타서 어디서 내리는지 보이게
+  const busWhere = setup.busDownBoard && setup.busDownAlight ? setup.busDownBoard + '에서 타서 ' + setup.busDownAlight + '에서 내려요 · ' : ''
+  showLiveNotice({ key: 'busdown-' + current.id, at: hhmm(appNow()), title: '남산 순환버스로 내려가요', body: busWhere + '약 ' + setup.busDownMin + '분', warn: false })
   await wait(NOTICE_MS)
   const path = await roadPath(from, { lat: setup.busDownLat, lng: setup.busDownLng }) // 11/17: 직선 대신 남산 찻길을 따라 내려가게
   demoRoute.value = path
@@ -313,6 +332,7 @@ async function busDown(current, from) {
   await setSpeed(STAY_SPEED)
   await setClock(date, departMin + setup.busDownMin)
   await props.live.placeAt(setup.busDownLat, setup.busDownLng, true) // 장소 칸은 아니고 버스에서 내린 자리 (다음 [다음 장소로]는 여기서 출발)
+  if (setup.busDownAlight) showLiveNotice({ key: 'busoff-' + current.id, at: hhmm(appNow()), title: setup.busDownAlight + '에서 내렸어요', body: '여기서 다음 장소로 가요', warn: false })
   await props.live.refresh()
   askRestIfFree()
 }

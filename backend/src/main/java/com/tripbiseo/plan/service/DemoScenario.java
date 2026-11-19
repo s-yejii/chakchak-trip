@@ -64,6 +64,8 @@ public class DemoScenario {
     private static final String WALK_UP_TO = "남산 팔각정";
     private static final double BUS_DOWN_LAT = 37.5605217984; // 버스에서 내리는 곳: 남산 아래 퇴계로(예전 예장공원 자리)
     private static final double BUS_DOWN_LNG = 126.9888869118;
+    private static final String BUS_DOWN_BOARD = "남산 팔각정 앞 정류장"; // 11/19 주형: 어디서 타서 어디서 내리는지 화면에 보이게
+    private static final String BUS_DOWN_ALIGHT = "퇴계로 남산예장공원 앞";
     private static final int BUS_DOWN_MIN = 13;         // 순환버스로 내려오는 분
     private static final int OVERSTAY_LATE_MIN = 35;    // 11/16 대본: 늦잠 → 12:00 출발 → 스시도 13:05 도착 = 35분 늦음 (돌발은 이것 하나뿐)
     private static final String START_TIME = "11:30"; // 시연 계정은 1일차 이 시각부터 (종로3가역 모임, 11/12)
@@ -178,6 +180,8 @@ public class DemoScenario {
         setup.setBusDownLat(BUS_DOWN_LAT);
         setup.setBusDownLng(BUS_DOWN_LNG);
         setup.setBusDownMin(BUS_DOWN_MIN);
+        setup.setBusDownBoard(BUS_DOWN_BOARD);
+        setup.setBusDownAlight(BUS_DOWN_ALIGHT);
         setup.setRainDay(IS_RAIN_NOTICE_ON ? RAIN_DAY : null);
         setup.setRainFrom(RAIN_FROM);
         for (Object[] row : RAIN_DAY_STOPS) {
