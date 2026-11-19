@@ -56,6 +56,17 @@ onMounted(() => {
   loadMyPlaces().catch(() => {}) // 못 읽어도 상세는 보여요 (누를 때 서버가 답해요)
 })
 
+// 출처를 꼭 적어야 하는 DB 사진 (11/19 ①): 위키미디어 공용 CC BY-SA 사진은 저작자·라이선스 표시가 조건
+const PHOTO_CREDITS = { 'Eastern_Seoul_Bus_Terminal.jpg': 'Hnc197 / Wikimedia Commons (CC BY-SA 3.0)' }
+// 라이선스 출처면 잘리지 않게 끝까지 보여 줘요 (블로그 출처는 한 줄로 줄임)
+const isLicenseCredit = computed(() => Object.values(PHOTO_CREDITS).includes(place.value && place.value.photoSite))
+function creditOf(imageUrl) {
+  for (const fileName in PHOTO_CREDITS) {
+    if (imageUrl && imageUrl.includes(fileName)) return PHOTO_CREDITS[fileName]
+  }
+  return null
+}
+
 // 실제 장소 불러오기 (처음 열 때와 [다시 시도])
 async function loadPlace() {
   isLoading.value = true
@@ -69,7 +80,7 @@ async function loadPlace() {
       ...detail,
       cat: detail.category || '',
       img: (photo && photo.imageUrl) || detail.imageUrl || imageFor(detail.category), // 찾은 사진 → DB 사진 → 카테고리 기본 그림
-      photoSite: photo ? photo.siteName : null, // 사진 출처 (블로그 이름). DB 사진이면 null
+      photoSite: (photo && photo.siteName) || creditOf(detail.imageUrl), // 사진 출처 (블로그 이름, 위키미디어 사진이면 저작자·라이선스). 그 밖의 DB 사진이면 null
       rate: detail.rating ?? '-',
       hours: today ? today.text : detail.useTime,
       dur: STAY_MIN_OF_KIND[kindOf(detail.category)] || OTHER_STAY_MIN,
@@ -153,7 +164,7 @@ function onAddClick() {
     </div>
     <div v-else class="app app--white">
       <img :src="place.img" :alt="place.name + ' 사진'" class="pl-photo" />
-      <span v-if="place.photoSite" class="pl-credit">사진: {{ place.photoSite }}</span>
+      <span v-if="place.photoSite" class="pl-credit" :class="{ 'pl-credit--license': isLicenseCredit }">사진: {{ place.photoSite }}</span>
       <header class="topbar topbar--float">
         <button type="button" class="iconbtn iconbtn--float" aria-label="뒤로가기" @click="goBack('/')"><i class="ic ic--l i-back" aria-hidden="true"></i></button>
         <span style="flex: 1"></span>
@@ -210,6 +221,7 @@ function onAddClick() {
 <style>
 .scr-Place .pl-photo{position:absolute;top:0;left:0;width:100%;height:300px;object-fit:cover}
 .scr-Place .pl-credit{position:absolute;right:16px;top:268px;max-width:60%;padding:2px 8px;border-radius:8px;background:rgba(24,33,58,.7);color:#fff;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.scr-Place .pl-credit--license{max-width:calc(100% - 32px);white-space:normal;font-size:10px;line-height:14px}
 .scr-Place .why{display:flex;gap:10px;padding:12px;border-radius:var(--radius-md);background:var(--navy-soft)}
 .scr-Place .why>span{display:flex;flex-direction:column;gap:6px}
 .scr-Place .why__tags{display:flex;flex-wrap:wrap;gap:6px}
