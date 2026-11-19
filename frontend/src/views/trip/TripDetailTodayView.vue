@@ -17,6 +17,7 @@ import { toShortDate, tripBadge } from '@/utils/tripView'
 import { useStartTrip } from '@/utils/useStartTrip'
 import StartConflictSheet from '@/components/trip/StartConflictSheet.vue'
 import ChipScroller from '@/components/common/ChipScroller.vue'
+import { useStopPhotos } from '@/utils/useStopPhotos'
 
 const NIGHT_END = '04:00' // 이 시각 전 칸은 그날 밤 늦게 간 곳
 // 정렬용 글자: 새벽 칸은 앞에 '1'을 붙여 그날 맨 뒤로 (11/12 ② 찬기, 자정 넘는 일정)
@@ -71,6 +72,16 @@ async function pickDay(d) {
   await loadDay(d)
 }
 
+// 칸 사진 (여행 전 상세 TripDetailView와 같은 방식, 11/19): 지금 보는 날 칸들로 받아요
+//   일차 칩을 바꾸면 그날 칸 이름이 바뀌어서 useStopPhotos가 다시 받아요
+const dayStops = computed(() => (saved.value ? saved.value.stops.filter((stop) => (stop.day || 1) === day.value) : []))
+const stopPhotos = useStopPhotos(() => dayStops.value)
+// 화면에 넘길 여행: 칸마다 찾은 사진을 img·photo에 덮어요 (사진이 없으면 photo는 null → StopThumb가 대신 그림)
+const shownTrip = computed(() => (view.value ? {
+  ...view.value,
+  stops: view.value.stops.map((stop) => ({ ...stop, img: stopPhotos.value[stop.name] || stop.img, photo: stopPhotos.value[stop.name] || null })),
+} : null))
+
 
 // 여행 이어가기: 여행 중 화면으로. 시연 계정이 다음 날 일정을 보고 누르면 그날 아침으로 시계를 옮겨 그날을 시작 (11/08 주형)
 const MORNING_BEFORE_MIN = 60 // 그날 첫 장소 몇 분 전으로 (숙소에서 일어난 때)
@@ -91,7 +102,7 @@ async function continueTrip() {
 
 <template>
   <div class="scr scr-TripDetailToday">
-    <TripPage v-if="view" :trip="view" :badge="tripBadge(saved)" back="/" :trip-id="saved.id" :reset-key="day">
+    <TripPage v-if="view" :trip="shownTrip" :badge="tripBadge(saved)" back="/" :trip-id="saved.id" :reset-key="day">
       <template #head>
         <ChipScroller v-if="dayList.length > 1" class="td-days" role="tablist" aria-label="일차">
           <button v-for="d in dayList" :key="d.day" type="button" role="tab" class="chip chip--sm" :class="{ 'is-on': day === d.day }" :aria-selected="day === d.day" @click="pickDay(d.day)">
