@@ -278,16 +278,14 @@ function replan() {
   isMenuOpen.value = false
   const old = trip.value
   store.resetPlan()
-  store.replanFrom = { id: old.id, title: old.title }
-  store.planStartDate = old.startDate
-  store.planEndDate = old.endDate !== old.startDate ? old.endDate : null
+  // 11/19 피드백: 취향(지역·인원·이동 수단·꼭 갈 곳)만 가져오고 날짜·예약은 안 가져옴 (지난 날짜·예약이 그대로 들어갔어요). 지난 예약은 "예약한 곳" 단계에서 불러오기로
+  store.replanFrom = { id: old.id, title: old.title, fixed: old.stops.filter((stop) => stop.fixed && stop.state !== 'skipped').map((stop) => ({ name: stop.name, time: stop.time, day: stop.day })) }
   store.planPeople = old.people || store.planPeople
   store.planMoves = Object.keys(MOVE_CODES).filter((label) => (old.transports || []).includes(MOVE_CODES[label]))
   store.planArea = areaFromPlaces(old.stops)
   const kept = old.stops.filter((stop) => stop.state !== 'skipped' && stop.state !== 'done')
   store.planConditions = {
     mustVisit: kept.filter((stop) => stop.importance === 'must' && !stop.fixed).map((stop) => stop.name),
-    fixed: kept.filter((stop) => stop.fixed).map((stop) => ({ name: stop.name, time: stop.time, day: stop.day })),
   }
   store.planStep = store.planArea ? WHEN_STEP : WHERE_STEP
   router.push('/plan/info')

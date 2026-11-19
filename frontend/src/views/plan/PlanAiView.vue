@@ -160,6 +160,11 @@ function setAreas(areas) {
 
 // 꼭 지킬 시간: 장소 검색·예약 캡처가 store.planConditions.fixed 에 넣은 { name, time } 목록
 const fixedList = computed(() => store.planConditions?.fixed || [])
+// 다시 짜기로 왔으면 지난 여행의 예약 (11/19 피드백: 자동으로 넣지 않고 눌렀을 때만, 날짜가 다르면 아래 안내로 다시 고르게)
+const oldFixed = computed(() => store.replanFrom?.fixed || [])
+function loadOldFixed() {
+  store.planConditions = { ...(store.planConditions || {}), fixed: [...oldFixed.value] }
+}
 
 const companions = [
   { name: '혼자', icon: 'i-user', desc: '내 속도대로' },
@@ -611,6 +616,7 @@ function useRecommendedTime() {
               <button type="button" class="iconbtn" :aria-label="item.name + ' 빼기'" @click="removeFixed(index)"><i class="ic i-close muted" aria-hidden="true"></i></button>
             </div>
           </div>
+          <button v-if="!fixedList.length && oldFixed.length" type="button" class="btn btn--secondary btn--md" @click="loadOldFixed">지난 여행 예약 {{ oldFixed.length }}개 불러오기</button>
           <button v-if="!fixedList.length" type="button" class="textlink" style="align-self: center" @click="goNext">예약 없어요</button>
         </section>
       </div>
