@@ -13,6 +13,7 @@ const GROUP_ICON = { 식당: 'i-food', 카페: 'i-cup', 놀거리: 'i-star' }
 const tab = ref('전체')
 const error = ref('')
 const isBusy = ref(false)
+const brokenPhotos = ref(new Set()) // 사진을 못 불러온 장소 placeId (이 곳은 아이콘으로)
 
 const tabs = computed(() => ['전체', ...GROUPS].map((name) => ({ name, count: countOf(name) })))
 const shown = computed(() => (myPlaces.value || []).filter((place) => tab.value === '전체' || place.group === tab.value))
@@ -30,6 +31,10 @@ async function load() {
 function countOf(name) {
   const list = myPlaces.value || []
   return name === '전체' ? list.length : list.filter((place) => place.group === name).length
+}
+// 사진 주소가 있고 못 불러온 적이 없으면 사진, 아니면 종류 아이콘
+function hasPhoto(place) {
+  return !!place.imageUrl && !brokenPhotos.value.has(place.placeId)
 }
 function metaOf(place) {
   const parts = [place.category ? place.category.replace(/,/g, ' · ') : place.group]
@@ -66,7 +71,10 @@ async function remove(place) {
           <div v-else class="group">
             <div v-for="place in shown" :key="place.placeId" class="row mp-row">
               <RouterLink :to="'/place?id=' + encodeURIComponent(place.placeId)" class="mp-link">
-                <span class="ico-tile" aria-hidden="true"><i class="ic" :class="GROUP_ICON[place.group]"></i></span>
+                <span class="ico-tile mp-tile" aria-hidden="true">
+                  <img v-if="hasPhoto(place)" :src="place.imageUrl" alt="" class="mp-photo" @error="brokenPhotos.add(place.placeId)" />
+                  <i v-else class="ic" :class="GROUP_ICON[place.group]"></i>
+                </span>
                 <span class="row__body">
                   <span class="row__title">{{ place.name }}</span>
                   <span class="row__meta">{{ metaOf(place) }}</span>
@@ -86,5 +94,7 @@ async function remove(place) {
 .scr-MyPlaces .mp-count { margin-left: 4px; font-size: 12px; color: var(--ink-muted); }
 .scr-MyPlaces .mp-none { margin: 24px 0; text-align: center; }
 .scr-MyPlaces .mp-row { gap: 4px; padding-right: 8px; }
+.scr-MyPlaces .mp-tile { width: 52px; height: 52px; overflow: hidden; }
+.scr-MyPlaces .mp-photo { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
 .scr-MyPlaces .mp-link { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; color: inherit; text-decoration: none; }
 </style>
