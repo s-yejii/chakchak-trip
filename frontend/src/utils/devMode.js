@@ -175,7 +175,7 @@ export async function prepareTripStart(tripId) {
   const trip = trips.find((item) => item.id === tripId)
   if (!trip) return
   const setup = await getDevScenario().catch(() => null)
-  // 어떤 날짜로 만든 여행이든 시연 날짜(11/10)부터로 옮김 (일수는 그대로) → 휴무·날씨도 그 날 기준 (11/09 주형)
+  // 11/19 주형: 여행 날짜는 그대로 두고 시계를 그 여행 1일차 시작 시각으로 (시연 날짜 고정이 없어서 moveToDemoDate는 안 옮김)
   const range = await moveToDemoDate(tripId, trip, setup)
   await trashOverlappingDemoTrips(tripId, range, trips)
   await setDevClock(range.startDate, (setup && setup.startTime) || '15:00')

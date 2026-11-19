@@ -437,12 +437,14 @@ onMounted(async () => {
   }
   const setup = scenario.value
   if (!store.planOrigin) store.planOrigin = { name: setup.originName, address: setup.originAddress, category: '출발지', lat: setup.originLat, lng: setup.originLng }
-  // 11/17 주형: 날짜가 진짜 오늘(11/17, 시연 시계를 맞추기 전에 잡힌 기본값)이면 시연 날짜(11/16)로 → 만든 여행이 'D-1'이 되어 [여행 시작]이 안 보이던 문제
+  // 11/19 주형: 날짜 고정 없음. 기본 날짜가 시연 시계 날짜(앞 여행을 시작하며 옮겨 둔 날)면 진짜 오늘로 → 달력·날씨·남은 날이 한 기준
+  //   어느 날짜로 만들든 [여행 시작]하면 시계가 그 여행 1일차로 옮겨져 바로 시작돼요 (devMode.prepareTripStart)
   const realToday = dateText(new Date())
-  if (setup.demoDate && store.planStartDate === realToday && setup.demoDate !== realToday) {
+  const clockToday = dateText(appNow())
+  if (store.planStartDate === clockToday && clockToday !== realToday) {
     const nights = store.planEndDate ? daysBetween(store.planStartDate, store.planEndDate) : 0
-    store.planStartDate = setup.demoDate
-    if (store.planEndDate) store.planEndDate = addDays(setup.demoDate, nights)
+    store.planStartDate = realToday
+    if (store.planEndDate) store.planEndDate = addDays(realToday, nights)
   }
   // 예약(산청숯불가든 회식·스시도)은 미리 넣지 않음. 발표자가 "예약한 곳" 단계에서 장소 검색으로 직접 넣어요 (11/09 상재 제보)
 })
