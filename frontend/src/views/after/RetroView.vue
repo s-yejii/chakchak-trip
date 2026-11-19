@@ -1,6 +1,6 @@
 <script setup>
 // S19-a 지난 여행 다시보기 (⑤): 다녀온 동선을 재생하고, 핀을 누르면 시간·결제 메모를 봐요. 계획과 실제도 비교해요
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { get, post, put, del, upload } from '@/api/http'
 import { toTime, toMinutes, toDuration, toWon } from '@/utils/time'
@@ -20,7 +20,7 @@ const extraPoints = ref([]) // 계획 없이 머문 곳 핀 {x, y, kind, name, l
 const progress = ref(0) // 재생 위치 (%)
 const playing = ref(false)
 const speed = ref(1) // 재생 속도(1,2,4배)
-const PLAY_STEP_1X = 0.375 // 1배속일 때 90ms마다 나아가는 % 100%까지 약 24초
+const PLAY_STEP_1X = 0.15 // 1배속일 때 90ms마다 나아가는 % 100%까지 약 60초 (11/19: 24초는 너무 빨라서 천천히)
 const infoNo = ref(null)
 const selectedDay  = ref(1)
 let timer = null
@@ -131,7 +131,7 @@ function changeDay(day) {
   selectedDay.value = day   // 누른 날
   progress.value = 0      // 막대 처음으로
   infoNo.value = null        // 열려 있던 핀 정보창 닫기
-  floatPhoto.value = null    // 떠 있던 사진 카드 내리기
+  clearPhotoQueue()          // 떠 있던 사진 카드 내리기
   if (selectedmap === null) return  // 지도가 아직 없으면 맞출 게 없음
   const sheet = document.querySelector('.retro-sheet')
  fitRoute(sheet.classList.contains('is-collapsed'))             // 시트가 내려가 있으면 true
@@ -175,8 +175,9 @@ function togglePlay() {
   if (progress.value >= 100) progress.value = 0
   playing.value = true
   infoNo.value = null
-  floatPhoto.value = null
+  if (!isPhotoHolding.value) floatPhoto.value = null // 사진을 보던 중에 멈췄다 다시 누르면 그 사진부터 이어서
   timer = setInterval(() => {
+    if (isPhotoHolding.value) return // 사진·영상을 보여 주는 동안은 제자리 (다 보면 이어서 감)
     const before = nowMinutes.value // 한 칸 나아가기 전 시각
     progress.value = Math.min(100, progress.value + PLAY_STEP_1X * speed.value)
     checkPhotoPopup(before, nowMinutes.value) // 그 사이에 찍은 사진이 있으면 지도 위에 띄움
@@ -203,7 +204,10 @@ function changeSpeed() {
   }
 }
 
-onUnmounted(() => clearInterval(timer))
+onUnmounted(() => {
+  clearInterval(timer)
+  clearTimeout(photoTimer)
+})
 onUnmounted(() => { if(sheetWatcher !== null ) sheetWatcher.disconnect()}) // 화면을 나가면 감시도 RRma
 const route = useRoute() // 지금 주소 정보. ?id = 12 값을 읽을 떄 사용
 const retro = ref(null)//서버 응답 . 받기 전에는 null
@@ -213,7 +217,7 @@ let selectedmap = null // 선택 한 지도로 변환
 const MAP_LEVEL = 5 // 지도 확대 단계, 숫자가 작을수록 가까이
 const MAP_PADDING_TOP = 120 // 위쪽 버튼 줄(47 + 56 = 103)과 핀 반지름(14)만큼 비워서 핀이 버튼에 안 가리게
 const MAP_PADDING_SIDE = 40 // 핀이 화면 양옆에 잘리지 않게
-const MAP_PADDING_BOTTOM_OPEN = 600 // 시트 펼침: 재생 막대(위쪽 262) 위만 보임 → 844 − 262 + 18
+const MAP_PADDING_BOTTOM_OPEN = 480 // 시트 펼침: 재생 막대(위쪽 382) 위만 보임 → 844 − 382 + 18 (11/19: 지도 칸을 140 → 260px로 키움)
 const MAP_PADDING_BOTTOM_CLOSED = 232 // 시트 내림: 재생 막대가 약 630까지 내려감 → 844 − 630 + 18
 const MAP_HEIGHT = 844 // 지도 칸 높이 = 화면 전체 (정보창 위치 계산에 씀)
 // 다녀온 길 : 자옷를 순서대로 한 줄 씩 담음 : {  예: { no: 1, name: '경복궁', timeText: '13:00 ~ 14:20', skipped: false }
@@ -775,27 +779,56 @@ function toTransfers(people) {
 }
 
 // ============================== 재생 중 사진 띄우기 + 막대 눈금
-const PHOTO_SHOW_MINUTES = 20 // 사진 카드가 떠 있는 시간 (재생 시각 기준 20분)
-const floatPhoto = ref(null)  // 지금 지도 위에 떠 있는 사진 { photo, x, y, until }. 없으면 null
+// 11/19 피드백: 사진이 너무 빨리 사라지고, 같은 장소에서 여러 장이면 한 장만 보였음
+//   → 지나온 사진을 줄 세워서 한 장씩 보여 주고, 보여 주는 동안 재생을 멈춤. 영상은 끝날 때까지 틀어 줌
+const PHOTO_HOLD_MS = 3500    // 사진 한 장을 보여 주는 시간 (그동안 재생이 멈춤)
+const VIDEO_MAX_MS = 30000    // 영상은 끝날 때까지, 길어도 이만큼까지만
+const floatPhoto = ref(null)  // 지금 지도 위에 떠 있는 사진 { photo }. 없으면 null
+const isPhotoHolding = ref(false) // 사진·영상을 보여 주는 중이라 재생을 멈춰 둔 상태인지
+let photoQueue = []           // 지나왔지만 아직 안 보여 준 사진 (찍은 순)
+let photoTimer = null
 
-// 재생이 before → after 시각으로 나아갔을 때, 그 사이에 찍은 사진이 있으면 지금 점(me) 위치에 띄움
-// 예: 12:18 → 12:21로 나아가면 12:20 사진이 뜸
+// 재생이 before → after 시각으로 나아갔을 때, 그 사이에 찍은 사진을 줄에 넣고 한 장씩 띄움
+// 예: 12:18 → 12:21로 나아가면 12:20 사진이 뜸. 12:20에 3장이면 3장이 차례로
 function checkPhotoPopup(before, after) {
   for (const photo of dayPhotos.value) {
     const minutes = toMinutes(photo.takenAt)
-    if (minutes > before && minutes <= after) {
-      floatPhoto.value = { photo: photo, x: me.value.x, y: me.value.y, until: after + PHOTO_SHOW_MINUTES }
-    }
+    if (minutes > before && minutes <= after) photoQueue.push(photo)
   }
-  if (floatPhoto.value !== null && after > floatPhoto.value.until) {
-    floatPhoto.value = null // 20분이 지나면 내림
+  if (photoQueue.length > 0 && !isPhotoHolding.value) showNextPhoto()
+}
+
+// 줄 맨 앞 사진을 띄움. 사진은 PHOTO_HOLD_MS 뒤, 영상은 끝나면(@ended) 다음 장. 줄이 비면 재생을 이어 감
+function showNextPhoto() {
+  clearTimeout(photoTimer)
+  if (photoQueue.length === 0) {
+    floatPhoto.value = null
+    isPhotoHolding.value = false
+    return
   }
+  const photo = photoQueue.shift() // shift: 줄 맨 앞을 꺼냄
+  floatPhoto.value = { photo: photo }
+  isPhotoHolding.value = true
+  let waitMs = PHOTO_HOLD_MS
+  // 영상은 @ended로 넘어가지만, 소리가 막혀 안 틀리는 경우를 위해 길이 + 1초 뒤에도 넘어가게
+  if (photo.mediaType === 'video') waitMs = Math.min(VIDEO_MAX_MS, (photo.durationSec || 15) * 1000 + 1000)
+  photoTimer = setTimeout(showNextPhoto, waitMs)
+}
+
+// 줄 선 사진을 다 버리고 카드 내리기 (날짜를 바꾸거나 막대를 옮길 때)
+function clearPhotoQueue() {
+  photoQueue = []
+  clearTimeout(photoTimer)
+  floatPhoto.value = null
+  isPhotoHolding.value = false
 }
 
 // 사진 카드를 누르면: 재생을 멈추고 크게 보기
 function openFloatPhoto() {
   stop()
-  openPhoto(floatPhoto.value.photo)
+  const photo = floatPhoto.value.photo
+  clearPhotoQueue() // 크게 보기로 넘어가면 줄 선 사진은 버림 (다시 재생하면 지금 자리부터)
+  openPhoto(photo)
 }
 
 // 사진을 찍은 장소 이름. 이동 중이면 '이동 중'
@@ -929,6 +962,7 @@ function moveToPlace(no) {
   if (place.actualArrive === null) return // 안 간 곳은 옮길 시각이 없음
   if (endMinutes.value === startMinutes.value) return // GPS가 없거나 한 점이면 옮길 수 없음
   stop() // 재생 중이면 멈추고 옮김
+  clearPhotoQueue()
   progress.value = (toMinutes(place.actualArrive) - startMinutes.value) / (endMinutes.value  - startMinutes.value) * 100
 }
 
@@ -936,14 +970,42 @@ function moveToPlace(no) {
 function moveToMinutes(minutes) {
   if (endMinutes.value === startMinutes.value) return
   stop()
+  clearPhotoQueue()
   const percent = (minutes - startMinutes.value) / (endMinutes.value - startMinutes.value) * 100
   progress.value = Math.max(0, Math.min(100, percent)) // 0 ~ 100 밖으로 안 나가게
 }
 
 // ============================== 줄을 누르면 지도를 그 마커로 확대해 가운데로 (11/07)
 const FOCUS_LEVEL = 3              // 이 단계까지 확대 (숫자가 작을수록 가까이). 이미 더 가까우면 그대로
-const VISIBLE_CENTER_Y_OPEN = 190  // 시트 펼침: 지도가 보이는 칸(위 버튼 120 ~ 재생 막대 262)의 가운데
+const VISIBLE_CENTER_Y_OPEN = 251  // 시트 펼침: 지도가 보이는 칸(위 버튼 120 ~ 재생 막대 382)의 가운데
 const VISIBLE_CENTER_Y_CLOSED = 375 // 시트 내림: 보이는 칸(120 ~ 630)의 가운데
+
+// 지금 지도가 보이는 칸의 가운데 높이 (시트를 내리면 칸이 길어짐)
+function visibleCenterY() {
+  const sheet = document.querySelector('.retro-sheet')
+  if (sheet !== null && sheet.classList.contains('is-collapsed')) return VISIBLE_CENTER_Y_CLOSED
+  return VISIBLE_CENTER_Y_OPEN
+}
+
+// [＋][－] 버튼: 카카오 지도는 단계 숫자가 작을수록 가까이. step −1 = 가까이, +1 = 멀리
+function zoomMap(step) {
+  if (selectedmap === null) return
+  selectedmap.setLevel(selectedmap.getLevel() + step, { animate: true })
+}
+
+// ============================== 재생 중 내 위치 따라가기 (11/19 피드백)
+// 점(me)이 보이는 칸 가장자리(FOLLOW_MARGIN 안쪽)를 벗어나면 지도를 옮겨 점을 칸 가운데로
+// setCenter: 바로 옮김 (panTo처럼 움직이는 동안 점이 또 밖이라 여러 번 부르는 일이 없게)
+const FOLLOW_MARGIN = 40
+watch(me, (point) => {
+  if (!playing.value || selectedmap === null || mapBox.value === null) return
+  const width = mapBox.value.clientWidth
+  const bottom = visibleCenterY() * 2 - MAP_PADDING_TOP // 보이는 칸 아래 끝 (가운데에서 위 끝만큼 더 아래)
+  const isInside = point.x > FOLLOW_MARGIN && point.x < width - FOLLOW_MARGIN && point.y > MAP_PADDING_TOP + FOLLOW_MARGIN && point.y < bottom - FOLLOW_MARGIN
+  if (isInside) return
+  const center = new kakao.maps.Point(point.x, point.y + (MAP_HEIGHT / 2 - visibleCenterY())) // focusOn과 같은 계산
+  selectedmap.setCenter(selectedmap.getProjection().coordsFromContainerPoint(center))
+})
 
 // 장소 줄 번호 → 그 장소로 지도 맞추기
 function focusPlace(no) {
@@ -957,9 +1019,7 @@ function focusOn(lat, lng) {
   if (lat === null || lng === null) return // 좌표 없는 칸(직접 입력)은 옮길 곳이 없음
   const map = selectedmap
   if (map.getLevel() > FOCUS_LEVEL) map.setLevel(FOCUS_LEVEL) // setLevel: 확대 단계 바꾸기
-  let targetY = VISIBLE_CENTER_Y_OPEN
-  const sheet = document.querySelector('.retro-sheet')
-  if (sheet !== null && sheet.classList.contains('is-collapsed')) targetY = VISIBLE_CENTER_Y_CLOSED
+  const targetY = visibleCenterY()
   const projection = map.getProjection()
   const marker = projection.containerPointFromCoords(new kakao.maps.LatLng(lat, lng)) // 마커의 화면 x, y
   const center = new kakao.maps.Point(marker.x, marker.y + (MAP_HEIGHT / 2 - targetY)) // 가운데로 삼을 화면 점
@@ -1017,12 +1077,12 @@ function toggleMapType() {
           :key="floatPhoto.photo.id"
           type="button"
           class="retro-float"
-          :style="{ left: Math.max(66, Math.min(324, floatPhoto.x)) + 'px', top: Math.max(150, floatPhoto.y - 18) + 'px' }"
           :aria-label="placeNameOf(floatPhoto.photo) + ' ' + floatPhoto.photo.takenAt + ' 사진 크게 보기'"
           @click="openFloatPhoto"
         >
           <span class="retro-float__img">
-            <video v-if="floatPhoto.photo.mediaType === 'video'" :src="floatPhoto.photo.url + '#t=0.1'" preload="metadata" muted playsinline></video>
+            <!-- 11/19: 영상이면 재생을 멈추고 끝까지 틀고(소리 포함), 끝나면 다음 사진으로 -->
+            <video v-if="floatPhoto.photo.mediaType === 'video'" :src="floatPhoto.photo.url" autoplay playsinline @ended="showNextPhoto"></video>
             <img v-else :src="floatPhoto.photo.url" alt="" />
           </span>
           <span class="retro-float__cap tn">{{ placeNameOf(floatPhoto.photo) }} · {{ floatPhoto.photo.takenAt }}</span>
@@ -1053,7 +1113,13 @@ function toggleMapType() {
 
       <!-- data-sheet-follow: 시트를 내리면 재생 막대도 같이 내려감 (BottomSheet 기능) -->
       
-      <div class="player" data-sheet-follow style="position: absolute; left: 16px; right: 16px; top: 262px">
+      <!-- 지도 가까이·멀리 (11/19 피드백: 손가락 두 개 말고도 확대할 수 있게) -->
+      <div class="retro-zoom" data-sheet-follow>
+        <button type="button" class="iconbtn iconbtn--float" aria-label="지도 가까이" @click="zoomMap(-1)">＋</button>
+        <button type="button" class="iconbtn iconbtn--float" aria-label="지도 멀리" @click="zoomMap(1)">－</button>
+      </div>
+
+      <div class="player" data-sheet-follow style="position: absolute; left: 16px; right: 16px; top: 382px">
         <button type="button" class="iconbtn retro-play" :aria-label="playing ? '멈추기' : '이동 경로 재생'" @click="togglePlay"><i class="ic" :class="playing ? 'i-pause' : 'i-play'" aria-hidden="true"></i></button>
         <!-- 재생 속도: 누를 때마다 1배 → 2배 → 4배 → 1배 -->
         <button type="button" class="retro-speed" :aria-label="'재생 속도 ' + speed + '배'" @click="changeSpeed()">{{ speed }}배</button>
@@ -1321,7 +1387,9 @@ function toggleMapType() {
 .scr-Retro .retro-tl__extra.is-sel{background:var(--coral-soft,#FDECE8)}
 .scr-Retro .retro-xpin__name{position:absolute;left:26px;top:50%;transform:translateY(-50%);white-space:nowrap;font-size:11px;font-weight:700;color:var(--ink);background:rgba(255,255,255,.92);padding:1px 6px;border-radius:6px}
 /* 정보 시트: 처음엔 지도 아래(340px)부터. 안쪽만 스크롤 (TripPage의 trip-sheet와 같은 모양) */
-.scr-Retro .retro-sheet{top:340px;padding:8px 0 0;gap:10px}
+.scr-Retro .retro-sheet{top:460px;padding:8px 0 0;gap:10px} /* 11/19: 340 → 460, 지도 칸을 더 넓게 */
+.scr-Retro .retro-zoom{position:absolute;right:16px;top:280px;z-index:3;display:flex;flex-direction:column;gap:6px}
+.scr-Retro .retro-zoom .iconbtn{width:40px;height:40px;font-size:20px;font-weight:700;color:var(--navy)}
 .scr-Retro .retro-sheet__head{padding:0 16px}
 .scr-Retro .retro-scroll{position:relative;flex:1;min-height:0;overflow-y:auto;padding:2px 16px 112px;display:flex;flex-direction:column;gap:14px}
 .scr-Retro .retro-scroll>*{flex-shrink:0}
@@ -1415,12 +1483,12 @@ function toggleMapType() {
 .scr-Retro .retro-barwrap{position:relative;display:block}
 .scr-Retro .retro-barwrap .bar{display:block}
 .scr-Retro .retro-tick{position:absolute;top:-4px;width:3px;height:16px;margin-left:-1.5px;border-radius:2px;background:var(--coral);pointer-events:none}
-.scr-Retro .retro-float{position:absolute;z-index:5;width:126px;padding:4px 4px 6px;border:0;border-radius:12px;background:#fff;box-shadow:0 8px 20px rgba(24,33,58,.3);transform:translate(-50%,-100%);display:flex;flex-direction:column;gap:4px;align-items:center;cursor:pointer;font:inherit;animation:retro-pop .25s ease}
-.scr-Retro .retro-float::after{content:"";position:absolute;bottom:-5px;left:50%;margin-left:-5px;width:10px;height:10px;background:#fff;transform:rotate(45deg)}
-.scr-Retro .retro-float__img{width:118px;height:84px;border-radius:9px;overflow:hidden;background:var(--line)}
-.scr-Retro .retro-float__img img,.scr-Retro .retro-float__img video{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none}
-.scr-Retro .retro-float__cap{font-size:11.5px;line-height:15px;color:var(--ink-muted);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:118px}
-@keyframes retro-pop{from{opacity:0;transform:translate(-50%,-90%) scale(.9)}to{opacity:1;transform:translate(-50%,-100%) scale(1)}}
+/* 11/19: 사진 칸을 크게(118×84 → 230×160), 점 위가 아니라 지도 왼쪽 위에 고정 (커져서 점·경로를 가리지 않게) */
+.scr-Retro .retro-float{position:absolute;z-index:5;left:16px;top:112px;width:238px;padding:4px 4px 6px;border:0;border-radius:12px;background:#fff;box-shadow:0 8px 20px rgba(24,33,58,.3);display:flex;flex-direction:column;gap:4px;align-items:center;cursor:pointer;font:inherit;animation:retro-pop .25s ease}
+.scr-Retro .retro-float__img{width:230px;height:160px;border-radius:9px;overflow:hidden;background:#000}
+.scr-Retro .retro-float__img img,.scr-Retro .retro-float__img video{width:100%;height:100%;object-fit:contain;display:block;pointer-events:none}
+.scr-Retro .retro-float__cap{font-size:12.5px;line-height:16px;color:var(--ink-muted);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:230px}
+@keyframes retro-pop{from{opacity:0;transform:translateY(8px) scale(.95)}to{opacity:1;transform:none}}
 .scr-Retro .retro-tl__photos{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0 6px}
 .scr-Retro .retro-tl__thumb{position:relative;width:48px;height:48px;padding:0;border:0;border-radius:8px;overflow:hidden;background:var(--line);cursor:pointer;flex:none}
 .scr-Retro .retro-tl__thumb img,.scr-Retro .retro-tl__thumb video{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none}
