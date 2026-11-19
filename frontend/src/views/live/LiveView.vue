@@ -324,7 +324,7 @@ function openAlert(alert) {
 watch(() => (!isReady.value ? undefined : currentStop.value ? currentStop.value.id : null), (currentId) => {
   if (currentId === undefined) return // 아직 상황을 못 받았으면 그대로
   removeLiveNotices((notice) => {
-    const match = (notice.key || '').match(/^leave-(\d+)-/)
+    const match = (notice.key || '').match(/^(?:leave|overdue)-(\d+)/) // 11/19: 서버 "나갈 시간"(overdue-칸id)도 같이 (팔각정을 나와 산청 가는 길에 남아 있었어요)
     return !!match && Number(match[1]) !== currentId
   })
 })
