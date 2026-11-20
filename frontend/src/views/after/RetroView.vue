@@ -1318,7 +1318,7 @@ function toggleMapType() {
       <div class="cta">
         <div class="cta__row">
           <RouterLink to="/album" class="btn btn--secondary btn--lg"><i class="ic i-camera" aria-hidden="true"></i>사진 담기</RouterLink>
-          <RouterLink to="/theme?id=alley" class="btn btn--primary btn--lg"><i class="ic i-refresh" aria-hidden="true"></i>이 코스로 다시</RouterLink>
+          <RouterLink :to="'/plan/info?again=' + route.query.id" class="btn btn--primary btn--lg"><i class="ic i-refresh" aria-hidden="true"></i>이 코스로 다시</RouterLink><!-- 11/20 ③(석진 OK): 이 여행 코스로 일정 만들기 -->
         </div>
       </div>
 
