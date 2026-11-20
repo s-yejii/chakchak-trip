@@ -44,7 +44,7 @@ import LiveTour from '@/components/live/LiveTour.vue'
 import { isTourDone, markTourDone } from '@/utils/liveTour'
 import LinkAddSheet from '@/components/live/LinkAddSheet.vue'
 import { useReplanStore } from '@/stores/replan'
-import { demoRide, demoRoute, restAsk } from '@/utils/demoRoute'
+import { demoRide, demoRoute, demoStops, restAsk } from '@/utils/demoRoute'
 
 const MUTE_AGAIN_MIN = 10 // "그냥 갈게요" 뒤 이만큼 더 늦어지면 다시 알림
 const LEG_MODE = { walk: 'walk', transit: 'subway', car: 'taxi' } // 서버 이동 수단 → 카드 칩 아이콘
@@ -382,6 +382,10 @@ const mapPins = computed(() => {
     const isRoute = stop.reach !== 'done' && stop.reach !== 'here'
     const no = shownNo(stop) // 넣을 순서를 고르는 중이면 넣은 뒤 번호
     pins.push({ key: stop.id, id: stop.id, tag: previewId.value === stop.id ? stop.name : '', lat: stop.lat, lng: stop.lng, text: no, icon: pinIcon(stop), cls: pinClass(stop), label: no + ' ' + stop.name, fit: isFit, route: isRoute })
+  }
+  // ③ 11/20 시연 순환버스 정류장 (DemoDrive가 넣음, 일반 계정은 늘 빈 목록)
+  for (const busStop of demoStops.value) {
+    pins.push({ key: busStop.key, lat: busStop.lat, lng: busStop.lng, icon: 'i-busstop', tag: busStop.name, cls: ' pin--done', label: busStop.name, route: false })
   }
   if (slotPlace.value) {
     // 넣을 장소: 일정 핀처럼 번호로 (코랄). 순서를 옮기면 번호도 같이 바뀜
