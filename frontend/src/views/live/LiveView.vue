@@ -324,7 +324,7 @@ function openAlert(alert) {
 watch(() => (!isReady.value ? undefined : currentStop.value ? currentStop.value.id : null), (currentId) => {
   if (currentId === undefined) return // 아직 상황을 못 받았으면 그대로
   removeLiveNotices((notice) => {
-    const match = (notice.key || '').match(/^leave-(\d+)-/)
+    const match = (notice.key || '').match(/^(?:leave|overdue)-(\d+)/) // 11/19: 서버 "나갈 시간"(overdue-칸id)도 같이 (팔각정을 나와 산청 가는 길에 남아 있었어요)
     return !!match && Number(match[1]) !== currentId
   })
 })
@@ -763,11 +763,15 @@ async function onLinkAdded(message) {
 }
 
 // 장면 2 카드 (11/17 주형, 시연 계정만): 버스에서 내린 뒤 예약까지 시간이 남으면 "이대로 갈까요?" → [가는 길 카페 찾기]는 AI에게 묻기를 질문 채워서 열어요
-const REST_QUESTION = '가는 길에 들를 곳'
+// 11/19 주형: [어디 갈까?]가 지금 자리 근처 펍을 추천해서 → 예약 가게 근처 카페로 물어요 (AI에게 묻기의 "다른 곳 기준 찾기")
 const askDraft = ref('')
+const askCafeNear = ref(null) // 열면 바로 이 예약 가게 근처 카페를 찾음 (AskPanel cafeNear)
 function findRestCafe() {
+  const name = restAsk.value ? restAsk.value.name : ''
+  const stop = (live.trip.value.stops || []).find((item) => item.name === name && item.lat != null)
   restAsk.value = null
-  askDraft.value = REST_QUESTION
+  askCafeNear.value = stop ? { name: stop.name, lat: stop.lat, lng: stop.lng } : null
+  askDraft.value = stop ? '' : name + ' 근처 카페'
   openAsk()
 }
 function keepGoing() {
@@ -829,6 +833,7 @@ function shownNo(stop) {
 }
 const SLOT_MAP_PADDING = { top: 110, right: 56, bottom: 440, left: 56 } // 아래 자리 고르기 시트만큼 비움
 function openSlotSheet(place) {
+  askCafeNear.value = null // 11/19: 자리 고르기에서 뒤로 오면 찾았던 카페 목록 그대로 (카페를 다시 찾느라 화면이 바뀌던 문제)
   slotPlace.value = place
   slotPath.value = []
   slotIndex.value = 0
@@ -1023,9 +1028,9 @@ function finishTour() {
         <!-- 장면 2: 버스에서 내린 뒤 시간이 남으면 가운데 카드 (시연 계정만, 고르기 전엔 시계·[다음 장소로] 멈춤) -->
         <div v-if="restAsk && !isLostOpen" class="rest-pop" role="alertdialog" aria-modal="true" aria-label="시간이 남아요">
           <section class="rest-pop__card">
-            <b class="rest-pop__title">시간이 {{ toDuration(restAsk.slackMin) }} 남아요</b>
-            <span class="rest-pop__text">{{ restAsk.name }} 예약까지 여유가 있어요. 가는 길에 들를 곳을 찾아볼까요?</span>
-            <button type="button" class="btn btn--primary btn--lg btn--block" @click="findRestCafe">어디 갈까?</button><!-- 11/19 주형: [어디 갈까?]를 누르게 유도 -->
+            <b class="rest-pop__title">{{ restAsk.name }}까지 {{ toDuration(restAsk.slackMin) }} 남아요</b>
+            <span class="rest-pop__text">예약 시각까지 시간이 남아요. 근처 카페에서 쉬었다 갈까요?</span>
+            <button type="button" class="btn btn--primary btn--lg btn--block" @click="findRestCafe">근처 카페 보기</button><!-- 11/19 주형: 예약 가게 근처 카페를 골라 넣기 -->
             <button type="button" class="btn btn--secondary btn--lg btn--block" @click="keepGoing">이대로 갈게요</button>
           </section>
         </div>
@@ -1107,7 +1112,7 @@ function finishTour() {
           <!-- AI 채팅(④) -->
           <!-- 자리 고르기 중에는 숨기기만 (AskPanel은 뿌리 요소가 둘이라 v-show를 감싸는 div에) -->
           <div v-if="asking" v-show="!slotPlace">
-            <AskPanel :initial-draft="askDraft" :me="mePoint || { x: 195, y: 300 }" :late="isLate" :trip-id="live.tripId.value" :position="live.position.value" @close="asking = false" @add="onAskAdd" :selected="askPickedId" :chat-key="chatKey(live.trip.value)" :planned="plannedPlaceIds" @choose="openSlotSheet" @found="onAskFound" @pick="askPickedId = $event" />
+            <AskPanel :initial-draft="askDraft" :cafe-near="askCafeNear" :me="mePoint || { x: 195, y: 300 }" :late="isLate" :trip-id="live.tripId.value" :position="live.position.value" @close="asking = false; askCafeNear = null" @add="onAskAdd" :selected="askPickedId" :chat-key="chatKey(live.trip.value)" :planned="plannedPlaceIds" @choose="openSlotSheet" @found="onAskFound" @pick="askPickedId = $event" />
           </div>
           <div v-else class="quick live-quick" data-sheet-follow role="group" aria-label="트리피에게 묻기와 결제 메모">
             <button type="button" class="chip chip--sm chip--add live-chip" data-tour="ask" aria-label="어디 갈까? 트리피에게 갈 곳 물어보기" @click="openAsk"><span class="live-chip__ic live-chip__ic--ai" aria-hidden="true"><img src="/img/trippie-favicon.png" alt="" class="live-chip__img" draggable="false" /></span>어디 갈까?</button>

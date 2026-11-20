@@ -103,7 +103,8 @@ public class StatusServiceImpl implements StatusService {
         // 알림은 LiveAlertMaker, 날씨는 LiveWeatherChecker가 (계산 결과를 context 하나로 넘김)
         StatusContext context = toContext(todayStops, current, nextStop, fixedStop, slack, etaMap, openMap);
         context.setFastestSlack(getFastestSlack(fixedStop, slack, lat, lng)); // 어떤 방법으로도 못 닿는지 (lost-·늦음 카드 문구)
-        setTaxi(context, fixedStop, lat, lng, devService.isDemoAccount(memberId)); // 놓침 카드 "택시로 가도 12:45 도착 · 약 N원" (11/17)
+        context.setDemo(devService.isDemoAccount(memberId));
+        setTaxi(context, fixedStop, lat, lng, context.isDemo()); // 놓침 카드 "택시로 가도 12:45 도착 · 약 N원" (11/17)
         context.setFixedMeal(fixedStop != null && mealStopIds.contains(fixedStop.getId())); // 놓침 문구: 식당이면 "예약 시각", 아니면 "약속 시각" (11/12)
         context.setWeather(liveWeatherChecker.check(lat, lng, context)); // 알림(rain-)도 이 값을 씀
         response.setWeather(context.getWeather());
