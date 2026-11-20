@@ -83,9 +83,10 @@ export function readStayCapture(file) {
   return upload('/plans/capture/stay', form)
 }
 
-export function readCapture(file) {
+export function readCapture(file, startDate) {
   const form = new FormData()
   form.append('image', file)
+  if (startDate) form.append('startDate', startDate) // 시연 캡처 날짜를 이 여행 1일차에 맞춤 (11/20)
   return upload('/plans/capture', form)
 }
 

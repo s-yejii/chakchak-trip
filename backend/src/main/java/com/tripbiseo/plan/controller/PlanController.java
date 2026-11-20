@@ -130,9 +130,10 @@ public class PlanController {
 
     /** 예약 캡처 사진 → 장소 이름·날짜·시각 (고정 일정 후보, 저장 안 함). MultipartFile: 화면이 올린 파일 */
     @PostMapping("/capture")
-    public CaptureResponse readCapture(@RequestParam(value = "image", required = false) MultipartFile image) throws IOException {
+    public CaptureResponse readCapture(@RequestParam(value = "image", required = false) MultipartFile image,
+                                       @RequestParam(value = "startDate", required = false) String startDate) throws IOException {
         byte[] bytes = image == null ? null : image.getBytes();
-        return captureService.readCapture(loginUser.id(), bytes, image == null ? null : image.getContentType());
+        return captureService.readCapture(loginUser.id(), bytes, image == null ? null : image.getContentType(), startDate);
     }
 
     /** 숙소 예약 캡처 사진 → 숙소 이름·주소·체크인·체크아웃 + 위치 (숙소 후보, 저장 안 함) */
