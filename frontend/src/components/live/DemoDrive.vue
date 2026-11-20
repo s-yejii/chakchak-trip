@@ -312,7 +312,8 @@ async function busDown(current, from) {
   const departMin = Math.max(minutesOf(appNow()), stayEndOf(current))
   if (departMin > minutesOf(appNow())) await setClock(date, departMin)
   // 11/19 주형: 어디서 타서 어디서 내리는지 보이게
-  const busWhere = setup.busDownBoard && setup.busDownAlight ? setup.busDownBoard + '에서 타서 ' + setup.busDownAlight + '에서 내려요 · ' : ''
+  // 11/20 주형: 서울시 이름으로. 순환버스는 몇 분마다 오는 버스라 시각표 대신 "몇 분마다 와요" (시계는 타는 시간 13분만)
+  const busWhere = setup.busDownBoard && setup.busDownAlight ? setup.busDownBoard + '에서 01A·01B(몇 분마다 와요)를 타고 ' + setup.busDownAlight + '에서 내려요 · ' : ''
   showLiveNotice({ key: 'busdown-' + current.id, at: hhmm(appNow()), title: '남산 순환버스로 내려가요', body: busWhere + '약 ' + setup.busDownMin + '분', warn: false })
   await wait(NOTICE_MS)
   const path = await roadPath(from, { lat: setup.busDownLat, lng: setup.busDownLng }) // 11/17: 직선 대신 남산 찻길을 따라 내려가게
