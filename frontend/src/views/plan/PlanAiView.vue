@@ -15,7 +15,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import RangeCalendar from '@/components/plan/RangeCalendar.vue'
 import WishLinks from '@/components/plan/WishLinks.vue'
-import { getAreaStats, getRecommendedLinks } from '@/api/trips'
+import { getAreaStats, getRecommendedLinks, getRecommendedStays } from '@/api/trips'
 import { useTripStore } from '@/stores/trip'
 import { addDays, daysBetween, toMonthDay, todayText } from '@/utils/dates'
 import TripWeather from '@/components/plan/TripWeather.vue'
@@ -34,6 +34,8 @@ import { appNow, devMode } from '@/utils/devMode'
 import { getDevScenario } from '@/api/dev'
 import { PLAN_STEP_IDS } from '@/utils/planSteps'
 import { readStyle } from '@/utils/mySettings'
+import { areasFromPlaces } from '@/utils/planArea'
+import { checkDay } from '@/utils/dayFit'
 import youtubeLogo from '@/assets/brand/youtube.svg'
 import instagramLogo from '@/assets/brand/instagram.svg'
 import naverLogo from '@/assets/brand/naver.svg'
@@ -48,7 +50,8 @@ const STEP_TEXT = {
   from: { title: '어디서 출발해요?', sub: '' },
   who: { title: '누구랑 가요?', sub: '' },
   kind: { title: '어디 위주로 갈까요?', sub: '' },
-  fixed: { title: '예약한 곳이 있나요?', sub: '' },
+  // 11/20 피드백: "예약한 곳"이 인스타로 담은 곳과 헷갈려서 시간이 정해진 곳만이라고 분명히
+  fixed: { title: '시간이 정해진 곳이 있나요?', sub: '식당 예약·공연·기차처럼 그 시각에 꼭 가야 하는 곳만 · 인스타로 담은 곳은 알아서 시간 맞춰 넣어요' },
 }
 const STEPS = PLAN_STEP_IDS.map((id) => ({ id, ...STEP_TEXT[id] }))
 
@@ -297,6 +300,24 @@ function pickCompanion(name) {
   store.planPeople = name === '혼자' ? 1 : Math.max(fewest, store.planPeople)
   // 11/09: 고르자마자 넘기지 않음 (같은 화면에서 인원도 맞추고 [다음]으로 넘어가요)
 }
+// 날짜 칸 숙소 추천 3곳 (11/20): 고른 지역 가운데 기준, 시연 계정은 르메르디앙이 맨 앞 (GET /api/plans/stays/recommended)
+const STAY_PICK_COUNT = 3
+const stayPicks = ref([])
+watch(() => [step.value.id, store.planArea && store.planArea.lat], async ([id]) => {
+  if (id !== 'when' || !store.planArea || store.planArea.lat == null) return
+  try {
+    stayPicks.value = (await getRecommendedStays(store.planArea.lat, store.planArea.lng)).slice(0, STAY_PICK_COUNT)
+  } catch {
+    stayPicks.value = []
+  }
+}, { immediate: true })
+// 추천 카드를 누르면 여행 전체 기간 숙소로 바로 담아요 (첫날 15:00 체크인 ~ 마지막 날 11:00 체크아웃, 숙소 칸에서 고칠 수 있어요)
+function addStayPick(pick) {
+  store.planStays = [{ name: pick.name, address: pick.address, lat: pick.lat, lng: pick.lng,
+    checkInDate: store.planStartDate, checkInTime: '15:00', checkOutDate: store.planEndDate, checkOutTime: '11:00' }]
+  showToast(pick.name + ' 담았어요 · 눌러서 날짜·시각을 고칠 수 있어요')
+}
+
 // 담은 숙소의 박 수 합 (체크인~체크아웃 날짜 차이). 여행 박 수만큼 다 담으면 "숙소 더 담기"를 숨김
 const stayNights = computed(() => {
   let total = 0
@@ -381,13 +402,23 @@ function saveConditions() {
   }
 }
 
-// 한 칸 앞뒤로
+// 한 칸 앞뒤로. 11/20 피드백: 인스타로 담은 곳이 있으면(지역 자동) "어디로"는 건너뛰고, 다음 칸 위 "담은 곳 기준 [바꾸기]"로 바꿔요
 function moveStep(direction) {
-  const next = store.planStep + direction
+  let next = store.planStep + direction
+  if (STEPS[next] && STEPS[next].id === 'where' && isAutoArea.value) next += direction
+  goStep(next, direction > 0)
+}
+const isAutoArea = computed(() => !!store.planArea && !!store.planArea.isAuto)
+const autoAreaText = computed(() => (store.planAreas.length ? store.planAreas.map((area) => area.name).join('·') : store.planArea ? store.planArea.name : ''))
+// "담은 곳 기준 [바꾸기]" → 어디로 칸으로 (직접 고르면 그 뒤로는 안 건너뜀)
+function openWhere() {
+  goStep(STEPS.findIndex((item) => item.id === 'where'), true)
+}
+function goStep(next, isForward) {
   store.planStep = next
   // 11/13: 단계를 주소(?step=)에도 적어서 폰·브라우저 뒤로가기가 앞 단계로 가게. 앞으로 갈 때만 기록을 쌓고, 뒤로 갈 때는 바꾸기만
   const query = { ...route.query, step: String(next) }
-  if (direction > 0) router.push({ query })
+  if (isForward) router.push({ query })
   else router.replace({ query })
 }
 
@@ -400,9 +431,10 @@ watch(() => route.query.step, (value) => {
 
 // 다음 칸으로 (이미 고른 지역 칸은 건너뜀). 마지막 칸이면 바로 일정 만들기로
 // (11/06: 단계에서 다 물어봐서 "원하는 것 말하기" 대화 화면은 흐름에서 뺌. 화면 파일·주소는 남겨 둠)
-function goNext() {
+async function goNext() {
   if (!canNext.value) return showToast('어디로 가는지 알려 주세요')
   if (isLast.value) {
+    if (await needsDayFitAsk()) return
     if (hasOutsideFixed.value && !isOutsideWarned) {
       isOutsideWarned = true
       return showToast('여행 날짜·시간 밖 예약이 있어요 · 고치거나, 그대로 만들려면 한 번 더 눌러 주세요')
@@ -414,17 +446,44 @@ function goNext() {
   }
   moveStep(1)
 }
+// 11/20 피드백 "멀리 떨어진 곳이면 며칠 필요한지": 당일치기인데 담은 곳을 하루에 다 못 돌 것 같으면 만들기 전에 한 번 물어요
+//   시연 계정은 시나리오 일정이라 안 물어요. 계산은 서버 POST /api/plans/day-check (PostGIS로 1.5km 동네 묶기), 실패하면 안 묻고 진행
+const dayFit = ref(null) // 물어보는 중이면 서버 결과
+let isDayFitAnswered = false
+async function needsDayFitAsk() {
+  if (byMe || devMode.isOn || isDayFitAnswered || nights.value > 0) return false
+  const dayMin = toMinutes(store.planToTime) - toMinutes(store.planFromTime)
+  const fit = await checkDay(store.planConditions?.mustVisit || [], dayMin)
+  if (!fit || !fit.over) return false
+  dayFit.value = fit
+  return true
+}
+function splitToTwoDays() {
+  store.planEndDate = addDays(store.planStartDate, 1)
+  isDayFitAnswered = true
+  dayFit.value = null
+  showToast('1박 2일로 바꿨어요 · 숙소는 알아서 골라 줄게요')
+}
+function keepOneDay() {
+  isDayFitAnswered = true
+  dayFit.value = null
+  goNext()
+}
+
 function goPrev() {
   if (store.planStep === 0) return goBack('/new')
   moveStep(-1)
 }
 // 인스타로 담으면: 담은 곳의 구를 지도에도 미리 골라 둠 (다음 "어디로"에서 확인)
 // 11/20 피드백 "여러 게시물에서 모아 한꺼번에": 담자마자 넘기지 않고 이 칸에 남아 링크를 더 넣거나 [다 담았어요]
-function onLinkAdded() {
-  const area = store.planArea
-  if (area && area.isAuto && !store.planAreas.length) {
-    store.planAreas = [{ name: area.name, lat: area.lat, lng: area.lng, dongs: [] }] // 지도(GuMapPicker)가 쓰는 모양
+//   담은 곳이 여러 구면 그 구를 다 골라 둬요 (지역을 직접 고른 뒤면 그대로)
+function onLinkAdded(places) {
+  if (!isAutoArea.value) return
+  const merged = [...store.planAreas]
+  for (const area of areasFromPlaces(places || [])) {
+    if (!merged.some((item) => item.name === area.name)) merged.push(area)
   }
+  store.planAreas = merged
 }
 const wishCount = computed(() => (store.planConditions?.mustVisit || []).length)
 // 검색 화면으로 갈 때 표시해 두면, 고르고 돌아왔을 때 바로 다음 칸으로
@@ -520,6 +579,7 @@ function useRecommendedTime() {
         <div>
           <h1 class="h-title pa-title" style="margin: 0">{{ step.title }}</h1>
           <p v-if="step.id === 'when'" class="t-cap" style="margin: 4px 0 0">{{ whenLabel }}</p>
+          <p v-if="step.id === 'when' && isAutoArea" class="pa-auto-area"><i class="ic ic--s i-pin" aria-hidden="true"></i><span>담은 곳 기준: <b>{{ autoAreaText }}</b></span><button type="button" class="textlink" @click="openWhere">바꾸기</button></p>
           <p v-else-if="step.sub" class="t-cap" style="margin: 4px 0 0">{{ step.sub }}</p>
         </div>
 
@@ -580,9 +640,21 @@ function useRecommendedTime() {
               </span>
               <i class="ic i-edit subtle" aria-hidden="true"></i>
             </RouterLink>
+            <!-- 11/20 피드백: 숙소는 기본 자동 추천. 안 고르면 서버가 근처 추천 1위로 넣고, 여기서 바로 고르거나 예약한 숙소만 따로 넣어요 -->
+            <template v-if="!store.planStays.length">
+              <p class="pa-stay-auto"><i class="ic ic--s i-check" aria-hidden="true"></i>숙소는 알아서 골라 줄게요 · 원하는 곳이 있으면 눌러요</p>
+              <div v-if="stayPicks.length" class="pa-stay-picks">
+                <button v-for="pick in stayPicks" :key="pick.placeId" type="button" class="pa-stay-pick" @click="addStayPick(pick)">
+                  <img v-if="pick.imageUrl" :src="pick.imageUrl" alt="" loading="lazy" />
+                  <span v-else class="pa-stay-pick__none" aria-hidden="true"><i class="ic i-home"></i></span>
+                  <b>{{ pick.name }}</b>
+                  <span class="t-cap tn">{{ pick.kind || '숙박' }} · {{ pick.distance >= 1000 ? (pick.distance / 1000).toFixed(1) + 'km' : pick.distance + 'm' }}</span>
+                </button>
+              </div>
+            </template>
             <RouterLink v-if="stayNights < nights" to="/plan/stay" class="stayrow">
               <span class="ico-tile"><i class="ic i-plus" aria-hidden="true"></i></span>
-              <span class="row__body"><span class="row__title">{{ store.planStays.length ? '숙소 더 담기' : '숙소 잡기' }}</span></span>
+              <span class="row__body"><span class="row__title">{{ store.planStays.length ? '숙소 더 담기' : '예약한 숙소 넣기' }}</span></span>
               <i class="ic i-next subtle" aria-hidden="true"></i>
             </RouterLink>
           </div>
@@ -622,6 +694,14 @@ function useRecommendedTime() {
         </section>
 
         <section v-else-if="step.id === 'fixed'" class="pa-cards" aria-label="꼭 지킬 시간">
+          <div v-if="dayFit" class="card card--pad pa-dayfit" role="alert">
+            <b>하루에 다 못 가요 · 2일로 나눌까요?</b>
+            <span class="t-cap tn">담은 {{ store.planConditions.mustVisit.length }}곳이 {{ dayFit.groups }}개 동네에 있어서 약 {{ Math.round(dayFit.needMin / 6) / 10 }}시간 걸려요 (머무는 시간 {{ dayFit.stayMin }}분 + 걷기 {{ dayFit.walkMin }}분 + 동네 옮기기 {{ dayFit.moveMin }}분). 하루 활동 시간은 {{ Math.round(dayFit.dayMin / 6) / 10 }}시간이에요</span>
+            <div class="cta__row">
+              <button type="button" class="btn btn--secondary btn--md" @click="keepOneDay">그대로 하루로</button>
+              <button type="button" class="btn btn--primary btn--md" @click="splitToTwoDays">2일로 나누기</button>
+            </div>
+          </div>
           <!-- 11/20: 따로 묻지 않은 시간·이동 수단을 여기서 확인하고 바꿔요 -->
           <div class="card card--pad pa-sum">
             <div class="pa-sum__row">
@@ -733,6 +813,15 @@ function useRecommendedTime() {
 .scr-PlanAI .pa-when-wx{display:flex;flex-direction:column;gap:8px;padding-top:4px}
 .scr-PlanAI .stays{display:flex;flex-direction:column;gap:8px;padding-top:4px}
 .scr-PlanAI .pa-sum{display:flex;flex-direction:column;gap:10px}
+.scr-PlanAI .pa-dayfit{display:flex;flex-direction:column;gap:6px;border:1.5px solid var(--warning,#e8a33d)}
+.scr-PlanAI .pa-stay-auto{display:flex;align-items:center;gap:6px;margin:0;color:var(--navy);font-size:14px;font-weight:600}
+.scr-PlanAI .pa-stay-picks{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px}
+.scr-PlanAI .pa-stay-pick{flex:none;width:128px;display:flex;flex-direction:column;gap:2px;padding:0;border:0;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.scr-PlanAI .pa-stay-pick img,.scr-PlanAI .pa-stay-pick__none{width:128px;height:80px;border-radius:var(--radius-md);object-fit:cover;background:var(--surface-sunken)}
+.scr-PlanAI .pa-stay-pick__none{display:flex;align-items:center;justify-content:center;color:var(--ink-muted)}
+.scr-PlanAI .pa-stay-pick b{font-size:14px;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.scr-PlanAI .pa-auto-area{display:flex;align-items:center;gap:6px;margin:8px 0 0;padding:8px 12px;border-radius:var(--radius-md);background:var(--navy-soft);color:var(--navy);font-size:14px}
+.scr-PlanAI .pa-auto-area .textlink{margin-left:auto}
 .scr-PlanAI .pa-sum__row{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .scr-PlanAI .pa-sum__text{display:flex;align-items:center;gap:6px;min-width:0}
 .scr-PlanAI .pa-sum__text .ic{color:var(--navy)}

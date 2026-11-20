@@ -23,6 +23,7 @@ import com.tripbiseo.common.exception.ApiException;
 import com.tripbiseo.common.external.FoundArea;
 import com.tripbiseo.common.util.Geo;
 import com.tripbiseo.live.dto.PlaceTagCount;
+import com.tripbiseo.plan.dto.StayPick;
 import com.tripbiseo.plan.dto.AiConditions;
 import com.tripbiseo.plan.dto.AiDraft;
 import com.tripbiseo.plan.dto.AiDraftStop;
@@ -110,6 +111,8 @@ public class PlanServiceImpl implements PlanService {
     private static final String MUST = "must";       // 일정 칸 중요도 (trip_stop.importance)
     private static final String MAYBE = "maybe";
 
+    private static final String AUTO_CHECK_IN = "15:00";  // 자동으로 넣는 숙소 체크인·체크아웃 (흔한 시각, 11/20)
+    private static final String AUTO_CHECK_OUT = "11:00";
     private final AiService aiService;
     private final PlaceService placeService;
     private final PlanCandidateFinder planCandidateFinder; // 후보 장소 찾기 (RAG의 찾기)
@@ -124,6 +127,7 @@ public class PlanServiceImpl implements PlanService {
     private final PlanWordGuesser planWordGuesser;         // Gemini가 안 될 때 낱말로만 조건 (11/04)
     private final DevService devService;                   // 시연 계정인지 (11/08)
     private final DemoScenario demoScenario;               // 시연 계정이면 이 시나리오 일정 (11/08)
+    private final StayPickService stayPickService;         // 숙소를 안 고른 1박 이상 여행은 근처 추천 숙소로 (11/20)
 
     /** 사용자 말 → 여행 조건. 보낸 조건은 남기고 Gemini가 새로 뽑은 값만 덮어씀. Gemini 실패는 오류 그대로 (API.md) */
     @Override
@@ -212,8 +216,12 @@ public class PlanServiceImpl implements PlanService {
         if (devService.isDemoAccount(memberId)) {
             return makeDemoDraft(conditions, progress); // 시연 계정은 발표 시나리오 일정 (11/08 주형)
         }
+        String autoStay = fillStayIfEmpty(memberId, conditions); // 시연 계정은 위에서 끝나서 여기 안 옴 (시나리오 숙소 그대로)
         boolean isLateNow = startFromNow(conditions);
         PlanGenerateResponse response = makeEmptyDraft(conditions);
+        if (autoStay != null) {
+            response.getNotes().add(makeNote("숙소를 안 골라서 근처 " + autoStay + "로 넣었어요 · 일정에서 바꿀 수 있어요", null));
+        }
         addBoardingBuffer(conditions, response.getNotes());
         if (isLateNow) {
             response.getNotes().add(makeNote("밤이라 지금 열린 곳 위주로 골랐어요", null));
@@ -602,6 +610,36 @@ public class PlanServiceImpl implements PlanService {
     }
 
     /** 시연 계정: 진행 단계를 평소처럼 몇 초 보여 준 뒤 시나리오 일정(DemoScenario)을 돌려줌 */
+    /**
+     * 11/20 피드백 "숙소는 기본 자동 추천": 1박 이상인데 숙소를 하나도 안 넣었으면 지역 가운데 근처 추천 1위 숙소를
+     * 첫날 15:00 체크인 ~ 마지막 날 11:00 체크아웃으로 넣어요 (StayPickService: 관광공사 등록 숙박, 사진 있는 호텔 → 가까운 순).
+     * 넣었으면 그 이름, 아니면 null
+     */
+    private String fillStayIfEmpty(long memberId, PlanConditions conditions) {
+        boolean hasStay = conditions.getStays() != null && !conditions.getStays().isEmpty();
+        String start = conditions.getStartDate();
+        String end = conditions.getEndDate();
+        if (hasStay || start == null || end == null || end.compareTo(start) <= 0 || conditions.getAreaLat() == null) {
+            return null;
+        }
+        List<StayPick> picks = stayPickService.getStayList(memberId, conditions.getAreaLat(), conditions.getAreaLng());
+        if (picks.isEmpty()) {
+            return null;
+        }
+        StayPick pick = picks.get(0);
+        PlanStay stay = new PlanStay();
+        stay.setName(pick.getName());
+        stay.setAddress(pick.getAddress());
+        stay.setLat(pick.getLat());
+        stay.setLng(pick.getLng());
+        stay.setCheckInDate(start);
+        stay.setCheckInTime(AUTO_CHECK_IN);
+        stay.setCheckOutDate(end);
+        stay.setCheckOutTime(AUTO_CHECK_OUT);
+        conditions.setStays(new ArrayList<>(List.of(stay)));
+        return pick.getName();
+    }
+
     private PlanGenerateResponse makeDemoDraft(PlanConditions conditions, Consumer<PlanProgress> progress) {
         String[][] steps = {
             { "candidates", "20", "장소 후보 찾기" },

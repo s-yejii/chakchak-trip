@@ -6,22 +6,27 @@
 //   11/14 디자인 검토: HOT·NEW 딱지는 근거 데이터가 없어서 뺐어요
 //   (DB 장소 수 11/13 확인: 익선동 51 · 을지로 63 · 성수 180)
 //   11/19 피드백: "노포·힙지로" 같은 AI 같은 말 → 쉬운 말로, 테마 화면의 긴 설명 줄은 뺌
+//   placeIds·stayId (11/20 피드백 "코스에 들어가는 장소·숙소를 보여 주기"): 테마 동네에서 리뷰가 많은 실제 DB 가게·가까운 숙소 (11/20 SQL로 고름).
+//     화면은 DB 사진만 쓰고 없으면 아이콘 (성수는 DB에 사진이 있는 가게가 없어서 아이콘, 2km 안 숙소가 없어서 숙소 칸 없음)
 
 export const themeList = [
   {
     id: 'ikseon', label: '익선동 골목', title: '익선동 한옥 골목 걷기', tagline: '한옥 골목의 밥집·카페 들르기', img: '/img/alley.jpg', kindText: '밥집 · 카페 · 전시',
     area: { name: '익선동', fullName: '서울 종로구 익선동', type: 'dong', lat: 37.5741, lng: 126.9901 },
     kinds: ['food', 'cafe', 'culture'], tags: ['mood'],
+    placeIds: ['naver-1915561327', 'naver-800663301', 'naver-1262377225', 'naver-1754874578'], stayId: 'tour-3079777',
   },
   {
     id: 'euljiro', label: '을지로 노포', title: '을지로 오래된 맛집 돌기', tagline: '오래된 밥집·술집에서 저녁 먹기', img: '/img/euljiro.jpg', kindText: '밥집 · 술집 · 카페',
     area: { name: '을지로동', fullName: '서울 중구 을지로동', type: 'dong', lat: 37.5663, lng: 126.9919 },
     kinds: ['food', 'bar', 'cafe'], tags: [],
+    placeIds: ['naver-1319831936', 'naver-1347353294', 'naver-2041488467', 'naver-1382044467'], stayId: 'tour-2819007',
   },
   {
     id: 'seongsu', label: '성수 카페', title: '성수 카페·옷가게 거리', tagline: '카페와 옷가게를 번갈아 들르기', img: '/img/cafe.jpg', kindText: '카페 · 옷가게 · 밥집',
     area: { name: '성수동', fullName: '서울 성동구 성수동', type: 'dong', lat: 37.5446, lng: 127.0557 },
     kinds: ['cafe', 'shop', 'food'], tags: ['mood'],
+    placeIds: ['naver-1836736663', 'naver-1996321844', 'naver-1241532707', 'naver-2087524275'], stayId: null,
   },
 ]
 
