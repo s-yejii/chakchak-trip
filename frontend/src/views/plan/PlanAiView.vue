@@ -33,6 +33,7 @@ import { recommendTimeFor } from '@/utils/timeRecommend'
 import { appNow, devMode } from '@/utils/devMode'
 import { getDevScenario } from '@/api/dev'
 import { PLAN_STEP_IDS } from '@/utils/planSteps'
+import { readStyle } from '@/utils/mySettings'
 import youtubeLogo from '@/assets/brand/youtube.svg'
 import instagramLogo from '@/assets/brand/instagram.svg'
 import naverLogo from '@/assets/brand/naver.svg'
@@ -254,8 +255,18 @@ function setDefaultTimes() {
     }
     moveToTomorrow()
   }
-  store.planFromTime = '10:00'
-  store.planToTime = toTime(DEFAULT_END_MIN)
+  // 11/20 피드백: 매번 묻지 않고 마이 > 여행 스타일의 하루 활동 시간대(① 상재, 이 브라우저에 저장)를 써요. 없으면 10:00~20:00
+  const style = readStyle()
+  store.planFromTime = style.dayFrom || '10:00'
+  store.planToTime = style.dayTo || toTime(DEFAULT_END_MIN)
+}
+// 마이 > 여행 스타일을 저장한 적이 있는지 (없으면 "기본값"이라고 알려요)
+function hasSavedStyle() {
+  try {
+    return !!localStorage.getItem('myStyle') // utils/mySettings.js STYLE_KEY와 같은 이름
+  } catch (e) {
+    return false
+  }
 }
 // 달력에서 날짜를 바꾸면 기본값으로 (늦어서 자동으로 옮긴 건 빼고)
 watch(() => store.planStartDate, () => {
@@ -327,7 +338,10 @@ function toggleCode(list, code) {
 const openSum = ref('') // 펼친 칸: 'time' | 'move' | ''
 const shownMoves = computed(() => (store.planMoves.length ? store.planMoves : DEFAULT_MOVES)) // 안 고르면 기본값이 켜진 채로 보여요
 const movesText = computed(() => shownMoves.value.join('·') + '로 다녀요')
-const timeSource = computed(() => '하루 활동 시간')
+const timeSource = computed(() => {
+  if (isToday()) return '오늘은 지금부터'
+  return hasSavedStyle() ? '마이 > 여행 스타일 기준' : '기본값 · 마이 > 여행 스타일에서 바꿀 수 있어요'
+})
 
 // 여기서 고른 값을 일정 만들기 조건(store.planConditions)으로 → 대화(③ chat)가 이어서 채우고, 만들기(③ generate)가 씀
 function saveConditions() {
