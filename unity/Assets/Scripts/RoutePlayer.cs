@@ -81,11 +81,10 @@ public class RoutePlayer : MonoBehaviour
         if (bus != null) DestroyImmediate(bus.gameObject);
         if (taxi != null) DestroyImmediate(taxi.gameObject);
 
-        GameObject body = GameObject.CreatePrimitive(PrimitiveType.Capsule); // 유니티 기본 알약 모양 (키 2m)
-        body.name = "Walker";
+        // "지금 여기" 표시: 마스코트 트리피 그림 (11/20, 전에는 회색 알약 모양). 그림 판은 늘 카메라를 마주 봄
+        GameObject body = new GameObject("Walker");
         body.transform.SetParent(transform, false);
-        body.transform.localScale = new Vector3(1.2f, WALKER_HEIGHT_M, 1.2f);
-        body.GetComponent<MeshRenderer>().sharedMaterial = Palette.Get("Pin");
+        Trippy.Create(body.transform, WALKER_HEIGHT_M);
         walker = body.transform;
         MakeBoat();
         bus = MakeVehicle("Bus", RouteData.BUS, StreetProps.BuildBus());
@@ -272,7 +271,8 @@ public class RoutePlayer : MonoBehaviour
         Vector2 heading = to - from;
         walker.position = new Vector3(at.x, SurfaceAt(at, heading) + WALKER_HEIGHT_M, at.y);
         if (heading.magnitude > 1) walker.rotation = Quaternion.LookRotation(new Vector3(heading.x, 0, heading.y)); // 가는 쪽을 바라봄 (머무는 중이면 그대로)
-        walker.gameObject.SetActive(mode == RouteData.WALK); // 배·버스·택시 안이나 땅속(지하철)에서는 사람 표시를 숨김
+        // 배·버스·택시 안이나 땅속(지하철)에서는 숨김. 내비(사람 눈높이)도 숨김: 카메라가 마스코트 몸 안에 있어서 모자·깃발이 화면을 가림
+        walker.gameObject.SetActive(mode == RouteData.WALK && !isNavigation);
         PlaceBoat(i, at, heading);
         PlaceVehicle(bus, RouteData.BUS, at, heading);
         PlaceVehicle(taxi, RouteData.RIDE, at, heading);
