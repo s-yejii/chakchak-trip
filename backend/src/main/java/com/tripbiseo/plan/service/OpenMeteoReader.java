@@ -6,9 +6,8 @@ import java.util.Map;
 
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientException;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 
 /**
  * ③ 기상청 단기예보(3일) 밖 날짜의 날씨 (11/20 주형: "1년 뒤 여행도 날씨가 나와야").
@@ -24,6 +23,7 @@ public class OpenMeteoReader {
     private static final String FORECAST_URL = "https://api.open-meteo.com/v1/forecast";
     private static final String ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive";
     private static final String TIMEZONE = "Asia/Seoul";
+    private static final int ARCHIVE_DELAY_DAYS = 7; // 과거 관측은 며칠 늦게 올라와서, 이보다 최근 날은 한 해 더 전으로
 
     private final RestClient restClient = RestClient.create();
 
@@ -33,7 +33,8 @@ public class OpenMeteoReader {
         public Double minTemp;
         public Integer maxPop;      // 강수확률 최고(%), 과거 관측이면 null
         public Double rainMm;       // 강수량(mm), 예보면 null
-        public boolean isLastYear;  // 작년 관측값을 올해 날짜로 옮긴 것인지
+        public boolean isLastYear;  // 지난 관측값을 올해 날짜로 옮긴 것인지
+        public int observedYear;    // 관측한 해 (지난 관측일 때만)
         public Integer weatherCode; // WMO 날씨 코드 (0 맑음, 1~3 구름, 45·48 안개, 51~67 비, 71~77 눈, 80~82 소나기, 95~ 뇌우)
     }
 
@@ -45,12 +46,17 @@ public class OpenMeteoReader {
         return readDays(url, 0);
     }
 
-    /** 예년 기준: 작년 같은 날들의 실제 관측 → 올해 날짜로 바꿔서 돌려줌. 실패하면 빈 맵 */
+    /** 예년 기준: 작년(아직 관측이 안 올라왔으면 재작년) 같은 날들의 실제 관측 → 여행 날짜로 바꿔서 돌려줌. 실패하면 빈 맵 */
     public Map<LocalDate, Day> readLastYear(double lat, double lng, LocalDate from, LocalDate to) {
+        LocalDate lastObserved = java.time.ZonedDateTime.now(java.time.ZoneId.of(TIMEZONE)).toLocalDate().minusDays(ARCHIVE_DELAY_DAYS);
+        int years = 1;
+        while (to.minusYears(years).isAfter(lastObserved)) {
+            years++;
+        }
         String url = ARCHIVE_URL + "?latitude=" + lat + "&longitude=" + lng + "&timezone=" + TIMEZONE
                 + "&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,weather_code"
-                + "&start_date=" + from.minusYears(1) + "&end_date=" + to.minusYears(1);
-        return readDays(url, 1);
+                + "&start_date=" + from.minusYears(years) + "&end_date=" + to.minusYears(years);
+        return readDays(url, years);
     }
 
     private Map<LocalDate, Day> readDays(String url, int plusYears) {
@@ -68,11 +74,12 @@ public class OpenMeteoReader {
                 Double code = numberAt(daily, "weather_code", i);
                 day.weatherCode = code == null ? null : code.intValue();
                 day.isLastYear = plusYears > 0;
+                day.observedYear = LocalDate.parse(times.get(i).asText()).getYear();
                 if (day.maxTemp != null && day.minTemp != null) {
                     days.put(LocalDate.parse(times.get(i).asText()).plusYears(plusYears), day);
                 }
             }
-        } catch (RestClientException | IllegalArgumentException | NullPointerException e) {
+        } catch (RuntimeException e) { // 연결 실패·응답 모양이 다름 등
             return new HashMap<>(); // 날씨 서버가 답을 못 하면 그 날은 안내 문구로
         }
         return days;

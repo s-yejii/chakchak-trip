@@ -23,7 +23,7 @@ import lombok.RequiredArgsConstructor;
  * 기상청 단기예보는 3일 뒤까지만 있어요. 11/20 주형: 그 뒤 날짜도 보이게 (OpenMeteoReader)
  *   - 3일 안: 기상청 단기예보 (예전 그대로)
  *   - 16일 안: Open-Meteo 예보 (출처에 그대로 적음)
- *   - 그보다 먼 날: 예보가 없어서 작년 같은 날 실제 관측을 "예년 기준"으로 (출처에 적음. 예보처럼 지어내지 않아요)
+ *   - 그보다 먼 날: 예보가 없어서 작년(관측이 아직 없으면 재작년) 같은 날 실제 관측을 "예년 기준"으로 (출처에 몇 년 것인지 적음. 예보처럼 지어내지 않아요)
  * 옷차림은 흔히 쓰는 '기온별 옷차림 표'를 낮(9~21시) 평균 기온에 맞춰 골라요.
  */
 @Service
@@ -38,7 +38,7 @@ public class TripWeatherServiceImpl implements TripWeatherService {
     private static final int WIDE_GAP_DEGREE = 10;  // 일교차가 이 이상이면 겉옷 안내
     private static final String SOURCE = "기상청 단기예보";
     private static final String FORECAST_SOURCE = "Open-Meteo 예보";
-    static final String LAST_YEAR_SOURCE = "예년 기준 (작년 같은 날 실제 날씨)"; // 화면이 이 앞글자 "예년"을 보고 "작년 이맘때"로 써요
+    static final String LAST_YEAR_SOURCE = "예년 기준 (%d년 같은 날 실제 날씨)"; // 화면이 앞글자 "예년"을 보고 줄 앞에 "예년 기준"을 붙여요
     private static final double RAIN_MM = 1.0;      // 작년 관측: 하루 강수량이 이 이상이면 비 온 날
     private static final DateTimeFormatter KMA_DATE = DateTimeFormatter.BASIC_ISO_DATE; // yyyyMMdd
 
@@ -78,9 +78,11 @@ public class TripWeatherServiceImpl implements TripWeatherService {
     }
 
     // 기상청 밖 날짜: 16일 안은 Open-Meteo 예보, 그 뒤는 작년 같은 날 관측. 두 번 넘게 부르지 않게 한 번에 받아요
+    //   기상청 마지막 날(3일 뒤)은 예보 칸이 덜 올 수 있어서 같이 받아 둬요
     private Map<LocalDate, OpenMeteoReader.Day> loadFarDays(double lat, double lng, LocalDate startDate, LocalDate lastDate) {
         LocalDate lastForecastDate = today().plusDays(OpenMeteoReader.FORECAST_DAYS - 1);
-        LocalDate from = startDate.isBefore(today()) ? today() : startDate;
+        LocalDate kmaLastDate = today().plusDays(FORECAST_DAYS);
+        LocalDate from = startDate.isBefore(kmaLastDate) ? kmaLastDate : startDate;
         Map<LocalDate, OpenMeteoReader.Day> days = new HashMap<>();
         if (from.isAfter(lastDate)) {
             return days; // 다 지난 날짜
@@ -102,7 +104,7 @@ public class TripWeatherServiceImpl implements TripWeatherService {
         DayWeather day = new DayWeather();
         day.setDate(date.toString());
         day.setAvailable(true);
-        day.setSource(isLastYear ? LAST_YEAR_SOURCE : FORECAST_SOURCE);
+        day.setSource(isLastYear ? String.format(LAST_YEAR_SOURCE, far.observedYear) : FORECAST_SOURCE);
         day.setMinTemp(round(far.minTemp));
         day.setMaxTemp(round(far.maxTemp));
         day.setDayTemp(round((far.minTemp + far.maxTemp * 2) / 3)); // 낮 평균 어림: 최고 쪽에 가깝게

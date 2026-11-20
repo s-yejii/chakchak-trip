@@ -42,6 +42,7 @@ class TripWeatherFarDayTest {
                 day.maxPop = pop;
                 day.rainMm = rainMm;
                 day.isLastYear = rainMm != null;
+                day.observedYear = date.getYear() - 1;
                 day.weatherCode = 3;
                 days.put(date, day);
             }
@@ -68,7 +69,7 @@ class TripWeatherFarDayTest {
     @Test
     void 사십일_뒤는_작년_같은_날_기준() {
         List<DayWeather> days = service.getWeatherList(37.56, 126.99, today.plusDays(40), today.plusDays(41));
-        assertEquals(TripWeatherServiceImpl.LAST_YEAR_SOURCE, days.get(1).getSource());
+        assertEquals("예년 기준 (" + (today.plusDays(41).getYear() - 1) + "년 같은 날 실제 날씨)", days.get(1).getSource());
         assertEquals("비", days.get(1).getSky()); // 작년 그날 5mm 왔음
         assertTrue(days.get(1).getOutfitNote().contains("우산"));
         assertEquals("lastYear " + today.plusDays(40) + "~" + today.plusDays(41) + ";", reader.asked);
