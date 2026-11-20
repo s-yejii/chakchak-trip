@@ -103,7 +103,8 @@ const canNext = computed(() => !step.value.isRequired || !!store.planArea)
 const nextLabel = computed(() => {
   if (isLast.value) return '일정 만들기'
   const hasWish = (store.planConditions?.mustVisit || []).length > 0
-  return step.value.id === 'link' && !hasWish ? '링크 없어요, 넘어가기' : '다음'
+  if (step.value.id === 'link') return hasWish ? '다 담았어요' : '링크 없어요, 넘어가기' // 11/20: 담은 뒤에도 링크를 더 넣을 수 있게 이 칸에 남아요
+  return '다음'
 })
 
 // 1단계: 플랫폼 검색 바로가기 (새 창). 이 칸에선 아직 지역을 안 골라서 검색어는 늘 서울로 고정 (지난번 지역이 저장소에 남아 있어요)
@@ -417,14 +418,15 @@ function goPrev() {
   if (store.planStep === 0) return goBack('/new')
   moveStep(-1)
 }
-// 인스타로 담으면: 담은 곳의 구를 지도에도 미리 골라 두고 "어디로" 단계로 (11/13: 예전엔 "어디로·동"을 건너뛰어서 지역을 확인할 수 없었어요)
+// 인스타로 담으면: 담은 곳의 구를 지도에도 미리 골라 둠 (다음 "어디로"에서 확인)
+// 11/20 피드백 "여러 게시물에서 모아 한꺼번에": 담자마자 넘기지 않고 이 칸에 남아 링크를 더 넣거나 [다 담았어요]
 function onLinkAdded() {
   const area = store.planArea
   if (area && area.isAuto && !store.planAreas.length) {
     store.planAreas = [{ name: area.name, lat: area.lat, lng: area.lng, dongs: [] }] // 지도(GuMapPicker)가 쓰는 모양
   }
-  store.planStep = STEPS.findIndex((item) => item.id === 'where')
 }
+const wishCount = computed(() => (store.planConditions?.mustVisit || []).length)
 // 검색 화면으로 갈 때 표시해 두면, 고르고 돌아왔을 때 바로 다음 칸으로
 function markAutoNext() {
   store.planAutoNext = true
@@ -523,6 +525,7 @@ function useRecommendedTime() {
 
         <section v-if="step.id === 'link'" class="card card--pad pa-sec" aria-label="인스타 링크">
           <WishLinks ref="wishLinks" @added="onLinkAdded" />
+          <p v-if="wishCount" class="t-cap" style="margin: 0">{{ wishCount }}곳 담았어요 · 다른 게시물 링크도 더 넣을 수 있어요. 다 모았으면 [다 담았어요]</p>
         </section>
 
         <section v-if="step.id === 'link'" class="pa-sns-sec" aria-label="어디서 봤어요?">
