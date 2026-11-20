@@ -128,7 +128,7 @@ function toCountText(album) {
               <h2 :id="'album-' + album.tripId" class="t-sub">{{ album.title }}</h2>
               <p class="t-cap tn">{{ toDateLabel(album.startDate) }} · {{ toCountText(album) }}</p>
             </div>
-            <RouterLink :to="'/retro?id=' + album.tripId " class="album__retro">회고<i class="ic ic--s i-next" aria-hidden="true"></i></RouterLink>
+            <RouterLink :to="'/retro?id=' + album.tripId " class="album__retro">여행 기록<i class="ic ic--s i-next" aria-hidden="true"></i></RouterLink>
           </div>
 
           <!-- ② 사진이 없으면 점선 칸 -->
