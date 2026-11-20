@@ -4,7 +4,7 @@ import lombok.Data;
 
 /**
  * 여행 하루의 날씨 + 옷차림 (GET /api/plans/weather 한 줄).
- * available=false면 예보 범위(3일 뒤까지) 밖이라 숫자 없이 message만 있어요.
+ * available=false면 날씨를 못 받아 숫자 없이 message만 있어요 (11/20부터 먼 날짜도 Open-Meteo·작년 관측으로 채워요, source로 구분).
  */
 @Data
 public class DayWeather {
