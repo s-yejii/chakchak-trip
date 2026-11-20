@@ -2,7 +2,7 @@
 // 화면 모양은 원래 가짜 데이터(data/trips.js)와 같아요: time, name, dur, img, meta, imp, wx, fixed, leg, x, y
 import { imageFor, isStayStop, toMapPositions } from '@/utils/mapView'
 import { toDuration } from '@/utils/time'
-import { appNow } from '@/utils/devMode'
+import { appNow, devMode } from '@/utils/devMode'
 import { addDays } from '@/utils/dates'
 
 const WEEK = ['일', '월', '화', '수', '목', '금', '토']
@@ -63,7 +63,8 @@ export function pickHomeTrip(trips) {
 
 // 여행 상세 화면 주소 (오늘·여행 중이면 오늘 화면, 아니면 여행 전 화면)
 export function tripDetailLink(trip) {
-  if (trip.status === 'ongoing' || isTodayTrip(trip)) return '/trips/today?id=' + trip.id
+  // 11/20: 시연 계정은 날짜와 상관없이 [여행 시작]이 있는 여행 날 화면으로 (언제 눌러도 시계를 그 여행 1일차로 옮겨 바로 시작)
+  if (trip.status === 'ongoing' || isTodayTrip(trip) || (devMode.isOn && trip.status === 'planned')) return '/trips/today?id=' + trip.id
   return '/trips/detail?id=' + trip.id
 }
 
