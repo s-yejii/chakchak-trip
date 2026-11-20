@@ -24,7 +24,6 @@ import { imageFor } from '@/utils/mapView'
 import GuMapPicker from '@/components/plan/GuMapPicker.vue'
 import OriginPicker from '@/components/plan/OriginPicker.vue'
 import ChoiceCard from '@/components/plan/ChoiceCard.vue'
-import TimeRangePicker from '@/components/plan/TimeRangePicker.vue'
 import { KIND_CHIPS, MOVE_CODES, TAG_CHIPS } from '@/utils/styleCodes'
 // 서비스 아이콘: Simple Icons (CC0, 상표는 각 회사 소유). 그 서비스 바로가기에만 써요
 import { toShortDate } from '@/utils/tripView'
@@ -724,15 +723,7 @@ function useRecommendedTime() {
           <!-- 11/20 주형: 글씨가 작고 눈에 안 띈다 → 제목 + 칸마다 아이콘 타일·큰 값·작은 설명·[바꾸기] 버튼 -->
           <div class="card card--pad pa-sum">
             <b class="pa-sum__head">이렇게 짜요</b>
-            <div class="pa-sum__row">
-              <span class="pa-sum__ic" aria-hidden="true"><i class="ic i-clock"></i></span>
-              <span class="pa-sum__body"><span class="pa-sum__label">하루 시간</span><b class="pa-sum__val tn">{{ store.planFromTime }} ~ {{ store.planToTime }}</b><span class="pa-sum__note">{{ timeSource }}</span></span>
-              <button type="button" class="btn btn--secondary btn--sm" :aria-expanded="openSum === 'time'" @click="openSum = openSum === 'time' ? '' : 'time'">{{ openSum === 'time' ? '닫기' : '바꾸기' }}</button>
-            </div>
-            <template v-if="openSum === 'time'">
-              <TimeRangePicker v-model:start="store.planFromTime" v-model:end="store.planToTime" :note="timeNote" />
-              <button type="button" class="chip" style="align-self: center" @click="useRecommendedTime"><i class="ic ic--s i-sparkle" aria-hidden="true"></i>시간 추천</button>
-            </template>
+            <!-- 11/20 주형: 하루 시간은 여기서 빼고 마이 > 여행 스타일에서만 바꿔요 (오늘 여행이면 지금부터 자동, setDefaultTimes) -->
             <div class="pa-sum__row">
               <span class="pa-sum__ic" aria-hidden="true"><i class="ic i-subway"></i></span>
               <span class="pa-sum__body"><span class="pa-sum__label">이동 수단</span><b class="pa-sum__val">{{ shownMoves.join(' · ') }}</b><span class="pa-sum__note">{{ store.planMoves.length ? '직접 골랐어요' : '기본값으로 골라 뒀어요' }}</span></span>
