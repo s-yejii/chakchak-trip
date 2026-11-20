@@ -146,7 +146,8 @@ async function moveToNext() {
   const departDate = isNextDay ? dateOf(next.day) : dateText(appNow())
   const plan = planDeparture({
     nowMin: minutesOf(appNow()),
-    stayEndMin: current ? stayEndOf(current) : null,
+    // 11/19 주형: 예약 앞 카페에서 [다음 장소로]를 누르면 나갈 시각까지 기다리지 않고 바로 출발 (도착 뒤 남는 시간은 그냥 남음)
+    stayEndMin: current ? (isCafeStop(current) && next.fixed ? minutesOf(appNow()) : stayEndOf(current)) : null,
     extraMin: current ? extraStayOf(current) : 0,
     travelMin,
     nextTimeMin: toMinutes(next.time),
@@ -187,6 +188,7 @@ async function moveToNext() {
   await setSpeed(Math.max(1, Math.round((travelMin * 60 * 1000) / MOVE_MS)))
   for (let step = leftEnd + 1; step < MOVE_STEPS; step++) {
     const [lat, lng] = pointAlong(path, step / MOVE_STEPS)
+    if (step >= REST_ASK_STEP && (await askRestOnWay(next, lat, lng))) return // 11/19 주형: 예약 가는 길 중간에 "시간이 남아요" 카드 → 근처 카페 고르기
     // 11/17: 이동 중에도 몇 점은 서버에 (위치 기록이 비면 회고가 "한 자리에 15분 넘게 머묾 = 계획 밖"으로 봐요). 다음 장소 근처 점은 안 보냄 (일찍 도착 판정 안 되게)
     if (distanceMeters({ lat, lng }, next) > NEAR_NEXT_M) await props.live.placeAt(lat, lng, false)
     else props.live.showAt(lat, lng)
@@ -334,16 +336,23 @@ async function busDown(current, from) {
   await props.live.placeAt(setup.busDownLat, setup.busDownLng, true) // 장소 칸은 아니고 버스에서 내린 자리 (다음 [다음 장소로]는 여기서 출발)
   if (setup.busDownAlight) showLiveNotice({ key: 'busoff-' + current.id, at: hhmm(appNow()), title: setup.busDownAlight + '에서 내렸어요', body: '여기서 다음 장소로 가요', warn: false })
   await props.live.refresh()
-  askRestIfFree()
 }
 
-// 11/17 주형: 버스에서 내린 뒤 예약까지 여유가 REST_ASK_MIN 이상이면 가운데 카드 "시간이 남아요 · 이대로 갈까요?" (고르기 전엔 시계 멈춤)
+// 11/19 주형: 예약 가는 길 중간(경로 2/3쯤)에서 예약까지 여유가 REST_ASK_MIN 이상이면 가운데 카드 "○○까지 N분 남아요"
+//   → 그 자리에서 멈추고(시계도), [근처 카페 보기]로 예약 가게 근처 카페를 골라 넣어요. [이대로 갈게요]면 다시 [다음 장소로]로 이어서 감
+//   (예전엔 버스에서 내린 자리에서 바로 떠서, [어디 갈까?]가 지금 자리 근처 펍을 추천했어요). 한 예약에 한 번만
 const REST_ASK_MIN = 30
-function askRestIfFree() {
+const REST_ASK_STEP = 8 // 12걸음 중 8번째부터 (가는 길 중간)
+async function askRestOnWay(next, lat, lng) {
+  if (!next.fixed || isIncidentDone('rest-' + next.id) || distanceMeters({ lat, lng }, next) <= NEAR_NEXT_M) return false
+  await props.live.placeAt(lat, lng, false)
   const fixed = props.live.status.value && props.live.status.value.fixed
-  if (!fixed || fixed.slackMin < REST_ASK_MIN) return
+  if (!fixed || fixed.name !== next.name || fixed.slackMin < REST_ASK_MIN) return false
+  markIncidentDone('rest-' + next.id)
+  demoRoute.value = null
+  await setSpeed(0)
   restAsk.value = { name: fixed.name, slackMin: fixed.slackMin }
-  setSpeed(0)
+  return true
 }
 watch(restAsk, (value, old) => {
   if (old && !value) setSpeed(STAY_SPEED) // 카드에서 골랐으면 시계 다시 흐름
