@@ -68,7 +68,7 @@ async function applyQuick(option) {
   <section v-for="(quick, i) in quickList" :key="quick.short" class="card card--pad qalt" aria-label="더 빨리 가는 방법">
     <div class="qalt__head">
       <span class="badge badge--navy">{{ i === 0 ? '추천 · ' : '' }}{{ quick.short }}</span>
-      <span class="t-cap tn" :class="quick.slackMin < 0 ? 'c-warning' : 'c-success'">{{ quick.finalArrive }} 도착 · {{ quick.slackMin < 0 ? toDuration(-quick.slackMin) + ' 늦음' : '여유 ' + toDuration(quick.slackMin) }}</span>
+      <span class="qalt__result tn" :class="quick.slackMin < 0 ? 'c-warning' : 'c-success'"><i class="ic ic--s" :class="quick.slackMin < 0 ? 'i-warning' : 'i-check'" aria-hidden="true"></i>{{ quick.finalArrive }} 도착 · {{ quick.slackMin < 0 ? toDuration(-quick.slackMin) + ' 늦음' : '여유 ' + toDuration(quick.slackMin) }}</span>
     </div>
     <b class="t-strong">{{ quick.title }}</b>
     <span v-if="quick.reason" class="t-cap">{{ quick.reason }}</span>
@@ -88,4 +88,6 @@ async function applyQuick(option) {
 .qalt-note { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 13px; line-height: 18px; color: var(--warning); }
 .qalt { display: flex; flex-direction: column; gap: 6px; }
 .qalt__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+/* 11/20 주형(예지 OK): 도착·늦음/여유가 이 카드의 핵심이라 크게·굵게 + 아이콘 (색만으로 구분하지 않게) */
+.qalt__result { display: inline-flex; align-items: center; gap: 4px; font-size: 15px; line-height: 20px; font-weight: 700; }
 </style>
