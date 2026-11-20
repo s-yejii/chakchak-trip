@@ -49,7 +49,8 @@ const STEP_TEXT = {
   from: { title: '어디서 출발해요?', sub: '' },
   who: { title: '누구랑 가요?', sub: '' },
   kind: { title: '어디 위주로 갈까요?', sub: '' },
-  fixed: { title: '예약한 곳이 있나요?', sub: '' },
+  // 11/20 피드백: "예약한 곳"이 인스타로 담은 곳과 헷갈려서 시간이 정해진 곳만이라고 분명히
+  fixed: { title: '시간이 정해진 곳이 있나요?', sub: '식당 예약·공연·기차처럼 그 시각에 꼭 가야 하는 곳만 · 인스타로 담은 곳은 알아서 시간 맞춰 넣어요' },
 }
 const STEPS = PLAN_STEP_IDS.map((id) => ({ id, ...STEP_TEXT[id] }))
 
