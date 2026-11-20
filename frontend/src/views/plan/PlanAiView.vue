@@ -336,6 +336,10 @@ function toggleCode(list, code) {
 
 // 마지막 칸 "이렇게 짜요" (11/20): 시간·이동 수단은 따로 안 묻고 여기서 바꾸기
 const openSum = ref('') // 펼친 칸: 'time' | 'move' | ''
+// 11/20 피드백 "건너뛰면 기본값이 골라진 채로": 안 고르면 서버 기본(밥집·카페, PlanRuleMaker DEFAULT_KINDS)이 켜진 채로 보여요
+//   보여 주기만 하고 보내는 값은 그대로 빈 목록 (누르면 그때부터 고른 값)
+const DEFAULT_KINDS = ['food', 'cafe']
+const shownKinds = computed(() => (store.planKinds.length ? store.planKinds : DEFAULT_KINDS))
 const shownMoves = computed(() => (store.planMoves.length ? store.planMoves : DEFAULT_MOVES)) // 안 고르면 기본값이 켜진 채로 보여요
 const movesText = computed(() => shownMoves.value.join('·') + '로 다녀요')
 const timeSource = computed(() => {
@@ -605,9 +609,9 @@ function useRecommendedTime() {
         <!-- 11/20: 어디 위주 + 이런 곳을 한 화면에 (둘 다 안 골라도 돼요) -->
         <section v-else-if="step.id === 'kind'" class="pa-cards" aria-label="장소 종류">
           <div class="choice-grid">
-            <ChoiceCard v-for="chip in KIND_CARDS" :key="chip.code" :icon="chip.icon" :title="chip.label" :desc="chip.desc" :color="chip.color" :selected="store.planKinds.includes(chip.code)" @click="store.planKinds = toggleCode(store.planKinds, chip.code)" />
+            <ChoiceCard v-for="chip in KIND_CARDS" :key="chip.code" :icon="chip.icon" :title="chip.label" :desc="chip.desc" :color="chip.color" :selected="shownKinds.includes(chip.code)" @click="store.planKinds = toggleCode(shownKinds, chip.code)" />
           </div>
-          <p class="t-cap tn" style="margin: 0; text-align: center">{{ store.planKinds.length ? store.planKinds.length + '개 골랐어요' : '안 고르면 밥집·카페 위주로 짜요' }}</p>
+          <p class="t-cap tn" style="margin: 0; text-align: center">{{ store.planKinds.length ? store.planKinds.length + '개 골랐어요' : '기본값으로 골라 뒀어요 · 바꾸려면 눌러요' }}</p>
           <h2 class="t-sub" style="margin: 8px 0 0">이런 곳이면 더 좋아요</h2>
           <div class="choice-grid" aria-label="분위기">
             <ChoiceCard v-for="chip in TAG_CARDS" :key="chip.code" :icon="chip.icon" :title="chip.label" :desc="chip.desc" :selected="store.planTags.includes(chip.code)" @click="store.planTags = toggleCode(store.planTags, chip.code)" />
@@ -626,7 +630,7 @@ function useRecommendedTime() {
               <button type="button" class="chip" style="align-self: center" @click="useRecommendedTime"><i class="ic ic--s i-sparkle" aria-hidden="true"></i>시간 추천</button>
             </template>
             <div class="pa-sum__row">
-              <span class="pa-sum__text"><i class="ic ic--s i-subway" aria-hidden="true"></i><b>{{ movesText }}</b><span class="t-cap">{{ store.planMoves.length ? '' : '기본값' }}</span></span>
+              <span class="pa-sum__text"><i class="ic ic--s i-subway" aria-hidden="true"></i><b>{{ movesText }}</b><span class="t-cap">{{ store.planMoves.length ? '' : '기본값으로 골라 뒀어요' }}</span></span>
               <button type="button" class="textlink" :aria-expanded="openSum === 'move'" @click="openSum = openSum === 'move' ? '' : 'move'">바꾸기</button>
             </div>
             <div v-if="openSum === 'move'" class="choice-grid" aria-label="이동 수단">
