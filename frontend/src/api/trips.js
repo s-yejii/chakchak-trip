@@ -55,6 +55,8 @@ export const searchLocations = (q, lat, lng) => {
 }
 export const getLocationHubs = (lat, lng) => get(`/places/locations/hubs?lat=${lat}&lng=${lng}`)
 export const getLocationHere = (lat, lng) => get(`/places/locations/here?lat=${lat}&lng=${lng}`)
+// ③ 숙소 추가 화면의 근처 추천 숙소 (관광공사 등록 숙박, 사진 있는 호텔 → 가까운 순, 11/20)
+export const getRecommendedStays = (lat, lng) => get('/plans/stays/recommended?' + new URLSearchParams({ lat, lng }))
 export const searchStays = (q) => get('/places/locations/stays?' + new URLSearchParams({ q })) // 숙소 위치 찍기: 숙소만
 
 // ③ AI 일정

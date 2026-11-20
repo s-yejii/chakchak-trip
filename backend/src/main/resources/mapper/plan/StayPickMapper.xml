@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- ③ 숙소 추가 화면의 근처 추천 숙소 (11/20). 관광공사 숙박(content_type_id 32)만, 평점이 없어서 "사진 있는 호텔 → 가까운 순" -->
+<mapper namespace="com.tripbiseo.plan.mapper.StayPickMapper">
+
+  <sql id="stayColumns">
+    id AS place_id, name, biz_type AS kind, address, latitude AS lat, longitude AS lng, image_url,
+    ROUND(ST_Distance(geom, ST_SetSRID(ST_MakePoint(#{lng}, #{lat}), 4326)::geography))::int AS distance
+  </sql>
+
+  <select id="selectStayList" resultType="com.tripbiseo.plan.dto.StayPick">
+    SELECT <include refid="stayColumns"/>
+    FROM retrip_place
+    WHERE content_type_id = '32'
+      AND ST_DWithin(geom, ST_SetSRID(ST_MakePoint(#{lng}, #{lat}), 4326)::geography, #{radius})
+    ORDER BY CASE WHEN biz_type = '호텔' AND image_url IS NOT NULL THEN 0 ELSE 1 END,
+             geom &lt;-&gt; ST_SetSRID(ST_MakePoint(#{lng}, #{lat}), 4326)::geography
+    LIMIT #{limit}
+  </select>
+
+  <select id="selectStay" resultType="com.tripbiseo.plan.dto.StayPick">
+    SELECT <include refid="stayColumns"/>
+    FROM retrip_place
+    WHERE id = #{placeId} AND content_type_id = '32'
+  </select>
+</mapper>
