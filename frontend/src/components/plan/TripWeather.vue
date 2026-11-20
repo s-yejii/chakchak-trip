@@ -8,9 +8,13 @@ import { get } from '@/api/http'
 const props = defineProps({
   date: { type: String, default: '' },       // 'YYYY-MM-DD' (그날)
   stops: { type: Array, default: () => [] }, // 그날 일정 칸 (좌표가 있는 첫 칸 기준으로 날씨를 받아요)
+  // 한 줄로 줄이기 (11/19 ② 일정 점검·여행 상세, ③ 주형 OK): 습도·출처 줄 없이 한 줄 + [옷차림 ⌄]로 펼치기.
+  //   날씨가 아직 안 나오는 날(available false: "3일 전부터 보여요" 등)은 칸을 안 보여요. false면 예전 그대로
+  compact: { type: Boolean, default: false },
 })
 
 const weather = ref(null)
+const isOutfitOpen = ref(false) // compact: 옷차림 줄을 펼쳤는지
 const SKY_ICON = { 맑음: 'i-sun', 구름많음: 'i-cloud', 흐림: 'i-cloud', 비: 'i-rain', 눈: 'i-rain' }
 
 // 날씨를 볼 곳: 좌표가 있는 첫 칸 (기상청 격자가 5km라 서울 안 하루 일정은 거의 같아요)
@@ -21,6 +25,7 @@ watch(key, load, { immediate: true })
 
 async function load() {
   weather.value = null
+  isOutfitOpen.value = false // 다른 날로 바뀌면 옷차림은 접어서 시작
   if (!key.value) return
   const asked = key.value
   try {
@@ -45,11 +50,39 @@ const summary = computed(() => {
   if (w.rainFrom) parts.push(`${Number(w.rainFrom.slice(0, 2))}시부터 ${w.sky}`)
   return parts.join(' · ')
 })
+// compact 한 줄: 하늘 · 최저~최고° · (비 오면) N시부터 비 (습도는 빼요)
+const compactSummary = computed(() => {
+  const w = weather.value
+  const parts = []
+  if (w.sky) parts.push(w.sky)
+  if (w.minTemp != null && w.maxTemp != null) parts.push(`${w.minTemp}~${w.maxTemp}°`)
+  if (w.rainFrom) parts.push(`${Number(w.rainFrom.slice(0, 2))}시부터 ${w.sky}`)
+  return parts.join(' · ')
+})
+// 칸을 보여 줄지: 날씨를 못 받았으면 안 보여요. compact는 숫자가 없는 날(안내 글만 있는 날)도 안 보여요
+const isShown = computed(() => !!weather.value && (!props.compact || weather.value.available))
 </script>
 
 <template>
-  <section v-if="weather" class="trip-weather" :aria-label="monthDay + ' 날씨와 옷차림'">
-    <template v-if="weather.available">
+  <section v-if="isShown" class="trip-weather" :class="{ 'trip-weather--compact': compact }" :aria-label="monthDay + ' 날씨와 옷차림'">
+    <!-- compact: 한 줄 + 오른쪽 [옷차림 ⌄] (누르면 아래로 펼침) -->
+    <template v-if="compact">
+      <div class="trip-weather__row">
+        <p class="trip-weather__line">
+          <i class="ic ic--s" :class="SKY_ICON[weather.sky] || 'i-cloud'" aria-hidden="true"></i>
+          <b class="tn">{{ monthDay }}</b><span class="tn trip-weather__text">{{ compactSummary }}</span>
+        </p>
+        <button v-if="weather.outfit" type="button" class="trip-weather__toggle" :aria-expanded="isOutfitOpen" @click="isOutfitOpen = !isOutfitOpen">
+          옷차림<i class="ic ic--s" :class="isOutfitOpen ? 'i-up' : 'i-down'" aria-hidden="true"></i>
+        </button>
+      </div>
+      <p v-if="isOutfitOpen && weather.outfit" class="trip-weather__outfit">
+        <span class="trip-weather__label">옷차림</span>
+        <span>{{ weather.outfit }}<template v-if="weather.outfitNote"><br /><small>{{ weather.outfitNote }}</small></template></span>
+      </p>
+    </template>
+    <!-- 기본(AI 일정 만들기 화면 등): 예전 그대로 -->
+    <template v-else-if="weather.available">
       <p class="trip-weather__line">
         <i class="ic ic--s" :class="SKY_ICON[weather.sky] || 'i-cloud'" aria-hidden="true"></i>
         <b class="tn">{{ monthDay }}</b><span class="tn">{{ summary }}</span>
@@ -76,4 +109,12 @@ const summary = computed(() => {
 .trip-weather__outfit small { font-size: 12px; color: var(--ink-muted); }
 .trip-weather__label { flex: none; font-weight: 700; color: var(--navy); }
 .trip-weather__source { font-size: 10px; line-height: 14px; color: var(--ink-muted); }
+/* compact (11/19): 한 줄 + 오른쪽 [옷차림 ⌄]. 글이 길면 끝을 …로 */
+.trip-weather--compact { padding: 6px 6px 6px 12px; }
+.trip-weather__row { display: flex; align-items: center; gap: 8px; }
+.trip-weather--compact .trip-weather__line { flex: 1; min-width: 0; white-space: nowrap; }
+.trip-weather__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.trip-weather__toggle { flex: none; display: inline-flex; align-items: center; gap: 2px; height: 28px; padding: 0 8px; border: 0; border-radius: var(--radius-sm); background: none; font: inherit; font-size: 12px; font-weight: 600; color: var(--navy); cursor: pointer; }
+.trip-weather__toggle:hover { background: var(--surface-raised); }
+.trip-weather--compact .trip-weather__outfit { padding: 2px 6px 4px 0; }
 </style>

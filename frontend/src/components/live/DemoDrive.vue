@@ -146,7 +146,8 @@ async function moveToNext() {
   const departDate = isNextDay ? dateOf(next.day) : dateText(appNow())
   const plan = planDeparture({
     nowMin: minutesOf(appNow()),
-    stayEndMin: current ? stayEndOf(current) : null,
+    // 11/19 주형: 예약 앞 카페에서 [다음 장소로]를 누르면 나갈 시각까지 기다리지 않고 바로 출발 (도착 뒤 남는 시간은 그냥 남음)
+    stayEndMin: current ? (isCafeStop(current) && next.fixed ? minutesOf(appNow()) : stayEndOf(current)) : null,
     extraMin: current ? extraStayOf(current) : 0,
     travelMin,
     nextTimeMin: toMinutes(next.time),
@@ -159,7 +160,7 @@ async function moveToNext() {
   await showNotice(next, travelMin)
 
   // 이동: 경로선을 따라 움직이고, 그동안 시계는 이동 시간만큼 흐름
-  const path = demoPathFor(next) || (route && route.coords && route.coords.length > 1 ? route.coords : [[from.lat, from.lng], [next.lat, next.lng]])
+  const path = (await demoPathFor(next, from)) || (route && route.coords && route.coords.length > 1 ? route.coords : [[from.lat, from.lng], [next.lat, next.lng]])
   demoRoute.value = path // 이동하는 동안 지도의 남색 점선도 이 길로 고정 (11/09 ①: 중간에 다시 받은 길과 어긋나지 않게)
   await wait(FOLLOW_START_MS) // 지도가 내 위치로 다가가며 확대하는 동안 점은 출발점에서 기다림 (11/09 ①)
   // 떠나는 그 시각에 서버에 "떠났다"를 먼저 알림 (점 두 개가 칸 밖이어야 출발로 봄) → 늦게 떠났으면 서버가 뒤 일정을 밀거나 줄임
@@ -187,6 +188,7 @@ async function moveToNext() {
   await setSpeed(Math.max(1, Math.round((travelMin * 60 * 1000) / MOVE_MS)))
   for (let step = leftEnd + 1; step < MOVE_STEPS; step++) {
     const [lat, lng] = pointAlong(path, step / MOVE_STEPS)
+    if (step >= REST_ASK_STEP && (await askRestOnWay(next, lat, lng))) return // 11/19 주형: 예약 가는 길 중간에 "시간이 남아요" 카드 → 근처 카페 고르기
     // 11/17: 이동 중에도 몇 점은 서버에 (위치 기록이 비면 회고가 "한 자리에 15분 넘게 머묾 = 계획 밖"으로 봐요). 다음 장소 근처 점은 안 보냄 (일찍 도착 판정 안 되게)
     if (distanceMeters({ lat, lng }, next) > NEAR_NEXT_M) await props.live.placeAt(lat, lng, false)
     else props.live.showAt(lat, lng)
@@ -207,9 +209,26 @@ const NADEULGIL_PATH = [
   [37.5559, 126.9856],
   [37.55522, 126.98656], // 나들길 (와룡묘 앞)
 ]
-/** 시연에서 길을 정해 둔 칸이면 그 길 (없으면 null → 길찾기 길) */
-function demoPathFor(next) {
-  return next && next.name === NADEULGIL_NAME ? NADEULGIL_PATH : null
+const CABLE_CAR_POINT = { lat: 37.5576, lng: 126.9836 } // 남산 케이블카 타는 곳 앞 (나들길 가는 길에 들르는 점)
+/**
+ * 시연에서 길을 정해 둔 칸이면 그 길 (없으면 null → 길찾기 길).
+ * 11/19 주형: 손으로 찍은 점이 건물을 가로질러 "제대로 안 간다" → 숙소 → 케이블카 앞 → 나들길을 TMAP 도보 길로 이어 붙임 (실패하면 예전 점)
+ */
+async function demoPathFor(next, from) {
+  if (!next || next.name !== NADEULGIL_NAME) return null
+  const first = await walkPath(from, CABLE_CAR_POINT)
+  const second = await walkPath(CABLE_CAR_POINT, next)
+  return first && second ? [...first, ...second] : NADEULGIL_PATH
+}
+// 걸어가는 길 점들 (TMAP 도보). 실패하면 null
+async function walkPath(from, to) {
+  try {
+    const guide = await getRouteGuide(from.lat, from.lng, to.lat, to.lng, 'walk')
+    if (guide.available && guide.coords && guide.coords.length > 1) return [[from.lat, from.lng], ...guide.coords, [to.lat, to.lng]]
+  } catch (e) {
+    // 길찾기 실패면 예전 점으로
+  }
+  return null
 }
 
 // 출발 전 확인 (11/08 주형: 대안을 고른 다음에 움직여야지): 예약까지 여유 5분 이하·늦음 알림(late-)이면 시계를 멈추고 출발 안 함
@@ -292,7 +311,9 @@ async function busDown(current, from) {
   const date = dateText(appNow())
   const departMin = Math.max(minutesOf(appNow()), stayEndOf(current))
   if (departMin > minutesOf(appNow())) await setClock(date, departMin)
-  showLiveNotice({ key: 'busdown-' + current.id, at: hhmm(appNow()), title: '순환버스로 내려가요', body: '걸어서 내려가는 대신 버스 · 약 ' + setup.busDownMin + '분', warn: false })
+  // 11/19 주형: 어디서 타서 어디서 내리는지 보이게
+  const busWhere = setup.busDownBoard && setup.busDownAlight ? setup.busDownBoard + '에서 타서 ' + setup.busDownAlight + '에서 내려요 · ' : ''
+  showLiveNotice({ key: 'busdown-' + current.id, at: hhmm(appNow()), title: '남산 순환버스로 내려가요', body: busWhere + '약 ' + setup.busDownMin + '분', warn: false })
   await wait(NOTICE_MS)
   const path = await roadPath(from, { lat: setup.busDownLat, lng: setup.busDownLng }) // 11/17: 직선 대신 남산 찻길을 따라 내려가게
   demoRoute.value = path
@@ -313,17 +334,25 @@ async function busDown(current, from) {
   await setSpeed(STAY_SPEED)
   await setClock(date, departMin + setup.busDownMin)
   await props.live.placeAt(setup.busDownLat, setup.busDownLng, true) // 장소 칸은 아니고 버스에서 내린 자리 (다음 [다음 장소로]는 여기서 출발)
+  if (setup.busDownAlight) showLiveNotice({ key: 'busoff-' + current.id, at: hhmm(appNow()), title: setup.busDownAlight + '에서 내렸어요', body: '여기서 다음 장소로 가요', warn: false })
   await props.live.refresh()
-  askRestIfFree()
 }
 
-// 11/17 주형: 버스에서 내린 뒤 예약까지 여유가 REST_ASK_MIN 이상이면 가운데 카드 "시간이 남아요 · 이대로 갈까요?" (고르기 전엔 시계 멈춤)
+// 11/19 주형: 예약 가는 길 중간(경로 2/3쯤)에서 예약까지 여유가 REST_ASK_MIN 이상이면 가운데 카드 "○○까지 N분 남아요"
+//   → 그 자리에서 멈추고(시계도), [근처 카페 보기]로 예약 가게 근처 카페를 골라 넣어요. [이대로 갈게요]면 다시 [다음 장소로]로 이어서 감
+//   (예전엔 버스에서 내린 자리에서 바로 떠서, [어디 갈까?]가 지금 자리 근처 펍을 추천했어요). 한 예약에 한 번만
 const REST_ASK_MIN = 30
-function askRestIfFree() {
+const REST_ASK_STEP = 8 // 12걸음 중 8번째부터 (가는 길 중간)
+async function askRestOnWay(next, lat, lng) {
+  if (!next.fixed || isIncidentDone('rest-' + next.id) || distanceMeters({ lat, lng }, next) <= NEAR_NEXT_M) return false
+  await props.live.placeAt(lat, lng, false)
   const fixed = props.live.status.value && props.live.status.value.fixed
-  if (!fixed || fixed.slackMin < REST_ASK_MIN) return
+  if (!fixed || fixed.name !== next.name || fixed.slackMin < REST_ASK_MIN) return false
+  markIncidentDone('rest-' + next.id)
+  demoRoute.value = null
+  await setSpeed(0)
   restAsk.value = { name: fixed.name, slackMin: fixed.slackMin }
-  setSpeed(0)
+  return true
 }
 watch(restAsk, (value, old) => {
   if (old && !value) setSpeed(STAY_SPEED) // 카드에서 골랐으면 시계 다시 흐름

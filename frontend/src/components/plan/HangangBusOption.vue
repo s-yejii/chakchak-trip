@@ -98,10 +98,10 @@ function earlyMin(item) {
     <span class="tn">{{ arriveTime(option) }} 도착 · 예약 {{ earlyMin(option) }}분 전</span>
     <div v-if="beforeLeave" class="hb-option__actions">
       <button type="button" class="btn btn--primary" :class="popup ? 'btn--lg btn--block' : 'btn--sm'" @click="ride">⛴ 배 타고 갈게요</button>
-      <button type="button" class="btn btn--secondary" :class="popup ? 'btn--lg btn--block' : 'btn--sm'" @click="skip">그냥 지하철</button>
+      <button type="button" class="btn btn--secondary" :class="popup ? 'btn--lg btn--block' : 'btn--sm'" @click="skip">대중교통 타고 가기</button>
     </div>
     <button v-else-if="isFakeGps()" type="button" class="btn btn--secondary btn--sm" @click="rideDemo">⛴ 배 타고 갈게요</button>
-    <p class="t-cap tn hb-option__sub">지하철은 {{ option.directArriveAt }} 도착, {{ toDuration(option.directWaitMin) }} 기다려요</p>
+    <p class="t-cap tn hb-option__sub">대중교통은 {{ option.directArriveAt }} 도착, 시간이 {{ toDuration(option.directWaitMin) }} 남아요</p>
   </section>
   </div>
 </template>

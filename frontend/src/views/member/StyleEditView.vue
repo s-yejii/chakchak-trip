@@ -20,6 +20,9 @@ const walkOptions = [
   { min: 20, label: '20분까지' },
   { min: 30, label: '30분도 OK' },
 ]
+// 하루 활동 시간대 (11/19 ①): 1시간 단위. 끝은 시작보다 늦어야 해요
+const FROM_HOURS = [8, 9, 10, 11, 12, 13]
+const TO_HOURS = [18, 19, 20, 21, 22, 23, 24]
 const moveOptions = [
   { name: '지하철', icon: 'i-subway' },
   { name: '버스', icon: 'i-bus' },
@@ -34,6 +37,15 @@ const likes = ref([...savedStyle.likes])
 const walk = ref(savedStyle.walk)
 const moves = ref([...savedStyle.moves])
 const rainIndoor = ref(savedStyle.rainIndoor)
+const dayFrom = ref(savedStyle.dayFrom)
+const dayTo = ref(savedStyle.dayTo)
+
+// 9 → '09:00' (24시는 '24:00')
+function toHourText(hour) {
+  return String(hour).padStart(2, '0') + ':00'
+}
+// 끝 시각 목록: 시작보다 늦은 시각만
+const toHours = computed(() => TO_HOURS.filter((hour) => toHourText(hour) > dayFrom.value))
 
 // 목록에 있으면 빼고, 없으면 넣어요 (여러 개 고르는 칩)
 function toggleIn(list, item) {
@@ -52,6 +64,7 @@ function toggleMove(name) {
 // 아래 "이렇게 짜 드려요" 요약
 const summary = computed(() => {
   const lines = [paces.find((p) => p.key === pace.value).count]
+  lines.push(parseInt(dayFrom.value) + '시부터 ' + parseInt(dayTo.value) + '시까지 일정')
   if (likes.value.length) lines.push(likes.value.slice(0, 3).join('·') + ' 위주')
   if (walk.value >= 30) lines.push('30분까지 걸어도 괜찮음')
   else lines.push(walk.value + '분 넘게 걸으면 ' + moves.value[0])
@@ -60,7 +73,7 @@ const summary = computed(() => {
 })
 
 function save() {
-  saveStyle({ pace: pace.value, likes: likes.value, walk: walk.value, moves: moves.value, rainIndoor: rainIndoor.value })
+  saveStyle({ pace: pace.value, likes: likes.value, walk: walk.value, moves: moves.value, rainIndoor: rainIndoor.value, dayFrom: dayFrom.value, dayTo: dayTo.value })
   router.push('/my')
   showToast('여행 스타일을 저장했어요')
 }
@@ -81,6 +94,25 @@ function save() {
           </div>
         </section>
 
+        <section class="st-q" aria-labelledby="qt">
+          <div class="st-q__h"><b id="qt">몇 시부터 몇 시까지 놀까요?</b><small>새 여행을 짤 때 이 시간에 맞춰 일정을 짜줘요</small></div>
+          <div class="st-time">
+            <span class="st-time__box">
+              <select v-model="dayFrom" aria-label="시작 시각">
+                <option v-for="hour in FROM_HOURS" :key="hour" :value="toHourText(hour)">{{ hour }}시</option>
+              </select>
+              <i class="ic ic--s i-down" aria-hidden="true"></i>
+            </span>
+            <span class="st-time__word">부터</span>
+            <span class="st-time__box">
+              <select v-model="dayTo" aria-label="끝 시각">
+                <option v-for="hour in toHours" :key="hour" :value="toHourText(hour)">{{ hour }}시</option>
+              </select>
+              <i class="ic ic--s i-down" aria-hidden="true"></i>
+            </span>
+            <span class="st-time__word">까지</span>
+          </div>
+        </section>
         <section class="st-q" aria-labelledby="q2">
           <div class="st-q__h"><b id="q2">좋아하는 곳</b><small>추천할 때 먼저 보여줘요 · 여러 개 골라요</small></div>
           <div class="chips" role="group" aria-labelledby="q2">
@@ -137,4 +169,10 @@ function save() {
 .scr-StyleEdit .st-sum ul{margin:0;padding-left:18px;font-size:13px;line-height:20px;color:var(--ink)}
 .scr-StyleEdit .st-walk{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .scr-StyleEdit .st-walk .chip{justify-content:center}
+.scr-StyleEdit .st-time{display:flex;align-items:center;gap:8px}
+.scr-StyleEdit .st-time__box{position:relative;flex:1;min-width:0}
+.scr-StyleEdit .st-time__box select{width:100%;height:48px;padding:0 36px 0 16px;border:1px solid var(--line-strong);border-radius:var(--radius-md);background:var(--surface-raised);font:inherit;font-size:16px;color:var(--ink);appearance:none;-webkit-appearance:none;cursor:pointer}
+.scr-StyleEdit .st-time__box select:focus{outline:0;border-color:var(--navy);box-shadow:0 0 0 1px var(--navy)}
+.scr-StyleEdit .st-time__box .ic{position:absolute;right:12px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--ink-muted)}
+.scr-StyleEdit .st-time__word{flex:none;font-size:15px;font-weight:600;color:var(--ink)}
 </style>

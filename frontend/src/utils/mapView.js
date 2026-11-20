@@ -42,10 +42,13 @@ export function isStayStop(stop) {
 export function imageFor(category) {
   const c = category || ''
   if (/숙소|호텔|숙박|모텔|게스트하우스/.test(c)) return '/img/stay.svg' // 11/17: 사진 없는 숙소·터미널에 감자탕 사진이 나오던 문제
-  if (/터미널|정차역|공항/.test(c)) return '/img/terminal.svg'
-  if (/카페|커피|디저트|베이커리/.test(c)) return '/img/daelim.jpg'
-  if (/공연|문화|콘서트|극장/.test(c)) return '/img/concert.svg'
-  if (/쇼핑|소품|편집/.test(c)) return '/img/sopum.jpg'
-  if (/관광|거리|공원|산책/.test(c)) return '/img/alley.jpg'
-  return '/img/gamjatang.jpg'
+  if (/터미널|정차역|기차역|지하철역|고속버스|KTX|공항/.test(c)) return '/img/terminal.svg' // 버스터미널 등 교통 종류 (11/19 ①)
+  // 11/19 ①: 사진 없는 칸에 국밥·골목 같은 엉뚱한 진짜 사진 대신 종류별 아이콘 (팀 규칙: 사진 없으면 아이콘)
+  if (!c) return '/img/place.svg'
+  if (/카페|커피|디저트|베이커리|케이크|도넛|빵/.test(c)) return '/img/cafe.svg'
+  if (/이자카야|주점|술집|맥주|호프|포장마차|와인|바\(BAR\)/.test(c)) return '/img/bar.svg'
+  if (/공연|문화|콘서트|극장|전시|미술관|박물관/.test(c)) return '/img/culture.svg'
+  if (/쇼핑|소품|편집|백화점|시장/.test(c)) return '/img/shop.svg'
+  if (/관광|거리|공원|산책|명소|축제|레포츠/.test(c)) return '/img/tour.svg'
+  return '/img/food.svg'
 }

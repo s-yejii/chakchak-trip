@@ -50,7 +50,7 @@ function toggleNotify() {
           <span class="ico-tile"><i class="ic ic--l i-check" aria-hidden="true"></i></span>
           <span class="nt-opt__b">
             <span class="nt-opt__t"><b>만들어 둔 일정이 완성됐어요</b></span>
-            <span class="nt-opt__d">{{ store.draft.title }} · 눌러서 완성본 보기</span>
+            <span class="nt-opt__d">{{ store.draft.title }} · 눌러서 일정 보기</span>
           </span>
           <i class="ic i-next subtle" aria-hidden="true"></i>
         </button>

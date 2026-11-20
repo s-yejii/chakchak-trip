@@ -37,7 +37,6 @@ function startWithTheme() {
         <section v-if="theme" class="theme-start" aria-labelledby="theme-start-title">
           <img class="theme-start__photo" :src="theme.img" alt="" />
           <h1 id="theme-start-title" class="h-display" style="margin: 0">{{ theme.title }}</h1>
-          <p class="t-body muted" style="margin: 0">{{ theme.tagline }}</p>
           <p class="theme-start__area t-cap"><i class="ic ic--s i-pin" aria-hidden="true"></i>{{ theme.area.fullName }} · {{ theme.kindText }}</p>
           <button type="button" class="btn btn--primary btn--lg" style="width: 100%" @click="startWithTheme">이 코스로 AI 일정 만들기</button>
           <p class="t-cap muted" style="margin: 0">날짜만 고르면 영업시간·이동 거리에 맞춰 짜 드려요</p>

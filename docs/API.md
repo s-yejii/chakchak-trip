@@ -76,7 +76,7 @@
 | `POST /api/trips/{id}/stops` | 일정 칸 추가 | trip/PlanManualView, trip/PlanEditView | 있음 |
 | `PUT /api/trips/{id}/stops/{stopId}` | 일정 칸 수정 | live/PinEditView (trip/StopEditView는 11/04부터 `PUT /stops`로 한 번에) | 있음 |
 | `DELETE /api/trips/{id}/stops/{stopId}` | 일정 칸 삭제 | (화면은 11/04부터 아래 `PUT /stops`) | 있음 |
-| `PUT /api/trips/{id}/stops` | 일정 칸 전부 한 번에 저장 (순서·수정·빼기) | trip/PlanEditView | 있음 (11/04) |
+| `PUT /api/trips/{id}/stops` | 일정 칸 전부 한 번에 저장 (순서·수정·빼기·추가) | trip/PlanEditView | 있음 (11/04) |
 | `GET /api/trips/{id}/chats` | 이 여행의 대화 기록 | plan/PlanChatView, after/RetroView | 있음 |
 | `POST /api/trips/{id}/chats` | 대화 기록 저장 | plan/PlanChatView, live/LiveView | 있음 |
 | `POST /api/plans/check?day=1` | 하루 일정 점검 (이동시간·영업시간·휴무·고정 일정 여유) | trip/PlanCheckView | 있음 |
@@ -659,12 +659,13 @@
 
 | 규칙 | 설명 |
 |---|---|
-| 칸마다 `id` 필수 | 이 여행 칸 번호만. 새 칸 추가는 `POST /stops` |
+| `id` 있는 칸 | 이 여행 칸 번호만 (다른 여행 칸 번호면 400) |
+| `id` 없는 칸 | 새로 추가해요. 검사는 `POST /stops`와 같아요 (편집 화면 [장소 추가], 11/19) |
 | 목록에 없는 칸 | 지움 (`state: "skipped"` 칸은 여행 중 기록이라 보내지 않아도 남김) |
 | 목록에 있는 칸 | `PUT /stops/{stopId}`와 같은 규칙으로 고침 (`mode`·`memo`는 보낸 값으로 덮어씀) |
 | 순서 | 따로 저장하지 않아요. 상세는 `day → time` 순이라 **바꾼 순서대로 `time`을 채워서** 보내요 (화면은 `/plans/check`로 시각을 채운 뒤 보냄) |
 
-하나라도 실패하면 지운 칸까지 전부 되돌려요 (`@Transactional`).
+하나라도 실패하면 지운 칸·새로 넣은 칸까지 전부 되돌려요 (`@Transactional`).
 
 **응답** 저장 후 `Trip` 전체
 
@@ -891,6 +892,7 @@
 | openNow | boolean (null 가능) | 지금 영업 중. 오늘 휴무면 `false`, 정보 없으면 `null` |
 | amenities | string[] | 편의시설 (없으면 `[]`) |
 | reviews | string[] | 리뷰 본문, 긴 순 최대 10개 |
+| keywords | string[] | 추천 이유: 방문자 키워드 상위 3개 ("디저트가 맛있어요"), 표 많은 순. 없으면 `[]` (11/19 ① 추가, ② 찬기 확인) |
 
 **오류** 404 "장소를 찾을 수 없어요."
 
@@ -1092,6 +1094,8 @@
 | stops | 초안 `Stop[]` (`day → time` 순). `id`·`tripId`·`mode`·`arrivedAt`·`departedAt`는 `null`. `memo`는 고른 이유 · 리뷰 근거 (예: "조용한 동네 카페 · 조용해요 · 리뷰 10개 중 4개", 없으면 `null`, 200자까지 — 저장하면 그대로 칸 메모로 남음), `state`는 `"todo"`, `stay` 10~600, DB 밖 장소면 `placeId`가 `null` |
 | notes | 안내 문구 `[{text, url}]` (없으면 `[]`). 예: "{이름}의 위치를 찾지 못해 뺐어요", "AI 연결이 안 돼서 고른 종류·평점·거리로 일정을 짰어요 (...)", "AI가 고른 2곳이 고른 종류·영업시간과 맞지 않아 평점·거리로 다시 골랐어요", "고른 지역 근처에서 쇼핑 장소를 찾지 못해 일정에 못 넣었어요", "'4명이 앉을 자리' 리뷰 확인: 맞는 곳 2곳(…) · 뺀 곳 1곳(…(\"자리가 좁아요\"))" (11/04). `url`은 네이버 지도 검색 링크, AI 실패 안내는 `null` |
 | missed | 꼭 갈 곳(`mustVisit`)인데 일정에 못 넣은 곳. 장소 카드 목록(못 찾은 곳은 `name`만), 없으면 `[]` (11/04) |
+| stopNotes | 칸별 안내 `[{ day, time, text, level }]` (11/18 ③). `day`·`time`은 `stops[]`의 같은 칸과 짝, `level`은 `warn`(노랑: 손보면 좋음) / `info`(회색: 알아만 두기). 지금 넣는 것: 앞 일정과 1시간 30분 넘게 빈 칸(warn), 1일차 고른 시작보다 이른 예약 칸(info). 없으면 `[]` |
+| openEndStops | 끝 시간 없는 칸 `"날/시각"` 목록 (예: `["1/20:40"]`). 끝 장소(`finish`)가 없으면 그날 마지막 칸(뒤가 없거나 숙소뿐, 예약 칸 빼고)은 끝 시각에 맞춰 자르지 않아서, 화면은 "끝 시간 없음"으로 보여 주면 돼요. 없으면 `[]` (11/18 ③) |
 
 **오류** 400 "여행 조건이 없어요." · 422 "내 위치를 받지 못했어요. 브라우저 위치 권한을 허용하거나 지역 이름을 말해 주세요." · 422 "일정에 넣을 장소를 찾지 못했어요. 가고 싶은 곳을 조금 더 자세히 말해 주세요."
 

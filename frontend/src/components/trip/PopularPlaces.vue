@@ -25,7 +25,7 @@ watch(() => props.places, async (list) => {
   }
 }, { immediate: true })
 
-// 믿을 만한 사진이 없으면 null → StopThumb가 이름 첫 글자 칸을 보여 줘요 (11/16 ①: 모든 음식점이 같은 기본 사진이던 문제)
+// 믿을 만한 사진이 없으면 null → StopThumb가 종류별 아이콘을 보여 줘요 (11/19) (11/16 ①: 모든 음식점이 같은 기본 사진이던 문제)
 function imageOf(item) {
   const photo = photos.value[item.place.id]
   return photo ? photo.imageUrl : null

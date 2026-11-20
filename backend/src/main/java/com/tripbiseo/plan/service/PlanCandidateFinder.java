@@ -61,7 +61,7 @@ public class PlanCandidateFinder {
     private static final Pattern SMALL_MONUMENT = Pattern.compile("비$|비석|표지석|기념비");
     private static final int FEW_REVIEWS = 10;
     private static final double SMALL_MONUMENT_PENALTY = 1.0;
-    private static final Pattern GOOD_SIGHT = Pattern.compile("공원|시장|거리|골목|전망|전시|미술관|박물관|갤러리|둘레길|산책|숲|천$|강$|마을|창작촌|광장");
+    private static final Pattern GOOD_SIGHT = Pattern.compile("공원|시장|거리|골목|전망|전시|미술관|박물관|갤러리|둘레길|산책|숲|천$|강$|마을|창작촌"); // 11/18 광장 뺌 (지나가는 곳)
     private static final int GOOD_SIGHT_ENOUGH = 3;
     // 동네 이름만 있는 곳 ("명동", "삼청동"): 관광 정보에 동네 자체가 장소로 들어 있어서, 일정 칸에 "명동 70분"이 들어가던 문제 (11/13)
     //   "익선동 한옥거리"·"인사동길"처럼 뒤에 말이 더 붙은 곳은 그대로
@@ -73,6 +73,15 @@ public class PlanCandidateFinder {
     private static final Pattern FOOD_STREET = Pattern.compile("(떡볶이|갈치|족발|순대|곱창|막창|냉면|칼국수|닭한마리|닭갈비|생선|빈대떡|전골목|맛골목|먹자|먹거리|대구탕|감자탕|해장국|국밥|아구찜|찜닭|낙지|주꾸미|쭈꾸미|장어|곰장어|보쌈|양꼬치|삼겹|갈비|고기|포차|오뎅|어묵|만두|호떡|치킨|김밥).*(골목|타운|거리)");
 
     private static final String FOOD_KIND = "food";
+    // 11/18 사용성 점검: 타는 곳(한강버스 선착장·정류장·환승센터)은 머무는 장소가 아님 ("한강버스 서울숲선착장 70분")
+    private static final Pattern TRANSIT_SPOT = Pattern.compile("선착장|정류장|정류소|승강장|환승센터|환승주차|나루터$");
+    private static final String TRANSIT_ID_PREFIX = "hangang-"; // 한강버스 선착장 데이터 번호
+    // 11/18: 추모·위령 공간은 여가로 추천하지 않음 ("기억의 터(일본군 위안부)"를 "산책하기 좋아요"로 소개했어요).
+    //   "향기억"처럼 이름에 "기억"만 들어간 곳은 그대로 (그래서 "기억"만으로 거르지 않음). 사용자가 꼭 갈 곳으로 넣으면 그대로 넣음
+    private static final Pattern MEMORIAL_SPOT = Pattern.compile("기억의 ?터|추모|위령|순국|묘역|묘지|충혼|현충|희생자|참사|순교|기념관.*(독립|의사|열사)|(독립|의사|열사).*기념관");
+    // 11/18: 광장·계단은 지나가는 곳이라 70분 머물 곳으로 약함 → 다른 볼거리가 없을 때만 (점수를 낮춤)
+    private static final Pattern PASS_THROUGH_SPOT = Pattern.compile("광장$|계단$");
+    private static final double PASS_THROUGH_PENALTY = 1.0;
 
     private static final Pattern AREA_NAME_ONLY = Pattern.compile("^[가-힣]{1,4}(동|구|가)$");
     private static final int MAX_SHAPE_LENGTH = 50000; // 동 경계 글자 길이 상한
@@ -195,6 +204,9 @@ public class PlanCandidateFinder {
         }
         try {
             for (Place place : areaStatMapper.selectPlacesInShape(dong.getGeometry(), DONG_PLACE_LIMIT)) {
+                if (isTransitSpot(place) || isMemorialName(place.getName())) {
+                    continue; // 타는 곳·추모 공간은 여가 후보가 아님 (11/18)
+                }
                 candidates.putIfAbsent(place.getId(), place);
                 dongPlaceIds.add(place.getId());
             }
@@ -208,7 +220,7 @@ public class PlanCandidateFinder {
         List<FoundLocation> kept = new ArrayList<>();
         List<FoundLocation> good = new ArrayList<>();
         for (FoundLocation sight : sights) {
-            if (NOT_SIGHT.matcher(sight.getName()).find()) {
+            if (NOT_SIGHT.matcher(sight.getName()).find() || TRANSIT_SPOT.matcher(sight.getName()).find() || isMemorialName(sight.getName())) {
                 continue;
             }
             kept.add(sight);
@@ -250,6 +262,24 @@ public class PlanCandidateFinder {
         return TOUR_KIND.equals(place.getKind()) && place.getName() != null && SMALL_MONUMENT.matcher(place.getName()).find() && isFewReviews;
     }
 
+    /** 광장·계단처럼 지나가는 볼거리인지 (11/18) */
+    boolean isPassThroughSpot(Place place) {
+        return "tour".equals(place.getKind()) && place.getName() != null && PASS_THROUGH_SPOT.matcher(place.getName().trim()).find();
+    }
+
+    /** 타는 곳(선착장·정류장·환승센터)인지: 일정에 머무는 장소로 넣지 않음 (11/18) */
+    public boolean isTransitSpot(Place place) {
+        boolean isPierData = place.getId() != null && place.getId().startsWith(TRANSIT_ID_PREFIX);
+        boolean isTransitName = place.getName() != null && TRANSIT_SPOT.matcher(place.getName()).find();
+        boolean isTransitCategory = place.getCategory() != null && TRANSIT_SPOT.matcher(place.getCategory()).find();
+        return isPierData || isTransitName || isTransitCategory;
+    }
+
+    /** 추모·위령 공간 이름인지: 여가 후보로 넣지 않고, 사용자가 넣으면 여가 문구를 안 붙임 (11/18) */
+    public boolean isMemorialName(String name) {
+        return name != null && MEMORIAL_SPOT.matcher(name).find();
+    }
+
     /** 후보들의 리뷰 태그 개수 (장소 id → 개수). 점수·이유에 같이 쓰려고 한 번만 셈 */
     public Map<String, PlaceTagCount> countTags(Map<String, Place> candidates) {
         return placeTagReader.countTags(new ArrayList<>(candidates.values()));
@@ -263,6 +293,9 @@ public class PlanCandidateFinder {
             double score = placeTagReader.getScore(place, tagCounts.get(place.getId()), wantedTags);
             if (isSmallMonument(place)) {
                 score -= SMALL_MONUMENT_PENALTY; // 리뷰가 거의 없는 비석·표지석은 다른 볼거리가 없을 때만 들어가게
+            }
+            if (isPassThroughSpot(place)) {
+                score -= PASS_THROUGH_PENALTY; // 광장·계단은 다른 볼거리가 없을 때만
             }
             scores.put(place.getId(), score);
         }
@@ -492,6 +525,9 @@ public class PlanCandidateFinder {
             }
             if (place.getName() != null && AREA_NAME_ONLY.matcher(place.getName()).matches()) {
                 continue; // 동네 이름은 장소가 아님
+            }
+            if (isTransitSpot(place) || isMemorialName(place.getName())) {
+                continue; // 타는 곳·추모 공간은 여가 후보가 아님 (꼭 갈 곳으로 직접 넣은 건 addMustVisit에서 따로 들어감, 11/18)
             }
             if (TOUR_KIND.equals(place.getKind()) && place.getName() != null && ODD_SIGHT.matcher(place.getName()).find()) {
                 continue; // 관광특구는 장소가 아니라 넓은 구역 이름 (11/14)

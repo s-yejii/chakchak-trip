@@ -11,7 +11,7 @@ import ChipScroller from '@/components/common/ChipScroller.vue'
 import PageMessage from '@/components/common/PageMessage.vue'
 import TopBar from '@/components/common/TopBar.vue'
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import TripPage from '@/components/trip/TripPage.vue'
 import { SHOW_PRICE_ESTIMATE, stopWon, toWonText } from '@/utils/budget'
 import { useStopPhotos } from '@/utils/useStopPhotos'
@@ -78,6 +78,24 @@ onMounted(() => {
   router.replace({ query: { ...route.query, from: 'ai' } })
 })
 const isFromAi = computed(() => hasDraft.value && route.query.from === 'ai')
+// 저장 안 하고 나가기 전에 묻기 (11/19): 위 ← 버튼·폰 뒤로가기 모두 이 화면을 떠나기 직전에 여기를 거쳐요
+//   onBeforeRouteLeave: 이 화면에서 다른 화면으로 가기 직전에 불려요. false를 돌려주면 이동을 멈춰요 (폰 뒤로가기면 주소도 되돌림)
+//   안 묻는 경우: 초안이 없을 때, 저장하고 넘어갈 때, /plan/ 화면(편집·조건 바꾸기 등 일정 만들기 안)으로 갈 때
+const leaveTo = ref(null) // 나가려던 곳 (값이 있으면 묻는 창이 떠 있음)
+let isLeaveOk = false // [나가기]를 눌렀거나 저장을 마쳤으면 다시 묻지 않음
+onBeforeRouteLeave((to) => {
+  if (isLeaveOk || !hasDraft.value || to.path.startsWith('/plan/')) return true
+  leaveTo.value = to.fullPath
+  return false
+})
+// [나가기]: 원래 가려던 곳으로
+function leaveCheck() {
+  const to = leaveTo.value
+  leaveTo.value = null
+  isLeaveOk = true
+  router.push(to)
+}
+
 // [조건 바꾸기]: 조건 화면 1단계부터 (고른 값은 그대로라 [다음]만 눌러도 돼요)
 //   조건 화면은 저장된 단계(store.planStep)로 열려서, 주소만 ?step=0 으로 주면 마지막 단계가 떠요 → 단계도 0으로
 const isConditionsAsk = ref(false) // [조건 바꾸기]를 누르면 먼저 묻는 창 (다시 만들면 지금 일정이 바뀌어서)
@@ -166,22 +184,13 @@ function markHoursChecked(id) {
 }
 const hoursCheckedIds = computed(() => dayStopsOf(store.draft, day.value).filter((stop) => stop.hoursChecked).map(hoursKeyOf))
 
-// 고른 칸 편집 버튼: "성내동 카페 편집" → 그 칸 수정 (칸을 안 고르면 버튼이 없어요)
-function editLabel(selected) {
-  const stop = trip.value.stops[selected]
-  if (!stop) return '' // 고른 칸이 목록에 없음 (일차를 바꿨거나 칸을 뺌)
-  return stop.name.replace('천호 ', '') + ' 편집'
-}
-function editLink(selected) {
-  return `/plan/edit/stop?day=${day.value}&idx=${selected}&back=${encodeURIComponent(route.fullPath)}` // 돌아올 곳 = 지금 주소 그대로
-}
-
-// 저장 끝: 초안·조건을 비우고 새 여행으로 (오늘·여행 중이면 여행 날 화면, 다음에 갈 여행이면 여행 전 화면)
+// 저장 끝: 초안·조건을 비우고 내 여행 목록으로 (11/19). 다시 짜기(replaceOld·둘 다 두기)도 여기를 거쳐요
+//   시연 계정은 시연 흐름대로 새 여행 상세로 (오늘·여행 중이면 여행 날 화면, 다음에 갈 여행이면 여행 전 화면)
 function finishSave(trip) {
   store.resetDraft()
   store.resetPlan()
   showToast('일정을 저장했어요')
-  router.replace(tripDetailLink(trip))
+  router.replace(devMode.isOn ? tripDetailLink(trip) : '/trips')
 }
 
 // 다시 짜기로 저장한 뒤: 옛 여행을 지우고 바꾸기 (지우기 실패해도 새 일정은 이미 저장됨)
@@ -238,6 +247,7 @@ async function save() {
   try {
     await fillEmptyTimes()
     const saved = await createTrip(store.draft)
+    isLeaveOk = true // 저장했으니 나갈 때 안 물어봄 (다시 짜기에서 "지금 여행 바꿀까요?"가 떠 있을 때도)
     store.tripId = saved.id
     if (devMode.isOn) await trashOverlappingTrips(saved) // 시연 계정: 날짜가 겹치는 예전 여행은 휴지통으로
     if (store.replanFrom) {
@@ -256,7 +266,7 @@ async function save() {
 
 <template>
   <div class="scr scr-PlanCheck">
-    <!-- 담은 장소가 없을 때: 안내만 (지도·저장·장소 추가·편집 버튼은 안 보여요) -->
+    <!-- 담은 장소가 없을 때: 안내만 (지도·저장·편집 버튼은 안 보여요) -->
     <div v-if="!hasDraft" class="app">
       <TopBar title="일정 점검" back="/trips" />
       <div class="scroll">
@@ -267,7 +277,6 @@ async function save() {
       <template #right="{ selected }">
         <button v-if="isFromAi && selected === null && !sim.isOn.value" type="button" class="btn btn--sm btn--float" @click="isConditionsAsk = true"><i class="ic ic--s i-settings" aria-hidden="true"></i>조건 바꾸기</button>
         <RouteSimButton v-if="hasDraft" :sim="sim" />
-        <RouterLink v-if="selected !== null && trip.stops[selected] && !sim.isOn.value" :to="editLink(selected)" class="btn btn--sm btn--float"><i class="ic ic--s i-edit" aria-hidden="true"></i>{{ editLabel(selected) }}</RouterLink>
       </template>
       <template v-if="hasDraft" #head>
         <div v-if="missedList.length" class="pc-missed">
@@ -280,7 +289,7 @@ async function save() {
             {{ d.day }}일차<span v-if="d.label" class="t-cap tn" style="margin-left: 4px">{{ d.label }}</span>
           </button>
         </ChipScroller>
-        <TripWeather :date="dayDate" :stops="dayStopsOf(store.draft, day)" />
+        <TripWeather compact :date="dayDate" :stops="dayStopsOf(store.draft, day)" />
         <ScenarioRainNotice :draft="store.draft" @applied="runCheck" /><!-- 시연 계정만: 비 예보를 일정 짤 때 알려 주고 반영 (③ 11/08) -->
       </template>
       <template v-if="error" #below>
@@ -288,11 +297,18 @@ async function save() {
       </template>
       <template #cta>
         <div class="cta__row">
-          <RouterLink to="/plan/manual" class="btn btn--secondary btn--lg"><i class="ic i-plus" aria-hidden="true"></i>장소 추가</RouterLink>
+          <!-- 편집: 지금 고른 일차를 편집 화면에서 고쳐요 (장소 추가·빼기·순서·시간). [완료]·✕면 이 화면으로 돌아와요
+               AI 일정(?from=ai)이면 같이 넘겨서, 돌아와도 [조건 바꾸기]가 남게 -->
+          <RouterLink :to="'/plan/edit?day=' + day + (route.query.from === 'ai' ? '&from=ai' : '')" class="btn btn--secondary btn--lg"><i class="ic i-edit" aria-hidden="true"></i>편집</RouterLink>
           <button type="button" class="btn btn--primary btn--lg" :disabled="saving" @click="save">이 일정으로 저장</button>
         </div>
       </template>
     </TripPage>
+    <Teleport v-if="leaveTo" to=".scr-PlanCheck .app">
+      <div class="pc-ask">
+        <ConfirmModal title="저장 안 하고 나갈까요?" text="지금 나가면 만든 일정이 저장되지 않아요." ok-text="나가기" cancel-text="계속 보기" danger @cancel="leaveTo = null" @ok="leaveCheck" />
+      </div>
+    </Teleport>
     <Teleport v-if="isConditionsAsk" to=".scr-PlanCheck .app">
       <div class="pc-ask">
         <ConfirmModal title="조건을 바꿔 다시 만들까요?" text="다시 만들면 조건이 같아도 장소가 바뀔 수 있어요. 지금 일정과 직접 바꾼 순서·이동 수단도 새 일정으로 바뀌어요." ok-text="조건 바꾸기" @cancel="isConditionsAsk = false" @ok="openConditions" />
