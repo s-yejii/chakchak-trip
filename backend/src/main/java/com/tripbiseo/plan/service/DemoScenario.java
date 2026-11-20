@@ -136,6 +136,11 @@ public class DemoScenario {
     }
 
     /** AI 일정 화면에 미리 채워 둘 출발지·예약(회식·스시도)·숙소 */
+    /** 시나리오 숙소의 장소 번호 (숙소 추가 화면 추천 맨 위, 11/20) */
+    public String getStayPlaceId() {
+        return STAY_PLACE_ID;
+    }
+
     public ScenarioSetup getSetup() {
         ScenarioSetup setup = new ScenarioSetup();
         setup.setOriginName(ORIGIN_NAME);

@@ -8,11 +8,12 @@
 //   날짜·시간 확인 후 "숙소로 추가" → store.planStays (여행 정보 화면 목록)
 //   ?index=N 으로 들어오면 담아 둔 N번째 숙소를 고치거나 지워요 (여행 정보 화면에서 숙소를 누름)
 //   날짜는 여행 기간(store.planStartDate ~ planEndDate) 안에서만: 1박 여행이면 1박까지, 달력도 그 밖은 못 골라요
-import { computed, onUnmounted, ref } from 'vue'
+//   11/20 주형: 맨 위에 "이 근처 숙소" 추천 (GET /api/plans/stays/recommended) → 누르면 검색으로 고른 것과 같이 위치 맞추기로
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import BottomSheet from '@/components/common/BottomSheet.vue'
 import KakaoMap from '@/components/common/KakaoMap.vue'
-import { getLocationHere, readStayCapture, searchStays } from '@/api/trips'
+import { getLocationHere, getRecommendedStays, readStayCapture, searchStays } from '@/api/trips'
 import { fitYearToTrip } from '@/utils/captureYear'
 import { useTripStore } from '@/stores/trip'
 import { addDays, daysBetween } from '@/utils/dates'
@@ -54,6 +55,20 @@ let timer = null
 let lookupNo = 0 // 늦게 온 예전 주소 찾기 결과는 버리려고
 
 onUnmounted(() => clearTimeout(timer))
+
+// 근처 추천 숙소: 여행 지역 가운데 기준. 못 받으면 칸을 숨겨요 (검색·캡처는 그대로)
+const picks = ref([])
+onMounted(async () => {
+  if (!store.planArea || store.planArea.lat == null) return
+  try {
+    picks.value = await getRecommendedStays(store.planArea.lat, store.planArea.lng)
+  } catch {
+    picks.value = []
+  }
+})
+function distanceText(meter) {
+  return meter >= 1000 ? (meter / 1000).toFixed(1) + 'km' : meter + 'm'
+}
 
 const step = computed(() => (candidate.value ? 'pick' : 'list'))
 // 여행 기간: 체크인은 첫날~마지막 전날, 체크아웃은 둘째 날~마지막 날
@@ -271,6 +286,18 @@ function remove() {
             <h1 class="h-title">숙소 추가</h1>
             <p class="t-cap tn" style="margin: 2px 0 0">여행 {{ toShortDate(tripStart) }}~{{ toShortDate(tripEnd) }} · {{ tripNights }}박{{ store.planStays.length ? ` 중 ${store.planStays.length}곳 담았어요` : ' · 예약하고 확정 화면을 캡처해서 올려 주세요' }}</p>
           </div>
+          <section v-if="picks.length" class="sp-step" aria-labelledby="sp-pick">
+            <h2 id="sp-pick" class="sp-step__title">{{ store.planArea.name }} 근처 숙소</h2>
+            <div class="sp-picks">
+              <button v-for="stay in picks" :key="stay.placeId" type="button" class="sp-pick" @click="pickFound(stay)">
+                <img v-if="stay.imageUrl" :src="stay.imageUrl" alt="" class="sp-pick__img" loading="lazy" />
+                <span v-else class="sp-pick__img sp-pick__img--none" aria-hidden="true"><i class="ic i-home"></i></span>
+                <b class="sp-pick__name">{{ stay.name }}</b>
+                <span class="t-cap tn">{{ stay.kind || '숙박' }} · {{ distanceText(stay.distance) }}</span>
+              </button>
+            </div>
+            <p class="t-cap" style="margin: 0">한국관광공사에 등록된 숙소예요 · 고르면 날짜만 확인하고 담아요</p>
+          </section>
           <section class="sp-step" aria-labelledby="sp-book">
             <h2 id="sp-book" class="sp-step__title"><span class="sp-no">1</span>예약하기</h2>
             <div class="sp-sites">
@@ -354,6 +381,11 @@ function remove() {
 .scr-StayPin .sp-sites{display:flex;flex-wrap:wrap;gap:8px}
 .scr-StayPin .sp-site{text-decoration:none;gap:2px}
 .scr-StayPin .sp-upload{cursor:pointer}
+.scr-StayPin .sp-picks{display:flex;gap:10px;overflow-x:auto;margin:0 -20px;padding:0 20px 4px;scroll-padding:0 20px;scroll-snap-type:x mandatory}
+.scr-StayPin .sp-pick{flex:none;width:136px;display:flex;flex-direction:column;gap:2px;padding:0;border:0;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer;scroll-snap-align:start}
+.scr-StayPin .sp-pick__img{width:136px;height:88px;border-radius:var(--radius-md);object-fit:cover;background:var(--surface-sunken)}
+.scr-StayPin .sp-pick__img--none{display:flex;align-items:center;justify-content:center;color:var(--ink-muted)}
+.scr-StayPin .sp-pick__name{font-size:14px;line-height:20px;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .scr-StayPin .sp-head{display:flex;align-items:flex-start;gap:8px}
 .scr-StayPin .sp-name{width:100%;border:0;padding:0;font:inherit;font-size:18px;font-weight:700;color:var(--ink);background:none}
 .scr-StayPin .sp-name:focus{outline:none;border-bottom:1.5px solid var(--navy)}
