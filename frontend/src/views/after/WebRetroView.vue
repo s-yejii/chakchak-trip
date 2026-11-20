@@ -22,8 +22,9 @@ import { get, post, put, del, upload } from '@/api/http'
 import { toTime, toMinutes, toDuration, toWon } from '@/utils/time'
 import { sunPosition, sunPhase, skyAt, koreanDate } from '@/utils/sun'
 import { loadJournal, editedOriginalIds, makeDelayedSave, toggleStopRating } from '@/utils/webJournal'
+import { uploadPhotos } from '@/utils/photoUpload'
 import RetroPhotoCard from '@/components/after/web/RetroPhotoCard.vue'
-import RetroLandscapeCard from '@/components/after/web/RetroLandscapeCard.vue'
+import RetroShorts from '@/components/after/web/RetroShorts.vue' // 이 여행 사진 쇼츠 (11/19, PC 화면용)
 import RetroUnityMap from '@/components/after/web/RetroUnityMap.vue' // 유니티로 만든 실감 3D 지도 (11/13)
 import { makeTripMap } from '@/components/after/web/landscape/unityTrip'
 import { analyzeLandscape } from '@/components/after/web/landscape/analyze'
@@ -44,6 +45,7 @@ const VISIT_BASE_M = 120         // 다녀온 동네 기둥 기본 높이(m)
 const VISIT_PER_MINUTE_M = 1.3   // 머문 1분마다 더하는 높이(m)
 const VISIT_MAX_MINUTES = 300    // 5시간 넘게 머물러도 높이는 여기까지
 const PASS_HEIGHT_M = 30         // 지나가기만 한 동네 높이(m)
+const IS_DONG_SHOWN = false      // 11/19 피드백: 지도의 빨간 동네 칸·이름표를 뺌 (경로가 잘 보이게). 다시 보이려면 true
 const NAV_ZOOM = 15.2            // 내비 재생 확대 (너무 가까우면 화면이 빨리 흘러서 어지러움)
 const PLAY_MOVE_SECONDS = 40     // 1배속에서 이동 구간에 쓰는 시간(초). 여기에 머문 곳에서 멈추는 시간이 더해짐
 const STAY_RADIUS_M = 60         // 이 반경 안에 오래 있으면 "머문 곳" (GPS는 가만히 있어도 흔들림)
@@ -62,7 +64,13 @@ const STREET_BACK_M = 3          // 거리 시점: 내 위치에서 이만큼 �
 const STREET_PITCH = 85          // 거리 시점: 기울기 (90이면 수평, 지도가 85까지 됨)
 const STREET_SPEED = 9           // 거리 시점: 1배속 이동 속도(초당 m). 걷는 느낌이 나게 천천히 (배속 버튼으로 빨리)
 const SPLIT_STAY_RADIUS_M = 30   // 나눈 머문 곳 조각의 동그라미 반경(m)
-const UNITY_TOP_SPEED = 50       // 3D 지도 위에서 보기: 1배속 이동 속도(초당 m). 평면 지도(여행 전체 40초)보다 천천히 (건물이 가까이 보여서)
+const VEHICLE_WINDOW = 3         // 3D 탈것 빨리 감기: 앞뒤 이만큼 구간을 묶어 실제 빠르기를 잼
+const RIDE_MS = 4                // 실제 초당 4m(시속 14km) 넘으면 탈것 (버스·택시·한강버스)
+const RIDE_BOOST = 3             // 탈것 구간은 3배 빨리
+const FAST_RIDE_MS = 9           // 실제 초당 9m(시속 32km) 넘으면 빠른 탈것 (지하철·빈 도로)
+const FAST_RIDE_BOOST = 5        // 빠른 탈것은 5배 빨리 (카메라도 탈것이면 더 높이 떠서 덜 어지러움)
+const MAX_SPEED = 8              // 배속 버튼 최대
+const UNITY_TOP_SPEED = 25      // 3D 지도 위에서 보기: 1배속 이동 속도(초당 m). 11/19 멀미 피드백: 50(시속 180km)은 땅이 너무 빨리 흘러서 절반으로
 const STREET_LOOK_AHEAD_M = 35   // 거리 시점: 경로를 따라 이만큼 앞을 바라봄 (모퉁이에서 늦지 않게)
 const STREET_MAX_TURN = 30       // 거리 시점: 1초에 돌 수 있는 최대 각도
 const STREET_TURN_SMOOTH = 0.5   // 거리 시점: 방향을 따라가는 부드러움
@@ -72,18 +80,13 @@ const STREET_PITCH_PER_SLOPE = 60 // 1인칭: 경사 10%면 고개를 6도 움�
 const STREET_PITCH_SMOOTH = 0.08 // 1인칭: 고개 움직임을 이 비율만큼씩 따라감 (튀지 않게)
 const STREET_GROUND_OPACITY = 0.6 // 1인칭 바닥에 까는 위성 사진 진하기
 const STREET_PIN_RANGE_M = 300   // 거리 시점: 이 거리 안의 장소 핀만 보여 줌 (먼 핀이 건물을 뚫고 보여서)
-const TURN_WINDOW_M = 40         // 회전 안내: 이 거리만큼 앞뒤 방향을 비교함 (GPS 잔떨림은 무시)
-const TURN_STEP_M = 10           // 회전 안내: 경로를 이 간격으로 살펴봄
-const TURN_MIN_ANGLE = 45        // 회전 안내: 이 각도 이상 꺾여야 안내함
-const TURN_UTURN_ANGLE = 150     // 회전 안내: 이 각도 이상이면 유턴
-const TURN_STAY_GAP_M = 60       // 회전 안내: 머문 곳에서 이 거리 안의 꺾임은 안내하지 않음
-const TURN_NOTICE_M = 500        // 회전 안내: 이 거리 안에 들어오면 카드에 보여 줌
 const SIDE_KEY = 'chakchak.webRetroSide'
 const SIDE_DEFAULT = 440         // 오른쪽 칸 기본 너비(px)
 const SIDE_MIN = 320             // 오른쪽 칸 최소 너비
 const SIDE_MAX_RATIO = 0.55      // 오른쪽 칸은 화면의 55%까지 (지도가 너무 좁아지지 않게)
 const FOREST_URL = '/geo/forest-seoul.json' // 숲 구역 (임상도 + NDVI를 미리 계산해 넣은 파일, 없으면 숲 층 없음)
-const PHOTO_POP_MS = 3500        // 재생 중 사진 카드가 떠 있는 시간
+const PHOTO_HOLD_MS = 4000       // 재생 중 사진 한 장을 보여 주는 시간. 그동안 재생은 멈춰 있음 (11/19: 너무 빨리 사라져서)
+const VIDEO_MAX_MS = 30000       // 재생 중 영상은 끝날 때까지 틀고, 길어도 이만큼까지만
 const PHOTO_MARKER_OFFSET = [30, -44] // 장소 사진 동그라미를 핀 오른쪽 위에 (핀과 안 겹치게)
 const SUN_STRIP_SAMPLES = 120    // 재생 막대의 낮·밤 띠를 이만큼 나눠서 색칠
 const SKY_BLEND = { 'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.7, 'fog-ground-blend': 0.7 }
@@ -99,6 +102,10 @@ const isLoading = ref(true)
 const selectedDay = ref(0)        // 0 = 전체, 1 = 1일차 …
 const isSatellite = ref(false)
 const isUnity3d = ref(false) // 실감 3D(유니티) 칸을 지도 위에 띄웠는지
+// 세슘 3D가 기본 (11/19 결정). 서버가 /web/retro에 세슘용 헤더를 붙여 이 페이지가 "격리 모드"로 열렸으면 세슘 빌드를 씀
+// crossOriginIsolated: 브라우저가 이 페이지에 여러 스레드(SharedArrayBuffer)를 허락했는지 (세슘 유니티 빌드에 필요)
+// cesium=0: 세슘이 안 떠서 기본 3D로 다시 연 경우 (안전장치)
+const isCesium = window.crossOriginIsolated && route.query.cesium !== '0'
 const isDayNight = ref(true) // 3D 지도: 재생 시각에 맞춰 밤낮이 바뀌는지 (끄면 늘 낮). 2D·위성 지도는 늘 낮
 const unityMap = ref(null)   // 실감 3D 부품 (재생 시각·시점을 넘겨줌)
 const unityTrip = ref(null)  // 이 여행의 실감 3D 지도 자료 { json, photo } (켜면 이 브라우저에서 만듦)
@@ -115,11 +122,14 @@ const photos = ref([])            // 이 여행 사진·영상 (GET /api/trips/{
 const journal = reactive(loadJournal(route.query.id)) // 여행·장소 메모, 장소 별점, 대표 사진 (이 브라우저). reactive: 안의 값이 바뀌면 화면이 따라 바뀜
 const memoStopId = ref(null)     // 메모 카드에서 고른 장소 (핀·표를 누르면 바뀜)
 const memoSavedText = ref('')
-const isPhotoShown = ref(true)    // 지도에 사진 보이기
+const isPhotoShown = ref(false)   // 지도에 사진 동그라미 보이기 (11/19 피드백: 지도에선 뺌. 사진은 재생 중 카드·장소 블럭으로)
 const floatPhoto = ref(null)      // 재생 중 잠깐 뜨는 사진 카드
 const viewer = ref(null)          // 크게 보기 { list, index }
 const isNavFolded = ref(false)    // 내비 카드를 한 줄로 접었는지
-const navOffset = ref({ x: 0, y: 0 }) // 내비 카드를 끌어 옮긴 거리(px)
+const isShortsOpen = ref(false)   // 쇼츠를 띄웠는지
+const placeInput = ref(null)      // 장소 블럭 [＋ 사진]의 숨겨 둔 파일 고르기 칸
+const placeUploadId = ref(null)   // 사진을 올리는 중인 장소 번호 (그동안 버튼을 막음)
+const placeMessage = ref('')      // 장소 사진 올리기 결과 한 줄
 const clusters = ref({ isOn: false, stays: [] }) // DBSCAN으로 찾은 머문 곳 군집
 const navSlope = ref(null)        // 1인칭에서 지금 자리의 경사·해발 { percent, altitude } (DEM)
 const sideWidth = ref(readSideWidth()) // 오른쪽 칸 너비(px). 가운데 막대를 끌어서 바꿈
@@ -145,43 +155,55 @@ let introTimers = []
 let photoMarkers = []             // 사진 동그라미 마커
 let lastPhotoMinutes = null       // 재생 중 사진을 마지막으로 확인한 여행 시각 (이 뒤에 찍은 사진만 띄움)
 let floatTimer = null
+let placePicked = null            // [＋ 사진]을 누른 장소 (파일을 고른 뒤 올릴 곳)
+let photoQueue = []               // 재생 중 지나온 사진 중 아직 안 보여 준 것 (한 장씩 차례로)
+let isPhotoHolding = false        // 사진·영상을 보여 주는 동안 재생을 멈춰 두는지
 let isMapReady = false            // 지도 스타일을 다 읽었는지 (하늘·빛은 그 뒤에만 바꿀 수 있음)
 let forestData = null             // 숲 구역 자료 (forest-seoul.json)
 let forestReady = null            // 숲 자료를 다 읽으면 끝나는 약속(Promise)
 let streetPitch = STREET_PITCH_FLAT // 1인칭 카메라의 지금 기울기 (경사를 부드럽게 따라감)
 let roadLabelIds = null           // 길 이름 글자 층 (1인칭에서 숨김)
-let navDrag = null                // 내비 카드를 끄는 중 { startX, startY, x, y }
 
 // ============================== 데이터 읽기
 onMounted(async () => {
-  window.addEventListener('keydown', onViewerKey)
+  // 지난 여행 목록에서 눌러 들어오면 화면만 바뀌고 페이지를 새로 받지 않아서 세슘용 헤더가 없음 → 한 번만 새로 받음
+  //   iso=1: 이미 한 번 새로 받았다는 표시 (서버에 헤더가 없어도 계속 새로 받지 않게, 그때는 기본 3D)
+  if (!window.crossOriginIsolated && route.query.cesium !== '0' && route.query.iso !== '1') {
+    window.location.replace('/web/retro?id=' + route.query.id + '&iso=1')
+    return
+  }
+  window.addEventListener('keydown', onViewerKey, true) // true: 다른 것(3D 화면 등)보다 먼저 키를 받음 (스페이스바 재생·멈춤)
   try {
     const id = route.query.id
     retro.value = await get('/trips/' + id + '/retro')
     payments.value = await get('/trips/' + id + '/payments')
     companions.value = await get('/trips/' + id + '/companions')
-    document.title = retro.value.title + ' · 웹 회고'
+    document.title = retro.value.title + ' · 여행 기록'
   } catch (e) {
     if (e.status === 401) {
       router.replace({ path: '/web', query: { next: route.fullPath } }) // 웹 로그인 뒤 이 회고로 돌아옴
       return
     }
-    errorMessage.value = '회고를 불러오지 못했어요 (' + e.message + ')'
+    errorMessage.value = '여행 기록을 불러오지 못했어요 (' + e.message + ')'
     isLoading.value = false
     return
   }
   await loadPhotos()
   await loadGeo()
+  // 11/20: 불러오는 사이에 화면이 닫혔으면(뒤로 가기·개발 중 자동 새로 그리기) 지도 칸이 없음 → 지도를 만들지 않고 끝냄
+  //   (그냥 만들면 "container must be a String or HTMLElement" 오류 → 3D가 그 오류를 잡아 알림 창을 띄웠음)
+  if (!mapBox.value) return
   isLoading.value = false
   createMap()
+  // 세슘이면 3D 지도를 바로 켬. 세슘이 실패해서 cesium=0으로 다시 열었으면 기본 3D를 바로 켬 (안전장치: 평면 지도로 끝나지 않게)
+  if (isCesium || route.query.cesium === '0') isUnity3d.value = true
 })
 
 onUnmounted(() => {
-  window.removeEventListener('keydown', onViewerKey)
+  window.removeEventListener('keydown', onViewerKey, true)
   cancelAnimationFrame(playFrame)
   cancelAnimationFrame(riseFrame)
   stopSplitDrag()
-  stopNavDrag()
   clearTimeout(startFlyTimer)
   clearTimeout(floatTimer)
   for (const timer of introTimers) clearTimeout(timer)
@@ -586,10 +608,66 @@ const passedDongs = computed(() => {
   return Object.values(found)
 })
 
-// 머문 시간 글자 (숙소만 있는 동은 시간 대신 "숙소")
+// '장소' 블럭의 사진: 그 장소에 머문 시간(from ~ to) 안에 찍은 사진·영상
+function photosOfPlace(place) {
+  const list = []
+  for (const photo of shownPhotos.value) {
+    if (photo.minutes >= place.from && photo.minutes <= place.to) list.push(photo)
+  }
+  return list
+}
+
+// [＋ 사진]: 어느 장소에 올릴지 기억하고 숨겨 둔 파일 고르기 칸을 대신 눌러 줌
+//   place가 null이면(제목 옆 버튼) 장소를 안 정하고 사진 속 찍은 시각으로 서버가 찾음
+function pickPlacePhotos(place) {
+  placePicked = place
+  placeMessage.value = ''
+  placeInput.value.click()
+}
+
+// 파일을 고르면 이 여행에 올림. 찍은 시각이 파일 안에 없는 사진은 이 장소 시각(도착 1분 뒤부터 1분씩)으로 보내서 이 장소에 붙음
+async function uploadPlacePhotos(event) {
+  const files = event.target.files
+  const place = placePicked
+  if (files.length === 0) return
+  let times = null // null이면 사진 속 찍은 시각 그대로 (제목 옆 버튼)
+  if (place !== null) {
+    times = []
+    for (let i = 0; i < files.length; i++) times.push(placeTimeText(Math.min(place.to, place.from + 1 + i)))
+  }
+  placeUploadId.value = place === null ? 'all' : place.id
+  try {
+    const result = await uploadPhotos(files, route.query.id, times)
+    placeMessage.value = result.savedCount + '개 올렸어요'
+    if (result.unmatchedCount > 0) placeMessage.value += ' · ' + result.unmatchedCount + '개는 사진 속 찍은 날짜가 여행 밖이라 빠졌어요'
+    await loadPhotos()
+  } catch (e) {
+    placeMessage.value = e.message
+  }
+  placeUploadId.value = null
+  event.target.value = '' // 같은 파일을 다시 골라도 올라가게
+}
+
+// 여행 첫날 0시부터 분 → "2026-11-14T17:15" (사진 올리기 API의 시각 모양)
+function placeTimeText(minutes) {
+  const day = Math.floor(minutes / MINUTES_PER_DAY) + 1
+  return dateOfDay(day) + 'T' + toTime(Math.round(minutes) % MINUTES_PER_DAY)
+}
+
+// 지도 동네 이름표의 머문 시간 글자 (숙소만 있는 동은 시간 대신 "숙소")
 function dongStayText(dong) {
   return dong.stay > 0 ? toDuration(dong.stay) : '숙소'
 }
+
+// 오른쪽 '장소' 카드: 실제로 머문 곳(GPS 군집) 중 고른 날 것만. from은 여행 첫날 0시부터 분 → 1440분마다 하루
+const shownPlaces = computed(() => {
+  const list = []
+  for (const stay of clusters.value.stays) {
+    const day = Math.floor(stay.from / MINUTES_PER_DAY) + 1
+    if (isShownDay(day)) list.push(stay)
+  }
+  return list
+})
 
 const visitedGuText = computed(() => {
   const names = []
@@ -1219,10 +1297,20 @@ function toggleClusters() {
   for (const layer of CLUSTER_LAYERS) map.setLayoutProperty(layer, 'visibility', visibility)
 }
 
-// 군집 줄을 누르면 지도에서 그 자리로
+// '장소' 줄을 누르면 그 자리로
+//   평면 지도: 그 자리로 날아감
+//   3D 지도(11/19): 재생 위치를 그 장소에 도착한 시각으로 옮김 → 유니티 카메라가 따라가서 그 장소가 보이고, 남색 바도 "머무는 중"
 function focusCluster(stay) {
-  if (!clusters.value.isOn) toggleClusters()
   stopPlay()
+  if (isUnity3d.value) {
+    if (!canPlay.value) return
+    isFollow.value = true
+    progress.value = secondsAtMinutes(stay.from + 1) // +1분: 도착 바로 뒤 (머무는 중으로 보이게)
+    lastPhotoMinutes = nowMinutes.value // 건너뛴 사이의 사진은 띄우지 않음
+    clearPhotoQueue()
+    showProgress()
+    return
+  }
   setStreetLook(false)
   map.flyTo({ center: [stay.lng, stay.lat], zoom: 17, pitch: 0, duration: 1400, essential: true })
 }
@@ -1371,6 +1459,7 @@ function trackCoordinates() {
 // 동네 기둥 데이터: 머문 동은 머문 시간만큼 높게, 지나간 동은 낮게
 function toDongCollection() {
   const features = []
+  if (!IS_DONG_SHOWN) return { type: 'FeatureCollection', features: features }
   for (const dong of visitedDongs.value) {
     const height = VISIT_BASE_M + Math.min(dong.stay, VISIT_MAX_MINUTES) * VISIT_PER_MINUTE_M
     features.push({ type: 'Feature', geometry: dong.feature.geometry, properties: { kind: 'visit', h: height, stay: dong.stay } })
@@ -1462,6 +1551,7 @@ function drawMarkers() {
     otherMarkers.push(new maplibregl.Marker({ element: element, anchor: 'bottom' }).setLngLat([extra.lng, extra.lat]).addTo(map))
   }
   for (const dong of visitedDongs.value) {
+    if (!IS_DONG_SHOWN) break
     const element = document.createElement('div')
     element.className = 'wr-dong'
     element.appendChild(makeTag('wr-dong__name', dong.name))
@@ -1484,7 +1574,7 @@ function makePin(row) {
   element.type = 'button'
   element.className = 'wr-pin' + (row.isVisited ? '' : ' wr-pin--skip') + (row.diff !== null && row.diff >= 10 ? ' wr-pin--over' : '')
   element.appendChild(makeTag('wr-pin__no', String(row.no)))
-  element.appendChild(makeTag('wr-pin__name', row.name + (row.cost > 0 ? ' · ' + toWon(row.cost) : '')))
+  element.appendChild(makeTag('wr-pin__name', row.name)) // 11/19 피드백: 재생 화면에서는 쓴 돈을 빼고 이름만 (돈은 핀을 누르면 나오는 칸·오른쪽 카드에)
   return element
 }
 
@@ -1593,12 +1683,6 @@ function focusStop(row) {
   if (marker && !marker.getPopup().isOpen()) marker.togglePopup()
 }
 
-function focusDong(dong) {
-  stopPlay()
-  setStreetLook(false) // 내비 시점에서 숨겼던 핀·바닥 표시를 되돌림
-  map.flyTo({ center: centerOf(dong.feature), zoom: 14.2, pitch: 0, duration: 1600, essential: true })
-}
-
 // ============================== 지도 고르기
 function changeDay(day) {
   selectedDay.value = day
@@ -1610,6 +1694,17 @@ watch(selectedDay, () => {
   filterLandscapeDay()
   fitTrip(1800)
 })
+
+// [2D · 위성 · 3D] 버튼: 고른 지도 하나만 켬. 3D가 아닌 걸 고르면 3D를 끄고 아래 평면 지도를 그 모양으로
+function chooseMap(kind) {
+  if (kind === '3d') {
+    if (!isUnity3d.value) toggleUnity3d()
+    return
+  }
+  if (isUnity3d.value) toggleUnity3d()
+  const wantsSatellite = kind === 'satellite'
+  if (isSatellite.value !== wantsSatellite) toggleSatellite()
+}
 
 function toggleSatellite() {
   isSatellite.value = !isSatellite.value
@@ -1732,15 +1827,35 @@ const playRoute = computed(() => {
   let secondsPerMeter = totalMeters > 0 ? PLAY_MOVE_SECONDS / totalMeters : 0
   if (isStreet()) secondsPerMeter = 1 / STREET_SPEED // 거리 시점은 거리와 상관없이 일정한 속도
   else if (isUnity3d.value) secondsPerMeter = 1 / UNITY_TOP_SPEED // 3D 위에서 보기도 일정한 속도 (평면보다 천천히)
+  // 11/20: 3D에서는 탈것 구간(버스·지하철·한강버스)을 빨리 지나감 → 4배속도 느리다는 의견. 걷는 곳은 그대로 (멀미 안 나게)
+  const isVehicleFast = isUnity3d.value
+  const perMeter = [] // 구간마다 1m에 쓰는 재생 초
+  for (let i = 0; i + 1 < nodes.length; i++) {
+    perMeter.push(isVehicleFast ? secondsPerMeter / vehicleBoost(nodes, meters, i) : secondsPerMeter)
+  }
   let clock = 0
   for (let i = 0; i < nodes.length; i++) {
     nodes[i].enter = clock
     if (nodes[i].isStay) clock += stayPauseSeconds(nodes, i)
     nodes[i].leave = clock
-    if (i + 1 < nodes.length) clock += (meters[i + 1] - meters[i]) * secondsPerMeter
+    if (i + 1 < nodes.length) clock += (meters[i + 1] - meters[i]) * perMeter[i]
   }
-  return { nodes: nodes, coordinates: coordinates, meters: meters, seconds: clock, secondsPerMeter: secondsPerMeter }
+  return { nodes: nodes, coordinates: coordinates, meters: meters, seconds: clock, perMeter: perMeter }
 })
+
+// i번째 구간을 몇 배 빨리 지나갈지: 실제로 그 둘레를 얼마나 빨리 움직였나(앞뒤 VEHICLE_WINDOW 구간을 묶어서 잼)로 정함
+//   묶어서 재는 이유: GPS 한 점이 튀면 걷다가 잠깐 "차"가 돼서 화면이 빨라졌다 느려졌다 함 → 멀미
+//   예) 앞뒤 3구간 600m를 2분에 감 = 초당 5m(시속 18km) → 버스로 보고 3배
+function vehicleBoost(nodes, meters, i) {
+  const from = Math.max(0, i - VEHICLE_WINDOW)
+  const to = Math.min(nodes.length - 1, i + 1 + VEHICLE_WINDOW)
+  const minutes = nodes[to].from - nodes[from].to
+  if (minutes <= 0) return 1
+  const realSpeed = (meters[to] - meters[from]) / (minutes * 60) // 실제 초당 m
+  if (realSpeed >= FAST_RIDE_MS) return FAST_RIDE_BOOST
+  if (realSpeed >= RIDE_MS) return RIDE_BOOST
+  return 1
+}
 
 const playEnd = computed(() => playRoute.value.seconds)
 const canPlay = computed(() => shownTrack.value.length >= 2 && playEnd.value > 0)
@@ -1780,46 +1895,31 @@ function pointAtMeters(target) {
 
 // 출발부터 이 거리(m)까지 오는 데 재생 몇 초째인지 (시점을 바꿔도 같은 자리에서 이어 가려고)
 function secondsAtMeters(target) {
-  const { nodes, meters, secondsPerMeter } = playRoute.value
+  const { nodes, meters, perMeter } = playRoute.value
   for (let i = 0; i + 1 < nodes.length; i++) {
-    if (target < meters[i + 1]) return nodes[i].leave + (target - meters[i]) * secondsPerMeter
+    if (target < meters[i + 1]) return nodes[i].leave + (target - meters[i]) * perMeter[i]
   }
   return playEnd.value
 }
 
-// 경로에서 꺾이는 곳 찾기 (내비 안내용): 앞뒤 TURN_WINDOW_M 방향을 비교해서 많이 꺾인 곳
-const routeTurns = computed(() => {
-  const { nodes, meters } = playRoute.value
-  const turns = []
-  if (nodes.length < 3) return turns
-  const total = meters[meters.length - 1]
-  let best = null // 지금 꺾이는 중인 구간에서 가장 많이 꺾인 지점
-  for (let at = TURN_WINDOW_M; at <= total - TURN_WINDOW_M; at += TURN_STEP_M) {
-    const here = pointAtMeters(at)
-    const angle = angleDiff(bearingOf(pointAtMeters(at - TURN_WINDOW_M), here), bearingOf(here, pointAtMeters(at + TURN_WINDOW_M)))
-    if (Math.abs(angle) >= TURN_MIN_ANGLE) {
-      if (best === null || Math.abs(angle) > Math.abs(best.angle)) best = { meters: at, angle: angle }
-    } else if (best !== null) {
-      if (!isNearStay(best.meters)) turns.push(toTurn(best))
-      best = null
-    }
-  }
-  if (best !== null && !isNearStay(best.meters)) turns.push(toTurn(best))
-  return turns
-})
-
-// 머문 곳 근처인가 (머문 곳에서 방향이 바뀌는 건 회전 안내가 아님)
-function isNearStay(target) {
-  const { nodes, meters } = playRoute.value
+// 여행 시각(분)이 재생 몇 초째인지 (장소 줄을 눌러 그 시각으로 옮길 때)
+//   지점마다 시각(from~to)과 재생 초(enter~leave)가 짝지어 있어서, 시각이 들어가는 칸을 찾아 비율만큼 나눔
+function secondsAtMinutes(target) {
+  const { nodes } = playRoute.value
   for (let i = 0; i < nodes.length; i++) {
-    if (nodes[i].isStay && Math.abs(meters[i] - target) < TURN_STAY_GAP_M) return true
+    const node = nodes[i]
+    if (target > node.to) continue
+    if (target >= node.from) {
+      // 이 지점에 머무는 동안
+      return node.to > node.from ? node.enter + ((node.leave - node.enter) * (target - node.from)) / (node.to - node.from) : node.enter
+    }
+    if (i === 0) return 0
+    // 앞 지점에서 이 지점으로 이동하는 동안
+    const before = nodes[i - 1]
+    if (node.from <= before.to) return node.enter
+    return before.leave + ((node.enter - before.leave) * (target - before.to)) / (node.from - before.to)
   }
-  return false
-}
-
-function toTurn(found) {
-  if (Math.abs(found.angle) >= TURN_UTURN_ANGLE) return { meters: found.meters, name: '유턴', arrow: '↩' }
-  return found.angle > 0 ? { meters: found.meters, name: '우회전', arrow: '↱' } : { meters: found.meters, name: '좌회전', arrow: '↰' }
+  return playEnd.value
 }
 
 // 지금 재생 시각 (여행 첫날 0시부터 분)
@@ -1857,6 +1957,27 @@ function toggleUnity3d() {
   isUnity3d.value = !isUnity3d.value
   if (hasStarted) progress.value = Math.min(playEnd.value, secondsAtMeters(meters))
 }
+
+// 안전장치: 세슘 3D가 안 뜨면(파일·스레드 문제, 90초 넘게 걸림) 기본 3D로 다시 엶
+//   유니티 로더 파일이 세슘(6.3)과 기본(6.6)이 달라서 화면 안에서 바꾸지 않고 주소를 바꿔 새로 엶
+function onUnityFail() {
+  if (!isCesium) return
+  window.location.replace('/web/retro?id=' + route.query.id + '&cesium=0')
+}
+
+// 쇼츠 카드에 보일 사진: 영상이 아닌 첫 사진 (영상만 있으면 없음)
+const shortsCover = computed(() => {
+  for (const photo of photos.value) {
+    if (photo.mediaType !== 'video') return photo
+  }
+  return null
+})
+
+// 쇼츠 카드를 누르면: 지도 재생은 멈추고 쇼츠를 화면 가득 띄움
+function openShorts() {
+  stopPlay()
+  isShortsOpen.value = true
+}
 watch(nowMinutes, (minutes) => {
   if (isUnity3d.value && unityMap.value && canPlay.value) unityMap.value.seekClock(minutes)
 })
@@ -1876,24 +1997,18 @@ const navCard = computed(() => {
     const arrive = tripMinutes(row.day, row.actualArrive)
     const leave = arrive + (row.actualStay !== null ? row.actualStay : row.stay)
     if (arrive <= now && now < leave) return { isStay: true, row: row, minutes: Math.round(now - arrive) }
-    if (arrive > now && next === null) next = row
+    if (arrive > now && next === null) next = { row: row, arrive: arrive }
   }
   if (next === null) return null
   let meters = null
-  if (mePosition.value) meters = metersLeftTo(next)
-  return { isStay: false, row: next, meters: meters, turn: nextTurn(meters) }
+  if (mePosition.value) meters = metersLeftTo(next.row)
+  return { isStay: false, row: next.row, meters: meters, minutesLeft: Math.max(1, Math.round(next.arrive - now)) }
 })
 
-// 다음 회전 안내: 목적지 전에, TURN_NOTICE_M 안에 있는 첫 꺾임
-function nextTurn(metersToGoal) {
-  const now = routeAt(progress.value).meters
-  for (const turn of routeTurns.value) {
-    const left = turn.meters - now
-    if (left <= 0) continue
-    if (left > TURN_NOTICE_M || (metersToGoal !== null && left > metersToGoal)) return null
-    return { name: turn.name, arrow: turn.arrow, meters: left }
-  }
-  return null
+// 다음 목적지까지 남은 것: "350m · 12분 남음" (재생 전이라 내 위치가 없으면 시간만)
+function leftText(card) {
+  const time = toDuration(card.minutesLeft) + ' 남음'
+  return card.meters === null ? time : metersText(card.meters) + ' · ' + time
 }
 
 // 다음 목적지까지 남은 거리: 경로를 따라 잰 거리 (머문 지점을 못 찾으면 직선거리)
@@ -1962,7 +2077,7 @@ function resetPlay() {
   mePosition.value = null
   cameraCenter = null
   lastPhotoMinutes = null
-  floatPhoto.value = null
+  clearPhotoQueue()
   setStreetLook(false)
   if (meMarker) {
     meMarker.remove()
@@ -2063,23 +2178,6 @@ function findRoadLabelIds() {
   return roadLabelIds
 }
 
-// ---------- 내비 카드 끌어 옮기기 (접기 버튼을 누를 때는 안 옮김)
-function startNavDrag(event) {
-  if (event.target.closest('button')) return
-  navDrag = { startX: event.clientX, startY: event.clientY, x: navOffset.value.x, y: navOffset.value.y }
-  window.addEventListener('pointermove', onNavDrag)
-  window.addEventListener('pointerup', stopNavDrag)
-  event.preventDefault()
-}
-
-function onNavDrag(event) {
-  navOffset.value = { x: navDrag.x + event.clientX - navDrag.startX, y: navDrag.y + event.clientY - navDrag.startY }
-}
-
-function stopNavDrag() {
-  window.removeEventListener('pointermove', onNavDrag)
-  window.removeEventListener('pointerup', stopNavDrag)
-}
 
 // 거리 시점: 가까운 장소 핀만 보이게
 function updateStreetPins(position) {
@@ -2110,6 +2208,10 @@ function goToStart() {
 function playStep(now) {
   const seconds = Math.max(0, Math.min(0.1, (now - lastFrameTime) / 1000)) // 탭을 다녀와도 순간이동하지 않게 한 번에 0.1초까지만
   lastFrameTime = now
+  if (isPhotoHolding) {
+    playFrame = requestAnimationFrame(playStep) // 사진·영상을 보는 동안은 제자리 (다 보면 이어서 감)
+    return
+  }
   progress.value = Math.min(playEnd.value, progress.value + seconds * speed.value)
   showProgress(seconds)
   checkPhotoPopup()
@@ -2173,8 +2275,9 @@ function followCamera(at, frameSeconds) {
   map.jumpTo(cameraFor(cameraCenter, smoothBearing))
 }
 
+// 배속 버튼: 1 → 2 → 4 → 8 → 1 (11/20: 8배속 더함)
 function changeSpeed() {
-  speed.value = speed.value === 4 ? 1 : speed.value * 2
+  speed.value = speed.value === MAX_SPEED ? 1 : speed.value * 2
 }
 
 // 막대를 끌면 그 위치로
@@ -2183,6 +2286,7 @@ const sliderValue = computed({
   set: (value) => {
     progress.value = (Number(value) / 1000) * playEnd.value
     lastPhotoMinutes = nowMinutes.value // 막대로 건너뛴 사이의 사진은 띄우지 않음
+    clearPhotoQueue()
     showProgress()
   },
 })
@@ -2198,20 +2302,36 @@ function checkPhotoPopup() {
   const now = nowMinutes.value
   const before = lastPhotoMinutes === null ? now - 1 : lastPhotoMinutes
   lastPhotoMinutes = now
+  // 11/19: 한 장만 띄우지 않고 지나온 사진을 다 줄 세움 (같은 장소에서 여러 장 찍었으면 여러 장 다 보여 줌)
   for (const photo of shownPhotos.value) {
-    if (photo.minutes > before && photo.minutes <= now) {
-      showFloatPhoto(photo)
-      return
-    }
+    if (photo.minutes > before && photo.minutes <= now) photoQueue.push(photo)
   }
+  if (photoQueue.length > 0 && !isPhotoHolding) showNextPhoto()
 }
 
-function showFloatPhoto(photo) {
-  floatPhoto.value = photo
+// 줄 선 사진을 한 장씩: 사진은 PHOTO_HOLD_MS, 영상은 끝날 때까지(@ended) 보여 주고 다음 장. 다 보면 재생을 이어 감
+function showNextPhoto() {
   clearTimeout(floatTimer)
-  floatTimer = setTimeout(() => {
+  if (photoQueue.length === 0) {
     floatPhoto.value = null
-  }, PHOTO_POP_MS)
+    isPhotoHolding = false
+    return
+  }
+  const photo = photoQueue.shift() // shift: 줄 맨 앞을 꺼냄
+  floatPhoto.value = photo
+  isPhotoHolding = true
+  let waitMs = PHOTO_HOLD_MS
+  // 영상은 @ended로 넘어감. 소리 막힘 등으로 안 끝나는 경우를 위해 길이 + 1초 뒤에도 넘어가게
+  if (photo.mediaType === 'video') waitMs = Math.min(VIDEO_MAX_MS, (photo.durationSec || 15) * 1000 + 1000)
+  floatTimer = setTimeout(showNextPhoto, waitMs)
+}
+
+// 재생 위치를 건너뛰면 줄 선 사진은 버림
+function clearPhotoQueue() {
+  photoQueue = []
+  isPhotoHolding = false
+  clearTimeout(floatTimer)
+  floatPhoto.value = null
 }
 
 // ============================== 사진 크게 보기
@@ -2229,10 +2349,25 @@ function moveViewer(step) {
 
 // 크게 보기 단축키: ← → 넘기기, Esc 닫기
 function onViewerKey(event) {
-  if (!viewer.value) return
+  if (!viewer.value) {
+    checkSpaceKey(event)
+    return
+  }
   if (event.key === 'Escape') viewer.value = null
   else if (event.key === 'ArrowLeft') moveViewer(-1)
   else if (event.key === 'ArrowRight') moveViewer(1)
+}
+
+// 스페이스바 = 재생·멈춤 (11/19 피드백). 메모처럼 글자 칸에 쓰는 중이거나 쇼츠를 보는 중이면 그대로 둠
+function checkSpaceKey(event) {
+  if (event.key !== ' ' || isShortsOpen.value || !canPlay.value) return
+  const tag = event.target.tagName
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+  event.preventDefault() // 스페이스바가 화면을 내리거나 버튼을 누르지 않게
+  event.stopPropagation() // 3D 화면(유니티)까지 가지 않게
+  // ▶ 재생 버튼을 마우스로 누른 뒤면 그 버튼에 초점이 남아 있어서, 스페이스바가 버튼을 한 번 더 눌러 멈춤이 바로 풀렸음 → 초점을 뺌
+  if (document.activeElement && document.activeElement.tagName === 'BUTTON') document.activeElement.blur()
+  togglePlay()
 }
 
 function photoCaption(photo) {
@@ -2261,7 +2396,7 @@ watch(shownPhotos, drawPhotoMarkers)
     <section class="wr-map">
       <div ref="mapBox" class="wr-map__canvas"></div>
       <!-- 실감 3D (유니티 WebGL): 켜면 지도 위를 덮음. 지금은 시연 자료(1박 2일)를 그림 -->
-      <RetroUnityMap v-if="isUnity3d" ref="unityMap" class="wr-unity" :trip-data="unityTrip" :status-text="unityStatus" @ready="syncUnity" />
+      <RetroUnityMap v-if="isUnity3d" ref="unityMap" class="wr-unity" :is-cesium="isCesium" :trip-data="unityTrip" :status-text="unityStatus" @ready="syncUnity" @fail="onUnityFail" />
       <!-- 밤·노을 덮개: 재생 시각의 해 높이에 맞춘 색 (지도 위, 카드 아래, 누르기는 통과) -->
       <!-- 3D 위에서 보기 가까이·멀리 (마우스 휠도 됨) -->
       <div v-if="isUnity3d && viewMode === 'top'" class="wr-unity-zoom">
@@ -2270,71 +2405,61 @@ watch(shownPhotos, drawPhotoMarkers)
       </div>
 
       <div v-if="isLoading || errorMessage" class="wr-state">
-        <p>{{ errorMessage || '회고를 불러오는 중…' }}</p>
+        <p>{{ errorMessage || '여행 기록을 불러오는 중…' }}</p>
       </div>
 
       <template v-if="retro">
-        <!-- 위 왼쪽: 여행 제목 -->
-        <div class="wr-title">
-          <div class="wr-title__links">
-            <RouterLink to="/web/trips" class="wr-btn">← 지난 여행</RouterLink>
-          </div>
-          <span class="wr-badge">착착트립 · 웹 회고</span>
-          <h1>{{ retro.title }}</h1>
-          <p>{{ retro.startDate }} ~ {{ retro.endDate }} · {{ retro.people }}명<template v-if="visitedGuText"> · {{ visitedGuText }}</template></p>
-        </div>
+        <!-- 위 왼쪽: 지난 여행 버튼만 (11/19 피드백: 흰 제목 카드는 빼고, 바로 밑에 남색 내비 바) -->
+        <RouterLink to="/web/trips" class="wr-btn wr-back">← 지난 여행</RouterLink>
 
         <!-- 위 오른쪽: 날짜·지도 고르기 -->
         <div class="wr-tools">
           <div class="wr-seg">
             <button v-for="item in dayButtons" :key="item.day" type="button" :class="{ 'is-on': selectedDay === item.day }" @click="changeDay(item.day)">{{ item.label }}</button>
           </div>
+          <!-- 지도 고르기 (11/20): 2D · 위성 · 3D 중 하나만 켜짐 (전에는 3D가 켜져도 2D가 같이 골라져 보였음) -->
           <div class="wr-seg">
-            <button type="button" :class="{ 'is-on': !isSatellite }" @click="isSatellite && toggleSatellite()">2D</button>
-            <button type="button" :class="{ 'is-on': isSatellite }" @click="!isSatellite && toggleSatellite()">위성</button>
+            <button type="button" :class="{ 'is-on': !isUnity3d && !isSatellite }" @click="chooseMap('2d')">2D</button>
+            <button type="button" :class="{ 'is-on': !isUnity3d && isSatellite }" @click="chooseMap('satellite')">위성</button>
+            <button type="button" :class="{ 'is-on': isUnity3d }" title="건물·한강·지형까지 보이는 3D 지도" @click="chooseMap('3d')">3D</button>
           </div>
-          <button type="button" class="wr-btn" :class="{ 'is-on': isUnity3d }" title="건물·한강·밤 불빛까지 보이는 3D 지도 (누르면 켜고 끔)" @click="toggleUnity3d">🏙 3D 지도</button>
-          <button v-if="isUnity3d" type="button" class="wr-btn" :class="{ 'is-on': isDayNight }" title="재생 시각에 맞춰 밤낮 바꾸기 (끄면 늘 낮)" @click="isDayNight = !isDayNight">🌙 밤낮</button>
-          <!-- 11/13: 지도 버튼은 실감 3D와 기본/위성만 남김 (3D·2D, 사진, 해·하늘, 동네 다시 띄우기, 머문 곳, 가시권 버튼은 뺌. 기능 코드는 그대로) -->
+          <button v-if="isUnity3d" type="button" class="wr-btn" :class="{ 'is-on': isDayNight }" title="재생 시각에 맞춰 밤낮 바꾸기 (끄면 늘 낮)" @click="isDayNight = !isDayNight">🌙 밤낮</button>          <!-- 11/13: 지도 버튼은 실감 3D와 기본/위성만 남김 (3D·2D, 사진, 해·하늘, 동네 다시 띄우기, 머문 곳, 가시권 버튼은 뺌. 기능 코드는 그대로) -->
         </div>
 
-        <!-- 내비 카드 -->
-        <div v-if="navCard && (playing || progress > 0)" class="wr-nav" :class="{ 'wr-nav--street': viewMode === 'street' && !isNavFolded, 'is-folded': isNavFolded }"
-          :style="{ transform: 'translate(calc(-50% + ' + navOffset.x + 'px), ' + navOffset.y + 'px)' }" title="끌어서 옮길 수 있어요" @pointerdown="startNavDrag">
+        <!-- 내비 카드 (11/19: 왼쪽 위 [지난 여행] 바로 밑에 고정, 재생 전에도 첫 목적지를 보여 줌) -->
+        <div v-if="navCard" class="wr-nav" :class="{ 'wr-nav--street': viewMode === 'street' && !isNavFolded, 'is-folded': isNavFolded }">
           <button type="button" class="wr-nav__fold" :aria-expanded="!isNavFolded" :title="isNavFolded ? '안내 펼치기' : '안내 접기'" :aria-label="isNavFolded ? '안내 펼치기' : '안내 접기'" @click="isNavFolded = !isNavFolded">{{ isNavFolded ? '▾' : '▴' }}</button>
           <!-- 재생 중 사진을 찍은 시각을 지나면 내비 카드 바로 밑에 잠깐 뜨는 카드 (카드를 옮기면 같이 움직임) -->
           <Transition name="wr-float">
             <button v-if="floatPhoto" type="button" class="wr-float" @click="openViewer([floatPhoto], 0)">
-              <video v-if="floatPhoto.mediaType === 'video'" :src="floatPhoto.url" muted autoplay loop></video>
+              <!-- 영상: 소리까지 끝까지 틀고, 끝나면 다음 사진으로 (그동안 재생은 멈춰 있음) -->
+              <video v-if="floatPhoto.mediaType === 'video'" :key="floatPhoto.id" :src="floatPhoto.url" autoplay playsinline @ended="showNextPhoto"></video>
               <img v-else :src="floatPhoto.url" alt="" />
               <span>📷 {{ floatPhoto.takenAt }} · {{ floatPhoto.placeName }}</span>
             </button>
           </Transition>
-          <div v-if="isNavFolded" class="wr-nav__line">{{ toDayTime(nowMinutes) }} · {{ navCard.isStay ? '머무는 중' : '다음' }} <b>{{ navCard.row.name }}</b><template v-if="!navCard.isStay && navCard.meters !== null"> {{ metersText(navCard.meters) }}</template></div>
+          <div v-if="isNavFolded" class="wr-nav__line">{{ toDayTime(nowMinutes) }} · {{ navCard.isStay ? '머무는 중' : '다음' }} <b>{{ navCard.row.name }}</b><template v-if="!navCard.isStay"> {{ leftText(navCard) }}</template></div>
           <div v-if="!isNavFolded" class="wr-nav__time">{{ toDayTime(nowMinutes) }}<span v-if="viewMode === 'street' && navSlope" class="wr-nav__slope">{{ slopeText(navSlope) }}</span></div>
           <template v-if="isNavFolded"></template>
           <template v-else-if="navCard.isStay">
             <div class="wr-nav__label">머무는 중</div>
             <div class="wr-nav__place">{{ navCard.row.name }}</div>
             <div class="wr-nav__sub">
-              {{ navCard.minutes }}분째 · 계획 {{ toDuration(navCard.row.stay) }}
-              <b v-if="navCard.row.diff !== null && navCard.row.diff > 0" class="is-over"> → 실제 {{ toDuration(navCard.row.actualStay) }} ({{ diffText(navCard.row.diff) }})</b>
+              <!-- 11/19 피드백: 계획 시간은 빼고 실제로 머문 시간만 -->
+              {{ navCard.minutes }}분째<template v-if="navCard.row.actualStay !== null"> · {{ toDuration(navCard.row.actualStay) }} 머묾</template>
             </div>
           </template>
           <template v-else>
             <div class="wr-nav__label">다음 목적지</div>
-            <div class="wr-nav__place">{{ navCard.row.name }} <span v-if="navCard.meters !== null">{{ metersText(navCard.meters) }}</span></div>
-            <div v-if="navCard.turn" class="wr-nav__turn"><span>{{ navCard.turn.arrow }}</span> {{ metersText(navCard.turn.meters) }} 앞 {{ navCard.turn.name }}</div>
-            <div class="wr-nav__sub">계획 {{ navCard.row.time }} 도착 · 실제 {{ navCard.row.actualArrive }}</div>
+            <div class="wr-nav__place">{{ navCard.row.name }}</div>
+            <!-- 11/19 피드백: 좌회전·우회전 안내는 빼고, 남은 거리·시간과 도착 시각만 -->
+            <div class="wr-nav__sub">{{ leftText(navCard) }} · <b>{{ navCard.row.actualArrive }} 도착</b></div>
           </template>
         </div>
 
         <!-- 범례 -->
         <div class="wr-legend">
           <span><i class="wr-legend__real"></i>실제 경로 (GPS)</span>
-          <span><i class="wr-legend__dong"></i>머문 동네 (높을수록 오래)</span>
-          <span><i class="wr-legend__pass"></i>지나간 동네</span>
-          <span v-if="shownPhotos.length > 0"><i class="wr-legend__photo"></i>사진 {{ shownPhotos.length }}장 (찍은 곳)</span>
           <template v-if="clusters.isOn">
             <span><i class="wr-legend__dot" style="background: #1F3A68"></i>머문 곳 · 계획한 곳</span>
             <span><i class="wr-legend__dot" style="background: #E8603F"></i>머문 곳 · 계획 밖</span>
@@ -2378,50 +2503,50 @@ watch(shownPhotos, drawPhotoMarkers)
         <template v-if="summary.skipped > 0"> 건너뛴 곳 {{ summary.skipped }}곳.</template>
       </p>
 
-      <!-- 여행 분석 (11/11, 11/12 이름 바꿈): 걸은 길 구성 + 머문 곳 -->
+      <!-- 쇼츠 (11/19 피드백: 오른쪽 칸에): 대표 사진을 누르면 이 여행 사진을 화면 가득 자동으로 넘겨 봄 -->
       <section class="wr-card">
-        <RetroLandscapeCard :landscape="landscape" :is-on="isLandscapeOn" :day="selectedDay" :clusters="clusters"
-          @toggle="toggleLandscape" @focus="focusLandscape"
-          @toggle-clusters="toggleClusters" @focus-cluster="focusCluster" />
+        <h2>쇼츠 <small>{{ photos.length > 0 ? '사진·영상 ' + photos.length + '장을 자동으로 넘겨 봐요' : '사진을 올리면 쇼츠로 볼 수 있어요' }}</small></h2>
+        <button v-if="shortsCover" type="button" class="wr-shorts" @click="openShorts">
+          <img :src="shortsCover.url" alt="" />
+          <span>▶ 쇼츠 보기</span>
+        </button>
       </section>
 
-      <!-- 메모 (11/11): 여행 메모 + 고른 장소의 메모·별점 (메모·사진 화면과 같은 저장소) -->
-      <section class="wr-card">
-        <h2>메모 <small>{{ memoSavedText || '이 브라우저에 저장돼요' }}</small></h2>
-        <label class="wr-memo__label" for="wr-trip-memo">여행 메모</label>
-        <textarea id="wr-trip-memo" v-model="journal.diary" rows="3" class="wr-memo__text" placeholder="이번 여행은 어땠나요? 첫 줄은 지난 여행 목록 카드에 보여요."></textarea>
-        <template v-if="dayButtons.length > 2">
-          <span class="wr-memo__label">날짜별 한 줄 메모</span>
-          <input v-for="item in dayButtons.slice(1)" :key="item.day" v-model="journal.dayNotes[item.day]" class="wr-memo__day" :placeholder="item.label + ' 한 줄'" :aria-label="item.label + ' 한 줄 메모'" />
-        </template>
-        <label class="wr-memo__label" for="wr-stop-pick">장소 메모 <small>지도 핀을 눌러도 골라져요</small></label>
-        <select id="wr-stop-pick" v-model="memoStopId" class="wr-memo__select">
-          <option :value="null">장소를 골라 주세요</option>
-          <option v-for="row in allStopRows" :key="row.id" :value="row.id">{{ row.day }}일차 {{ row.no }}. {{ row.name }}</option>
-        </select>
-        <template v-if="memoStop">
-          <div class="wr-memo__stars" :aria-label="memoStop.name + ' 별점'">
-            <button v-for="value in 5" :key="value" type="button" :class="{ 'is-on': value <= (journal.stopRatings[memoStop.id] || 0) }" :aria-label="value + '점'" @click="setStopRating(value)">★</button>
-            <span>{{ journal.stopRatings[memoStop.id] ? journal.stopRatings[memoStop.id] + '점' : '별을 눌러 점수를 줘요' }}</span>
+      <!-- 장소 (11/19 피드백: '여행 분석'·'다닌 동네' 대신 실제로 머문 곳만 시간 순으로. 누르면 지도로, 3D면 그 시각으로) -->
+      <section v-if="shownPlaces.length > 0" class="wr-card">
+        <!-- 제목 옆 [＋ 사진·영상] (11/19 피드백): 여러 장을 한 번에, 사진 속 찍은 시각으로 장소가 알아서 정해짐 -->
+        <div class="wr-card__head">
+          <h2>장소 <small>{{ shownPlaces.length }}곳 · 누르면 지도에서 보여요</small></h2>
+          <button type="button" class="wr-place__add" :disabled="placeUploadId !== null" @click="pickPlacePhotos(null)">{{ placeUploadId === 'all' ? '올리는 중…' : '＋ 사진·영상' }}</button>
+        </div>
+        <div v-for="place in shownPlaces" :key="place.id" class="wr-place">
+          <!-- 장소 이름 줄: 왼쪽 이름·시각(누르면 지도로), 오른쪽 [＋ 사진] (11/19 피드백: 장소 옆에) -->
+          <div class="wr-place__head">
+            <button type="button" class="wr-placerow" @click="focusCluster(place)">
+              <b>{{ place.name || '이름 없는 곳' }}</b>
+              <small>{{ toDayTime(place.from) }}부터 {{ toDuration(place.minutes) }}</small>
+            </button>
+            <button type="button" class="wr-place__add" :disabled="placeUploadId !== null" @click="pickPlacePhotos(place)">{{ placeUploadId === place.id ? '올리는 중…' : '＋ 사진' }}</button>
           </div>
-          <textarea v-model="journal.stopNotes[memoStop.id]" rows="3" class="wr-memo__text" :placeholder="memoStop.name + '에서 있었던 일, 맛, 기분…'"></textarea>
-        </template>
+          <!-- 이 장소에 머무는 동안 찍은 사진 (있을 때만) -->
+          <div v-if="photosOfPlace(place).length > 0" class="wr-place__photos">
+            <button v-for="(photo, i) in photosOfPlace(place)" :key="photo.id" type="button" class="wr-place__thumb" :aria-label="photo.takenAt + ' 사진 크게 보기'" @click="openViewer(photosOfPlace(place), i)">
+              <video v-if="photo.mediaType === 'video'" :src="photo.url + '#t=0.1'" muted preload="metadata"></video>
+              <img v-else :src="photo.url" alt="" loading="lazy" />
+              <span v-if="photo.mediaType === 'video'">▶</span>
+            </button>
+          </div>
+        </div>
+        <input ref="placeInput" type="file" multiple accept="image/*,video/*" hidden @change="uploadPlacePhotos" />
+        <p v-if="placeMessage" class="wr-place__msg" role="status">{{ placeMessage }}</p>
       </section>
+
+      <!-- 메모 카드 (11/11): 11/19 피드백으로 화면에서 뺌. 전에 적은 메모는 이 브라우저에 그대로 남아 있음 (journal) -->
 
       <!-- 사진 (11/11: 메모·사진 페이지에서 옮김) -->
-      <section class="wr-card">
-        <RetroPhotoCard ref="photoCard" :retro="retro" :photos="photos" :journal="journal" @reload="reloadPhotosFor" @view="openViewer([Object.assign({ placeName: '' }, $event)], 0)" />
-      </section>
-
-      <!-- 다닌 동네 -->
-      <section v-if="visitedDongs.length > 0" class="wr-card">
-        <h2>다닌 동네 <small>{{ visitedDongs.length }}개 동 · 지나간 동 {{ passedDongs.length }}개</small></h2>
-        <button v-for="(dong, i) in visitedDongs" :key="dong.code" type="button" class="wr-dongrow" @click="focusDong(dong)">
-          <span class="wr-dongrow__rank">{{ i + 1 }}</span>
-          <span class="wr-dongrow__name">{{ dong.name }} <small>{{ dong.gu }}</small></span>
-          <span class="wr-dongrow__stay">{{ dongStayText(dong) }}</span>
-          <span class="wr-dongrow__places">{{ dong.places.join(', ') }}</span>
-        </button>
+      <!-- 사진 카드는 11/19 피드백으로 화면에서 뺌 (사진은 '장소' 블럭에서). 사진 크게 보기의 [꾸미기] 편집기만 쓰려고 남김 -->
+      <section>
+        <RetroPhotoCard ref="photoCard" is-editor-only :retro="retro" :photos="photos" :journal="journal" @reload="reloadPhotosFor" @view="openViewer([Object.assign({ placeName: '' }, $event)], 0)" />
       </section>
 
       <!-- 계획 vs 실제 카드: 11/11 화면에서 뺌 (일단 주석으로 남김, 다시 쓰려면 이 주석을 풀기)
@@ -2449,7 +2574,7 @@ watch(shownPhotos, drawPhotoMarkers)
       <!-- 비용 -->
       <section class="wr-card">
         <h2>쓴 돈 <small>{{ toWon(summary.cost) }}</small></h2>
-        <p v-if="costByCategory.length === 0" class="wr-empty">결제 내역이 없어요. 앱 회고에서 넣을 수 있어요.</p>
+        <p v-if="costByCategory.length === 0" class="wr-empty">결제 내역이 없어요. 앱 여행 기록에서 넣을 수 있어요.</p>
         <div v-for="item in costByCategory" :key="item.name" class="wr-bar">
           <span class="wr-bar__name">{{ item.name }}</span>
           <span class="wr-bar__track"><i :style="{ width: item.percent + '%' }"></i></span>
@@ -2560,6 +2685,9 @@ watch(shownPhotos, drawPhotoMarkers)
       </section>
     </aside>
 
+    <!-- 쇼츠 (11/19): 이 여행 사진을 PC 화면 크기로 자동 넘겨 보기 -->
+    <RetroShorts v-if="isShortsOpen" :trip-id="route.query.id" :retro="retro" :photos="photos" @close="isShortsOpen = false" />
+
     <!-- 사진 크게 보기 -->
     <div v-if="viewerPhoto" class="wr-viewer" role="dialog" aria-modal="true" aria-label="사진 크게 보기" @click.self="viewer = null">
       <video v-if="viewerPhoto.mediaType === 'video'" :key="viewerPhoto.id" :src="viewerPhoto.url" controls autoplay></video>
@@ -2592,19 +2720,16 @@ watch(shownPhotos, drawPhotoMarkers)
 .wr-map__canvas { position: absolute; inset: 0; }
 .wr-state { position: absolute; inset: 0; display: grid; place-items: center; background: var(--surface); font-size: 16px; z-index: 5; }
 
-.wr-title, .wr-tools, .wr-nav, .wr-legend, .wr-player {
+.wr-tools, .wr-nav, .wr-legend, .wr-player {
   position: absolute;
   z-index: 2;
   background: rgba(255, 255, 255, 0.94);
   border-radius: var(--radius-lg);
   box-shadow: 0 4px 18px rgba(24, 33, 58, 0.16);
 }
-.wr-title { top: 16px; left: 16px; padding: 14px 18px; max-width: 420px; }
-.wr-title h1 { margin: 6px 0 2px; font-size: 22px; line-height: 28px; }
-.wr-title p { margin: 0; color: var(--ink-muted); }
-.wr-badge { display: inline-block; padding: 2px 8px; border-radius: var(--radius-full); background: var(--navy); color: var(--on-navy); font-size: 12px; }
+.wr-back { position: absolute; z-index: 2; top: 16px; left: 16px; color: var(--ink); text-decoration: none; box-shadow: 0 2px 8px rgba(24, 33, 58, 0.18); }
 
-.wr-tools { background: none; box-shadow: none; top: 16px; right: 16px; display: flex; flex-wrap: wrap; gap: 8px; padding: 0; max-width: min(560px, max(260px, calc(100% - 470px))); justify-content: flex-end; } /* 지도가 좁아지면 제목 카드와 안 겹치게 여러 줄로 */
+.wr-tools { background: none; box-shadow: none; top: 16px; right: 16px; display: flex; flex-wrap: wrap; gap: 8px; padding: 0; max-width: min(560px, max(260px, calc(100% - 420px))); justify-content: flex-end; } /* 지도가 좁아지면 왼쪽 남색 바와 안 겹치게 여러 줄로 */
 .wr-tools > * { box-shadow: 0 2px 8px rgba(24, 33, 58, 0.18); } /* 상자 없이 버튼마다 그림자 (지도 위에서도 보이게) */
 .wr-seg { display: flex; border: 1px solid var(--line); border-radius: var(--radius-md); overflow: hidden; }
 .wr-seg button { padding: 6px 12px; border: 0; background: #fff; cursor: pointer; }
@@ -2613,23 +2738,19 @@ watch(shownPhotos, drawPhotoMarkers)
 .wr-btn:disabled, .wr-player__play:disabled { opacity: 0.5; cursor: default; }
 
 .wr-nav__fold { position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border: 0; border-radius: 50%; background: rgba(255, 255, 255, 0.16); color: #fff; font-size: 12px; cursor: pointer; }
-.wr-nav.is-folded { min-width: 0; padding: 8px 44px 8px 14px; }
+.wr-nav.is-folded { width: 400px; padding: 8px 44px 8px 14px; }
 .wr-nav__line { font-size: 13px; white-space: nowrap; }
 .wr-nav__slope { margin-left: 10px; padding: 1px 8px; border-radius: var(--radius-full); background: rgba(255, 255, 255, 0.16); font-weight: 700; }
-.wr-nav { cursor: grab; touch-action: none; user-select: none; top: 176px; left: 50%; transform: translateX(-50%); min-width: 340px; padding: 12px 18px; background: rgba(31, 58, 104, 0.95); color: #fff; }
+.wr-nav { box-sizing: border-box; top: 60px; left: 16px; width: 400px; padding: 12px 44px 12px 18px; background: rgba(31, 58, 104, 0.95); color: #fff; } /* 11/19: [지난 여행] 바로 밑 왼쪽에 고정, 폭은 밑에 뜨는 사진 카드(400px)와 같게 */
 .wr-nav__time { font-size: 12px; opacity: 0.8; }
 .wr-nav__label { margin-top: 2px; font-size: 12px; color: #F6B9A6; }
 .wr-nav__place { font-size: 20px; font-weight: 700; line-height: 28px; }
 .wr-nav__place span { margin-left: 6px; font-size: 15px; font-weight: 400; opacity: 0.85; }
 .wr-nav__sub { font-size: 13px; opacity: 0.9; }
 .wr-nav__sub .is-over { color: #FFB49E; }
-.wr-nav__turn { margin-top: 2px; font-size: 18px; font-weight: 700; color: #FFE08A; }
-.wr-nav__turn span { font-size: 22px; }
-.wr-nav--street { min-width: 420px; padding: 16px 24px; }
-.wr-nav--street .wr-nav__turn { font-size: 26px; line-height: 34px; }
-.wr-nav--street .wr-nav__turn span { font-size: 32px; }
-.wr-nav--street .wr-nav__place { font-size: 28px; line-height: 36px; }
-.wr-nav--street .wr-nav__place span { display: block; margin-left: 0; font-size: 22px; font-weight: 700; opacity: 1; }
+.wr-nav--street { padding: 16px 48px 16px 24px; }
+.wr-nav--street .wr-nav__place { font-size: 26px; line-height: 34px; }
+.wr-nav--street .wr-nav__sub { font-size: 16px; }
 
 .wr-legend { left: 16px; bottom: 92px; display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; font-size: 12px; }
 .wr-legend i { display: inline-block; width: 22px; height: 0; margin-right: 6px; vertical-align: middle; }
@@ -2667,13 +2788,25 @@ watch(shownPhotos, drawPhotoMarkers)
 .wr-card h2 small { margin-left: 6px; font-size: 12px; font-weight: 400; color: var(--ink-muted); }
 .wr-empty { margin: 0; color: var(--ink-muted); }
 
-.wr-dongrow { display: grid; grid-template-columns: 24px 1fr auto; gap: 2px 8px; width: 100%; padding: 8px 4px; border: 0; border-top: 1px solid var(--line); background: none; text-align: left; cursor: pointer; }
-.wr-dongrow:hover { background: var(--surface); }
-.wr-dongrow__rank { grid-row: span 2; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--coral); color: #fff; font-size: 12px; }
-.wr-dongrow__name { font-weight: 700; }
-.wr-dongrow__name small { font-weight: 400; color: var(--ink-muted); }
-.wr-dongrow__stay { color: var(--coral-ink); font-weight: 700; white-space: nowrap; text-align: right; }
-.wr-dongrow__places { grid-column: 2 / 4; font-size: 12px; color: var(--ink-muted); }
+.wr-shorts { position: relative; display: block; width: 100%; height: 160px; padding: 0; overflow: hidden; border: 0; border-radius: var(--radius-md); background: #0A0E1C; cursor: pointer; }
+.wr-shorts img { width: 100%; height: 100%; object-fit: cover; opacity: 0.75; transition: opacity 0.2s; }
+.wr-shorts:hover img { opacity: 0.95; }
+.wr-shorts span { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 8px 18px; border-radius: var(--radius-full); background: rgba(0, 0, 0, 0.55); color: #fff; font-size: 15px; font-weight: 700; }
+.wr-placerow {display: flex; flex-direction: column; width: 100%; padding: 8px 4px; border: 0; border-top: 1px solid var(--line); background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.wr-placerow:hover { background: var(--surface); }
+.wr-placerow small { color: var(--ink-muted); font-size: 12px; }
+.wr-place { border-top: 1px solid var(--line); }
+.wr-place .wr-placerow { border-top: 0; }
+.wr-place__photos { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 4px 10px; }
+.wr-place__thumb { position: relative; width: 64px; height: 64px; padding: 0; overflow: hidden; border: 0; border-radius: var(--radius-md); background: var(--line); cursor: zoom-in; }
+.wr-place__thumb img, .wr-place__thumb video { display: block; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.wr-place__thumb span { position: absolute; right: 4px; bottom: 4px; padding: 0 5px; border-radius: var(--radius-full); background: rgba(0, 0, 0, 0.6); color: #fff; font-size: 10px; }
+.wr-place__head { display: flex; align-items: center; gap: 8px; }
+.wr-place__head .wr-placerow { flex: 1; min-width: 0; }
+.wr-place__add { flex: none; padding: 6px 12px; border: 1px solid var(--line); border-radius: var(--radius-full); background: #fff; color: var(--navy); font: inherit; font-size: 12px; font-weight: 700; white-space: nowrap; cursor: pointer; }
+.wr-place__add:hover:not(:disabled) { background: var(--surface); }
+.wr-place__add:disabled { opacity: 0.5; cursor: default; }
+.wr-place__msg { margin: 8px 0 0; color: var(--ink-muted); font-size: 12px; }
 
 .wr-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .wr-table th { padding: 4px; color: var(--ink-muted); font-weight: 400; text-align: left; border-bottom: 1px solid var(--line); }
@@ -2781,7 +2914,6 @@ watch(shownPhotos, drawPhotoMarkers)
 /* (11/10) 웹사이트 이동 버튼 · 사진 · 해 */
 .wr-btn { display: inline-block; color: var(--ink); font: inherit; text-decoration: none; }
 .wr-btn.is-on { border-color: var(--navy); background: var(--navy-soft); color: var(--navy); font-weight: 700; }
-.wr-title__links { display: flex; gap: 6px; margin-bottom: 8px; }
 .wr-payadd { display: flex; gap: 8px; margin: 6px 0 10px; }
 .wr-unity { position: absolute; inset: 0; z-index: 1; } /* 카드·버튼(z-index 2)은 3D 위에 그대로 보임 */
 .wr-unity-zoom { position: absolute; right: 10px; bottom: 96px; z-index: 3; display: flex; flex-direction: column; border-radius: var(--radius-sm); overflow: hidden; box-shadow: 0 2px 8px rgba(24, 33, 58, 0.18); }
@@ -2794,8 +2926,8 @@ watch(shownPhotos, drawPhotoMarkers)
 .wr-player__barwrap .wr-player__bar { width: 100%; }
 .wr-player__sun { position: absolute; left: 0; right: 0; top: 18px; height: 6px; border-radius: var(--radius-full); }
 
-.wr-float { position: absolute; left: 50%; top: calc(100% + 10px); transform: translateX(-50%); width: 260px; padding: 0; overflow: hidden; border: 3px solid #fff; border-radius: var(--radius-lg); background: #000; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35); cursor: zoom-in; }
-.wr-float img, .wr-float video { display: block; width: 100%; height: 170px; object-fit: cover; }
+.wr-float { box-sizing: border-box; position: absolute; left: 0; top: calc(100% + 10px); width: 400px; /* 11/19: 지도 가운데(경로)를 가리지 않게 왼쪽 남색 바 밑에 붙임, 칸도 크게 */ padding: 0; overflow: hidden; border: 3px solid #fff; border-radius: var(--radius-lg); background: #000; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35); cursor: zoom-in; }
+.wr-float img, .wr-float video { display: block; width: 100%; height: 270px; object-fit: contain; background: #000; } /* contain: 사진이 잘리지 않게 */
 .wr-float span { display: block; padding: 6px 10px; background: #fff; color: var(--ink); font-size: 13px; text-align: left; }
 .wr-float-enter-active, .wr-float-leave-active { transition: opacity 0.3s, transform 0.3s; }
 .wr-float-enter-from, .wr-float-leave-to { opacity: 0; }

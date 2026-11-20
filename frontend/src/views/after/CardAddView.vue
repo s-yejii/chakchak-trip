@@ -73,7 +73,7 @@ function connect() {
 
       <div class="scroll" style="padding-top: 8px; gap: 18px; bottom: 102px">
         <p class="t-cap ca-note">
-          <i class="ic ic--s i-info c-navy" aria-hidden="true"></i>카드사에 연결하면 여행 기간에 쓴 카드 결제 내역을 가져와 회고에서 장소별로 볼 수 있습니다.
+          <i class="ic ic--s i-info c-navy" aria-hidden="true"></i>카드사에 연결하면 여행 기간에 쓴 카드 결제 내역을 가져와 여행 기록에서 장소별로 볼 수 있습니다.
         </p>
 
         <!-- 카드사 고르기 -->
@@ -113,7 +113,7 @@ function connect() {
           <span style="display: flex; flex-direction: column; gap: 2px">
             <span class="t-strong" style="font-size: 14px">[필수] 카드 결제 내역 정보 조회 동의</span>
             <span class="t-cap">대상: 여행 기간의 결제 일시, 가맹점 이름·주소·업종, 이용 금액, 승인번호, 취소 여부</span>
-            <span class="t-cap">가져온 결제 중 회고에 담은 것만 저장하고, 카드 번호 전체는 저장하지 않습니다.</span>
+            <span class="t-cap">가져온 결제 중 여행 기록에 담은 것만 저장하고, 카드 번호 전체는 저장하지 않습니다.</span>
           </span>
         </button>
       </div>

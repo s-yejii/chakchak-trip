@@ -64,6 +64,8 @@ public static class Capture
             camera.transform.position = OnGround(map, ToVector(eye));
             camera.transform.LookAt(OnGround(map, ToVector(look)));
         }
+        // 트리피 그림 판을 이 카메라 쪽으로 (캡처는 화면을 돌리지 않아서 LateUpdate가 안 불림)
+        foreach (Trippy trippy in UnityEngine.Object.FindObjectsByType<Trippy>(FindObjectsSortMode.None)) trippy.FaceCamera();
         WaterReflection reflection = map.GetComponent<WaterReflection>();
         if (reflection != null) reflection.RenderNow(); // 카메라 자리에서 강물 반사를 찍어 둠
 

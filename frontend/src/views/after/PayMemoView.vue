@@ -101,7 +101,7 @@ async function save() {
       source: form.value.source,
     })
     form.value = null
-    showToast('저장했어요 · 여행이 끝나면 회고에서도 볼 수 있어요')
+    showToast('저장했어요 · 여행이 끝나면 여행 기록에서도 볼 수 있어요')
     await loadPayments()
   } catch (e) {
     showToast(e.message)
@@ -174,7 +174,7 @@ function setAmount(text) {
                 <b class="tn">{{ toWon(payment.amount) }}</b>
               </li>
             </ul>
-            <p class="t-cap" style="margin: 0">여행이 끝나면 회고 화면에서 누가 얼마 냈는지 나눌 수 있어요</p>
+            <p class="t-cap" style="margin: 0">여행이 끝나면 여행 기록 화면에서 누가 얼마 냈는지 나눌 수 있어요</p>
           </section>
         </template>
       </div>

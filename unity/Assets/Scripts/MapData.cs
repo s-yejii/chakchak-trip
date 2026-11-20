@@ -16,6 +16,7 @@ public class MapData
     public RouteData route;          // 걸은 경로
     public StopData[] stops;         // 다녀온 곳
     public LandmarkData[] landmarks; // 모양을 따로 만드는 눈에 띄는 건물
+    public BusStopData[] busStops;   // 걸은 길 둘레 버스 정류장 (지도 자료 자리, 11/19). 없으면 null
     public WaterData water;          // 강·호수 (없으면 cells가 비어 있음)
     public SunData sun;              // 여행 시각마다 해 위치 (없으면 minutes가 비어 있음 → 늘 낮)
     public int startClock;           // 경로 0분이 첫날 몇 시 몇 분인지 (0시부터 분. 예: 11시 30분 = 690)
@@ -35,6 +36,13 @@ public class WaterData
     public float level; // 물 높이(m)
     public int[] cells; // 지형 격자 점마다 1 물 · 0 땅 (heights와 같은 순서)
     [NonSerialized] public float[] levels; // 격자 점마다 그 물(한강·호수)의 물 높이. 웹 자료에는 없고 유니티가 채움 (WaterPrep). NonSerialized: JSON에서 읽지 않는 값이라는 표시
+}
+
+[Serializable]
+public class BusStopData
+{
+    public float x; // 정류장 자리 (m, 지도 가운데 기준)
+    public float z;
 }
 
 [Serializable]

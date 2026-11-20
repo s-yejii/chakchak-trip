@@ -26,7 +26,7 @@ public static class RoadPainter
     // 보도블록: 30cm 정사각 블록 4×4 (1.2m), 블록마다 밝기를 조금씩 다르게, 사이에 어두운 줄눈
     public static Texture2D Paving()
     {
-        return Blocks(4, 4, new Color32(186, 182, 174, 255), 14);
+        return Blocks(4, 4, new Color32(186, 182, 174, 255), 14, 46);
     }
 
     // 산책로: 벽돌색 블록 6×3, 줄마다 엇갈림
@@ -68,11 +68,12 @@ public static class RoadPainter
     //   줄눈이 어두워서 평균이 128보다 내려가므로 블록을 그만큼 밝게(138) 잡음
     public static Texture2D GroundPaving()
     {
-        return Blocks(8, 8, new Color32(138, 138, 138, 255), 12);
+        // 11/19: 줄눈 46 → 20, 칸 밝기 차 12 → 8. 땅 셰이더가 무늬를 2배로 키워서 줄눈이 28% 어둡게 보였음 → 바둑판처럼 튀었음
+        return Blocks(8, 8, new Color32(138, 138, 138, 255), 8, 20);
     }
 
-    // 블록 무늬: columns × rows 칸, base 색, tone = 칸마다 밝기 차이(±)
-    private static Texture2D Blocks(int columns, int rows, Color32 baseColor, int tone)
+    // 블록 무늬: columns × rows 칸, base 색, tone = 칸마다 밝기 차이(±), joint = 줄눈이 어두운 정도
+    private static Texture2D Blocks(int columns, int rows, Color32 baseColor, int tone, int joint)
     {
         int blockWidth = SIZE / columns;
         int blockHeight = SIZE / rows;
@@ -85,7 +86,7 @@ public static class RoadPainter
             {
                 int column = ((x + shift) % SIZE) / blockWidth;
                 bool isJoint = (x + shift) % blockWidth < 2 || y % blockHeight < 2; // 줄눈 (2픽셀)
-                float shade = isJoint ? -46 : (Noise(column * 17, row * 31) * 2 - 1) * tone + (Noise(x, y) * 8 - 4);
+                float shade = isJoint ? -joint : (Noise(column * 17, row * 31) * 2 - 1) * tone + (Noise(x, y) * 8 - 4);
                 pixels[y * SIZE + x] = new Color32(Clamp(baseColor.r + shade), Clamp(baseColor.g + shade), Clamp(baseColor.b + shade), 255);
             }
         }

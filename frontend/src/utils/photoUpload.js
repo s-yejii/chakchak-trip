@@ -28,13 +28,35 @@ function readDuration(file) {
   })
 }
 
+const REENCODE_QUALITY = 0.95 // 찍은 시각을 지우려고 다시 저장할 때 화질
+
+// 사진을 한 번 다시 그려서 저장: 파일 안의 찍은 시각(EXIF)이 지워져서 서버가 우리가 보낸 시각을 써요
+// 브라우저가 못 여는 사진(HEIC 등)이나 영상은 그대로 (11/19 RetroPhotoCard에서 옮김, 장소 블럭도 같이 씀)
+export async function withoutTakenInfo(file) {
+  if (!file.type.startsWith('image/') || file.type === 'image/heic') return file
+  try {
+    const bitmap = await createImageBitmap(file) // 파일을 그림으로 읽기
+    const canvas = document.createElement('canvas')
+    canvas.width = bitmap.width
+    canvas.height = bitmap.height
+    canvas.getContext('2d').drawImage(bitmap, 0, 0)
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', REENCODE_QUALITY))
+    return new File([blob], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' })
+  } catch (e) {
+    return file
+  }
+}
+
 // 고른 파일들을 한 번에 올려요. tripId가 없으면 서버가 찍은 날짜로 여행을 찾아요
+// placeTimes(11/19, 웹 회고 장소 블럭): 파일마다 "2026-11-14T17:15" 같은 그 장소 시각.
+//   주면 사진 속 찍은 시각을 지우고(withoutTakenInfo) 이 시각을 보냄 → 언제 찍은 사진이든 그 장소에 붙어요
 // 돌려줌: { savedCount, unmatchedCount }
-export async function uploadPhotos(files, tripId) {
+export async function uploadPhotos(files, tripId, placeTimes) {
   const form = new FormData() // 파일을 담는 상자
-  for (const file of files) {
-    form.append('files', file)
-    form.append('takenAts', toTakenAt(file))
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i]
+    form.append('files', placeTimes ? await withoutTakenInfo(file) : file)
+    form.append('takenAts', placeTimes ? placeTimes[i] : toTakenAt(file))
     form.append('durations', await readDuration(file))
   }
   if (tripId) form.append('tripId', tripId)
