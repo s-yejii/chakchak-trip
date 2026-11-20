@@ -13,7 +13,7 @@ import { addDays } from '@/utils/dates'
 import { appNow, clearCommand, devMode, ensureDemoFlow, INCIDENT_STORE_KEY, syncClock } from '@/utils/devMode'
 import { toMinutes, toTime } from '@/utils/time'
 import { showToast } from '@/utils/toast'
-import { boatChecking, boatPending, demoRide, demoRoute, restAsk } from '@/utils/demoRoute'
+import { boatChecking, boatPending, demoRide, demoRoute, demoStops, restAsk } from '@/utils/demoRoute'
 import { incidentClockMin, isBoardingPlace, lateMinutesFor, planDeparture } from '@/utils/departure'
 
 const props = defineProps({
@@ -118,12 +118,15 @@ async function goNext() {
 }
 
 async function moveToNext() {
+  demoStops.value = [] // 순환버스 정류장 핀은 다음 이동을 시작하면 지움
   const list = orderedStops()
   const current = currentStop()
   const next = list[current ? list.indexOf(current) + 1 : 0]
   if (!next) return showToast('마지막 장소예요')
   const isNextDay = !!current && next.day !== current.day
   if (isNextDay) await startNextMorning(current, next)
+  // 11/20 주형: 다음 날 아침 첫 칸이 자고 난 숙소 그대로면 이동 없이 그 칸 시각에 바로 "지금 여기" (숙소로 이동해요 알림·점선이 뜨던 문제)
+  if (isNextDay && distanceMeters(current, next) < NEARBY_M) return arrive(next, dateOf(next.day), toMinutes(next.time))
 
   // 같은 건물·바로 옆(200m 안)은 길 이동 없이 걸어서 몇 분 (11/08 주형: 더현대 → 지하 1층 테디뵈르)
   const from = props.live.position.value || (current ? { lat: current.lat, lng: current.lng } : origin.value)
@@ -160,7 +163,7 @@ async function moveToNext() {
   await showNotice(next, travelMin)
 
   // 이동: 경로선을 따라 움직이고, 그동안 시계는 이동 시간만큼 흐름
-  const path = (await demoPathFor(next, from)) || (route && route.coords && route.coords.length > 1 ? route.coords : [[from.lat, from.lng], [next.lat, next.lng]])
+  const path = (await demoPathFor(next, from)) || (hasRoadPoints(route) ? route.coords : await walkOrStraight(from, next))
   demoRoute.value = path // 이동하는 동안 지도의 남색 점선도 이 길로 고정 (11/09 ①: 중간에 다시 받은 길과 어긋나지 않게)
   await wait(FOLLOW_START_MS) // 지도가 내 위치로 다가가며 확대하는 동안 점은 출발점에서 기다림 (11/09 ①)
   // 떠나는 그 시각에 서버에 "떠났다"를 먼저 알림 (점 두 개가 칸 밖이어야 출발로 봄) → 늦게 떠났으면 서버가 뒤 일정을 밀거나 줄임
@@ -219,6 +222,17 @@ async function demoPathFor(next, from) {
   const first = await walkPath(from, CABLE_CAR_POINT)
   const second = await walkPath(CABLE_CAR_POINT, next)
   return first && second ? [...first, ...second] : NADEULGIL_PATH
+}
+// 서버가 준 다음 경로에 실제 길 점이 있는지 (두 점뿐이면 직선이라 없는 걸로)
+function hasRoadPoints(route) {
+  return !!route && !!route.coords && route.coords.length > 2
+}
+// 11/20 주형: 가는 길에 새로 넣은 카페(공간갑 등)는 서버 경로 점이 없어 일직선으로 갔어요 → 걸을 만한 거리면 TMAP 도보 길, 못 받으면 그때만 직선
+const WALK_PATH_MAX_M = 2000
+async function walkOrStraight(from, to) {
+  const straight = [[from.lat, from.lng], [to.lat, to.lng]]
+  if (distanceMeters(from, to) > WALK_PATH_MAX_M) return straight
+  return (await walkPath(from, to)) || straight
 }
 // 걸어가는 길 점들 (TMAP 도보). 실패하면 null
 async function walkPath(from, to) {
@@ -305,6 +319,14 @@ async function roadPath(from, to) {
   return [[from.lat, from.lng], [to.lat, to.lng]]
 }
 
+// 순환버스 타는 곳·내리는 곳 핀 (좌표가 없으면 그 정류장은 안 그림)
+function showBusStops(setup) {
+  const list = []
+  if (setup.busBoardLat != null) list.push({ key: 'bus-board', name: setup.busDownBoard, lat: setup.busBoardLat, lng: setup.busBoardLng })
+  list.push({ key: 'bus-alight', name: setup.busDownAlight, lat: setup.busDownLat, lng: setup.busDownLng })
+  demoStops.value = list
+}
+
 async function busDown(current, from) {
   const setup = scenario.value
   markIncidentDone('busdown-' + current.id)
@@ -312,8 +334,10 @@ async function busDown(current, from) {
   const departMin = Math.max(minutesOf(appNow()), stayEndOf(current))
   if (departMin > minutesOf(appNow())) await setClock(date, departMin)
   // 11/19 주형: 어디서 타서 어디서 내리는지 보이게
-  const busWhere = setup.busDownBoard && setup.busDownAlight ? setup.busDownBoard + '에서 타서 ' + setup.busDownAlight + '에서 내려요 · ' : ''
-  showLiveNotice({ key: 'busdown-' + current.id, at: hhmm(appNow()), title: '남산 순환버스로 내려가요', body: busWhere + '약 ' + setup.busDownMin + '분', warn: false })
+  // 11/20 주형: 서울시 정류장 이름으로, 짧게 "타는 곳 → 내리는 곳 · 13분" + 지도에 두 정류장 핀
+  const busWhere = setup.busDownBoard && setup.busDownAlight ? setup.busDownBoard + ' → ' + setup.busDownAlight + ' · ' : ''
+  showLiveNotice({ key: 'busdown-' + current.id, at: hhmm(appNow()), title: '남산 순환버스로 내려가요', body: busWhere + setup.busDownMin + '분', warn: false })
+  showBusStops(setup)
   await wait(NOTICE_MS)
   const path = await roadPath(from, { lat: setup.busDownLat, lng: setup.busDownLng }) // 11/17: 직선 대신 남산 찻길을 따라 내려가게
   demoRoute.value = path
@@ -433,7 +457,10 @@ async function rideHangang(option) {
   await setClock(date, toMinutes(option.leaveAt)) // ③ 내린 선착장 근처 한강공원에서 쉬기 (restMin)
   // ④ 버스로 예약한 가게
   const last = piers[piers.length - 1]
-  await moveAlong([[last.lat, last.lng], [next.lat, next.lng]], option.afterAlightMin)
+  // 11/20 주형: 내린 뒤 버스 길이 직선(점)과 서버가 다시 잰 길(선)로 따로 놀았어요 → 찻길(TMAP 자동차)을 받아 점·선을 같은 길로 고정
+  const busPath = await roadPath(last, next)
+  demoRoute.value = busPath
+  await moveAlong(busPath, option.afterAlightMin)
   await arrive(next, date, toMinutes(option.leaveAt) + option.afterAlightMin)
 }
 
@@ -639,6 +666,6 @@ onUnmounted(() => clearInterval(wanderTimer))
 </template>
 
 <style>
-.demo-next { position: absolute; right: 16px; top: 124px; z-index: 7; display: inline-flex; align-items: center; gap: 4px; height: 34px; padding: 0 12px 0 10px; border: 0; border-radius: 17px; background: #fff; color: var(--navy); font-size: 13px; font-weight: 700; box-shadow: 0 2px 8px rgba(24, 33, 58, 0.16); cursor: pointer; }
+.demo-next { position: absolute; right: 16px; top: 176px; /* 11/20 주형: 위 알림(2~3줄)과 안 겹치게 아래로 (예전 124px) */ z-index: 7; display: inline-flex; align-items: center; gap: 4px; height: 34px; padding: 0 12px 0 10px; border: 0; border-radius: 17px; background: #fff; color: var(--navy); font-size: 13px; font-weight: 700; box-shadow: 0 2px 8px rgba(24, 33, 58, 0.16); cursor: pointer; }
 .demo-next:disabled { opacity: 0.7; cursor: default; }
 </style>

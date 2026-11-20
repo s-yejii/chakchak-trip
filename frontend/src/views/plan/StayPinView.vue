@@ -57,13 +57,25 @@ let lookupNo = 0 // 늦게 온 예전 주소 찾기 결과는 버리려고
 onUnmounted(() => clearTimeout(timer))
 
 // 근처 추천 숙소: 여행 지역 가운데 기준. 못 받으면 칸을 숨겨요 (검색·캡처는 그대로)
+// 11/20 주형(시연에서 카드가 안 떴어요): 기준을 여행 지역 → 지도에서 고른 첫 구 → 출발지 순서로 찾고, 실패하면 한 번 더 불러요
 const picks = ref([])
+const pickCenter = computed(() => {
+  const candidates = [store.planArea, store.planAreas[0], store.planOrigin]
+  for (const place of candidates) {
+    if (place && place.lat != null && place.lng != null) return place
+  }
+  return null
+})
+const PICK_TRIES = 2
 onMounted(async () => {
-  if (!store.planArea || store.planArea.lat == null) return
-  try {
-    picks.value = await getRecommendedStays(store.planArea.lat, store.planArea.lng)
-  } catch {
-    picks.value = []
+  const center = pickCenter.value
+  if (!center) return
+  for (let i = 0; i < PICK_TRIES && !picks.value.length; i++) {
+    try {
+      picks.value = await getRecommendedStays(center.lat, center.lng)
+    } catch {
+      picks.value = []
+    }
   }
 })
 function distanceText(meter) {
@@ -287,7 +299,7 @@ function remove() {
             <p class="t-cap tn" style="margin: 2px 0 0">여행 {{ toShortDate(tripStart) }}~{{ toShortDate(tripEnd) }} · {{ tripNights }}박{{ store.planStays.length ? ` 중 ${store.planStays.length}곳 담았어요` : ' · 예약하고 확정 화면을 캡처해서 올려 주세요' }}</p>
           </div>
           <section v-if="picks.length" class="sp-step" aria-labelledby="sp-pick">
-            <h2 id="sp-pick" class="sp-step__title">{{ store.planArea.name }} 근처 숙소</h2>
+            <h2 id="sp-pick" class="sp-step__title">{{ pickCenter ? pickCenter.name : '' }} 근처 숙소</h2>
             <div class="sp-picks">
               <button v-for="stay in picks" :key="stay.placeId" type="button" class="sp-pick" @click="pickFound(stay)">
                 <img v-if="stay.imageUrl" :src="stay.imageUrl" alt="" class="sp-pick__img" loading="lazy" />

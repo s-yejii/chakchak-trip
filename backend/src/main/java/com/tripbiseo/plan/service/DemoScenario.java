@@ -64,8 +64,11 @@ public class DemoScenario {
     private static final String WALK_UP_TO = "남산 팔각정";
     private static final double BUS_DOWN_LAT = 37.5605217984; // 버스에서 내리는 곳: 남산 아래 퇴계로(예전 예장공원 자리)
     private static final double BUS_DOWN_LNG = 126.9888869118;
-    private static final String BUS_DOWN_BOARD = "남산 팔각정 앞 정류장"; // 11/19 주형: 어디서 타서 어디서 내리는지 화면에 보이게
-    private static final String BUS_DOWN_ALIGHT = "퇴계로 남산예장공원 앞";
+    // 11/19 주형: 어디서 타서 어디서 내리는지 화면에 보이게. 11/20: 서울시 안내 이름으로 (남산순환버스 01A·01B는 남산서울타워를 지나고 남산예장버스환승주차장이 기점·종점)
+    private static final String BUS_DOWN_BOARD = "남산서울타워 정류장";
+    private static final double BUS_BOARD_LAT = 37.5510545366; // 타는 곳: DB 남산서울타워(tour-126535) 좌표 (정류장이 타워 앞이라 그대로, 11/20 지도 핀)
+    private static final double BUS_BOARD_LNG = 126.9878820833;
+    private static final String BUS_DOWN_ALIGHT = "남산예장버스환승주차장"; // 내리는 좌표(BUS_DOWN_LAT·LNG) = DB 남산예장공원 자리 (환승주차장이 공원 아래)
     private static final int BUS_DOWN_MIN = 13;         // 순환버스로 내려오는 분
     private static final int OVERSTAY_LATE_MIN = 35;    // 11/16 대본: 늦잠 → 12:00 출발 → 스시도 13:05 도착 = 35분 늦음 (돌발은 이것 하나뿐)
     private static final String START_TIME = "11:30"; // 시연 계정은 1일차 이 시각부터 (종로3가역 모임, 11/12)
@@ -184,6 +187,8 @@ public class DemoScenario {
         setup.setBusDownFrom(BUS_DOWN_FROM);
         setup.setBusDownLat(BUS_DOWN_LAT);
         setup.setBusDownLng(BUS_DOWN_LNG);
+        setup.setBusBoardLat(BUS_BOARD_LAT);
+        setup.setBusBoardLng(BUS_BOARD_LNG);
         setup.setBusDownMin(BUS_DOWN_MIN);
         setup.setBusDownBoard(BUS_DOWN_BOARD);
         setup.setBusDownAlight(BUS_DOWN_ALIGHT);

@@ -19,3 +19,7 @@ export const boatChecking = ref(false)
 // 장면 2 (11/17 주형): 순환버스에서 내린 뒤 다음 예약까지 시간이 많이 남으면 가운데 카드 "이대로 갈까요?"
 // DemoDrive가 { name, slackMin }을 넣고 시계를 멈춤 → 여행 중 화면에서 고르면 null (그때 DemoDrive가 시계를 다시 흐르게)
 export const restAsk = ref(null)
+
+// 시연 순환버스 정류장 핀 (11/20 주형: "정류장 지도에 마커라도"): DemoDrive가 버스 탈 때 [{ key, name, lat, lng }]를 넣고 다음 이동 때 비워요
+// 여행 중 화면 지도가 버스 아이콘 핀 + 이름표로 그려요. 일반 계정은 늘 빈 목록
+export const demoStops = ref([])
