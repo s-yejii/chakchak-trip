@@ -125,6 +125,8 @@ async function moveToNext() {
   if (!next) return showToast('마지막 장소예요')
   const isNextDay = !!current && next.day !== current.day
   if (isNextDay) await startNextMorning(current, next)
+  // 11/20 주형: 다음 날 아침 첫 칸이 자고 난 숙소 그대로면 이동 없이 그 칸 시각에 바로 "지금 여기" (숙소로 이동해요 알림·점선이 뜨던 문제)
+  if (isNextDay && distanceMeters(current, next) < NEARBY_M) return arrive(next, dateOf(next.day), toMinutes(next.time))
 
   // 같은 건물·바로 옆(200m 안)은 길 이동 없이 걸어서 몇 분 (11/08 주형: 더현대 → 지하 1층 테디뵈르)
   const from = props.live.position.value || (current ? { lat: current.lat, lng: current.lng } : origin.value)
