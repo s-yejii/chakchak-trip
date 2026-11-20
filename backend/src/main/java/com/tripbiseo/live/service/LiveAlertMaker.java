@@ -25,6 +25,7 @@ public class LiveAlertMaker {
     private static final int LEAVE_NOW_SLACK_MIN = 5; // 나갈 시간이 지났는데 고정 일정 여유가 이 이하면 "지금 안 나가면 늦어요" (늦기 전에 먼저)
     private static final int LEAVE_SOON_MIN = 5;      // 출발 알림은 10분 전·5분 전·지금 세 번만 (11/19 PPT 14장)
     private static final int LEAVE_PASSED_STEP = -1;  // 출발 시각이 지난 뒤 묶음
+    private static final int DEMO_ROOMY_SLACK_MIN = 30; // 11/20 주형(시연 계정만): 다음 예약까지 여유가 이보다 많으면 "출발해야 해요"를 안 냄
 
     /**
      * 출발 알림: 출발 시각 앞뒤 10분 안일 때만 (아니면 null)
@@ -42,6 +43,9 @@ public class LiveAlertMaker {
             int left = context.getLeaveAt() - now;
             if (context.isDemo() && CafeStay.isCafe(current.getCategory()) && (left <= 0 || left > LEAVE_SOON_MIN)) {
                 return null; // 11/19 주형: 시연 계정만, 예약 앞 카페에선 나갈 시각 5분 전에 한 번만 (10분 전·지금·지남 알림은 안 냄)
+            }
+            if (context.isDemo() && isRoomy(context, nextStop)) {
+                return null; // 11/20 주형: 시연 계정만, 예약이 2시간 남았는데 "지금 출발해야 해요"가 떴어요 (머무는 시간 끝을 출발 시각으로 봐서)
             }
             return toLeave(current, context.getLeaveAt(), left, nextStop.getName(), true);
         }
@@ -183,6 +187,9 @@ public class LiveAlertMaker {
      * 지금 나가면 도착 = 지금 + 이동 분(예약 도착 예상 − 떠날 시각). 그 전에는 출발 알림("N분 뒤 출발해요")만
      */
     boolean isMustLeaveNow(StatusContext context) {
+        if (!context.isDemo()) {
+            return context.getSlack() != null && context.getSlack() <= LEAVE_NOW_SLACK_MIN; // 11/20 주형: 일반 계정은 예지가 만든 예전 기준 그대로 (새 기준은 시연 계정만)
+        }
         Stop fixedStop = context.getFixedStop();
         Integer eta = fixedStop == null || fixedStop.getId() == null ? null : context.getEtaMap().get(fixedStop.getId());
         if (eta == null || context.getLeaveAt() == null || fixedStop.getTime() == null) {
@@ -254,6 +261,12 @@ public class LiveAlertMaker {
     /** 고정 일정에 늦는지 (여유가 음수) */
     private boolean isLate(Integer slack) {
         return slack != null && slack < 0;
+    }
+
+    /** 계획대로 떠나도 다음 예약에 DEMO_ROOMY_SLACK_MIN보다 일찍 닿는가 (예상 도착을 모르면 false) */
+    boolean isRoomy(StatusContext context, Stop nextStop) {
+        Integer eta = context.getEtaMap().get(nextStop.getId());
+        return eta != null && Geo.toMinutes(nextStop.getTime()) - eta > DEMO_ROOMY_SLACK_MIN;
     }
 
     /** 남은 분이 −10~10 안이면 LeaveInfo, 아니면 null */

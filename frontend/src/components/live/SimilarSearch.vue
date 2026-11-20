@@ -11,7 +11,7 @@ import { useRouter } from 'vue-router'
 import { askRecommend, insertPlace } from '@/api/trips'
 import { radiusOptions } from '@/data/ask'
 import { showToast } from '@/utils/toast'
-import { appNow } from '@/utils/devMode'
+import { appNow, devMode } from '@/utils/devMode'
 import { photoFor } from '@/utils/placePhoto'
 import { distanceMeters } from '@/utils/geo'
 import '@/assets/css/live-panel.css' // 지도 위 패널 생김새 (AI 채팅·근처 찾기·비슷한 가게 같이, 11/13)
@@ -131,9 +131,17 @@ function firstReserveTime() {
   return String(Math.floor(rounded / 60)).padStart(2, '0') + ':' + String(rounded % 60).padStart(2, '0')
 }
 
+// 11/20 주형(시연 계정만): 놓친 칸이 예약(🔒)이면 [예약했어요] 없이 담지 않고 먼저 켜서 시각을 고르게 해요
+//   (그냥 담으면 일반 칸으로 들어가 한강버스 카드가 안 뜨고 시나리오에서 벗어났어요). 시각은 미리 안 정하고 발표자가 직접 (11/19 결정)
+const isAskReserve = computed(() => devMode.isOn && !!props.stop && !!props.stop.fixed && !isReserved.value)
+
 // 담기: 놓친 칸 자리에 넣고 바로 다음 목적지로 (예약했으면 그 시각 고정 일정으로)
 async function addPicked() {
   if (isAdding.value) return
+  if (isAskReserve.value) {
+    toggleReserved()
+    return showToast(props.stop.name + ' 예약 자리예요 · 예약 시각을 골라 주세요')
+  }
   if (isReserved.value && !reservedTime.value) return showToast('예약 시각을 골라 주세요')
   isAdding.value = true
   try {
@@ -176,7 +184,7 @@ async function addPicked() {
         <div class="lp-reserve">
           <button type="button" class="chip chip--sm" :class="{ 'is-on': isReserved }" :aria-pressed="isReserved" @click="toggleReserved"><i class="ic ic--s i-lock" aria-hidden="true"></i>예약했어요</button>
           <input v-if="isReserved" v-model="reservedTime" type="time" step="600" class="lp-reserve__time tn" aria-label="예약 시각" />
-          <span v-else class="lp-reserve__help">예약했으면 눌러서 시각을 골라요</span>
+          <span v-else class="lp-reserve__help">{{ isAskReserve ? stop.name + ' 예약 자리예요 · 눌러서 시각을 골라요' : '예약했으면 눌러서 시각을 골라요' }}</span>
         </div>
         <div class="lp-actions" :class="{ 'lp-actions--wide': picked.naverUrl }">
           <button type="button" class="btn btn--secondary btn--md" @click="router.push('/place?id=' + encodeURIComponent(picked.id))">자세히</button>
