@@ -96,6 +96,8 @@ function earlyMin(item) {
     <b class="hb-option__title"><span aria-hidden="true">⛴</span> {{ beforeLeave ? '한강버스로 가면 딱 맞게 도착해요' : '한강버스로 가요' }}</b>
     <span class="tn">{{ leaveTime(option) }} 출발 · 배 {{ option.boardAt }} → {{ option.alightPier }} {{ option.alightAt }}</span>
     <span class="tn">{{ arriveTime(option) }} 도착 · 예약 {{ earlyMin(option) }}분 전</span>
+    <!-- 11/20 주형: 배 타기 전에 한강버스가 뭐가 좋은지 한 줄 (요금은 우리 DB에 없어서 안 적어요) -->
+    <p v-if="beforeLeave" class="t-cap hb-option__intro">서울시 강 위 대중교통이에요. 지하철보다 느려도 앉아서 한강 보며 남는 시간을 써요.</p>
     <div v-if="beforeLeave" class="hb-option__actions">
       <button type="button" class="btn btn--primary" :class="popup ? 'btn--lg btn--block' : 'btn--sm'" @click="ride">⛴ 배 타고 갈게요</button>
       <button type="button" class="btn btn--secondary" :class="popup ? 'btn--lg btn--block' : 'btn--sm'" @click="skip">대중교통 타고 가기</button>
@@ -110,6 +112,7 @@ function earlyMin(item) {
 .hb-option{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--radius-md);background:var(--surface-raised)}
 .hb-option__title{font-weight:700}
 .hb-option__sub{margin:0}
+.hb-option__intro{margin:2px 0 0;color:var(--ink-muted)}
 .hb-option__actions{display:flex;gap:8px}
 .hb-option__actions .btn{flex:1}
 .hb-inline{display:contents}
