@@ -663,6 +663,6 @@ onUnmounted(() => clearInterval(wanderTimer))
 </template>
 
 <style>
-.demo-next { position: absolute; right: 16px; top: 124px; z-index: 7; display: inline-flex; align-items: center; gap: 4px; height: 34px; padding: 0 12px 0 10px; border: 0; border-radius: 17px; background: #fff; color: var(--navy); font-size: 13px; font-weight: 700; box-shadow: 0 2px 8px rgba(24, 33, 58, 0.16); cursor: pointer; }
+.demo-next { position: absolute; right: 16px; top: 176px; /* 11/20 주형: 위 알림(2~3줄)과 안 겹치게 아래로 (예전 124px) */ z-index: 7; display: inline-flex; align-items: center; gap: 4px; height: 34px; padding: 0 12px 0 10px; border: 0; border-radius: 17px; background: #fff; color: var(--navy); font-size: 13px; font-weight: 700; box-shadow: 0 2px 8px rgba(24, 33, 58, 0.16); cursor: pointer; }
 .demo-next:disabled { opacity: 0.7; cursor: default; }
 </style>
