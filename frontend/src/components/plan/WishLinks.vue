@@ -2,8 +2,11 @@
 // "가고 싶은 곳": 인스타·유튜브·네이버 링크를 붙여넣으면 글에 나온 장소를 찾아 담아요 (③ POST /api/plans/links)
 // 담은 곳은 일정 조건의 "꼭 갈 곳"(store.planConditions.mustVisit)에 이름으로 들어가요
 // 글을 못 읽었거나(422) 찾은 곳이 없으면 글을 복사해 붙이는 칸을 열어요 (유튜브는 키가 없으면 제목만 읽어요)
+// 11/20 피드백 "마이 저장과 인스타 담기는 같은 것" (① 상재 OK): 링크로 담은 곳은 내 장소(/api/my/places)에도 저장하고,
+//   [내 장소에서 고르기]로 저장해 둔 곳을 같은 목록에서 골라 담아요
 import { computed, ref } from 'vue'
 import { findLinkPlaces } from '@/api/trips'
+import { getMyPlaceList, saveMyPlace } from '@/api/myPlaces'
 import { useTripStore } from '@/stores/trip'
 import { areaFromPlaces } from '@/utils/planArea'
 import { showToast } from '@/utils/toast'
@@ -20,6 +23,8 @@ const loading = ref(false)
 const found = ref(null) // 찾은 장소 카드 목록 (찾기 전에는 null)
 const picked = ref({}) // 찾은 장소 중 고른 것 { 이름: true }
 const missed = ref([]) // 글에는 있었지만 장소를 못 찾은 이름 (11/14: 3곳 중 2곳만 나오면 왜인지 몰랐어요)
+const isMyList = ref(false) // 지금 목록이 내 장소에서 불러온 것인지
+const MY_PLACE_FROM = '인스타에서 담음' // 내 장소에 남기는 출처 글자
 
 const wish = computed(() => store.planConditions?.mustVisit || [])
 const pickCount = computed(() => (found.value ? found.value.filter((place) => picked.value[place.name]).length : 0))
@@ -42,10 +47,36 @@ defineExpose({ fill, fillShared })
 
 // 찾은 곳 표시: 링크 주소로 플랫폼 이름
 const sourceName = computed(() => {
+  if (isMyList.value) return '내 장소'
   if (/youtu/.test(url.value)) return '유튜브'
   if (/naver/.test(url.value)) return '네이버'
   return '인스타'
 })
+
+// [내 장소에서 고르기]: 저장해 둔 곳을 찾은 목록처럼 보여 주고 같은 [담기]로
+async function openMyPlaces() {
+  error.value = ''
+  loading.value = true
+  try {
+    const list = await getMyPlaceList()
+    if (!list.length) return (hint.value = '내 장소에 저장한 곳이 아직 없어요')
+    found.value = list.map((item) => ({ id: item.placeId, name: item.name, category: item.category, address: item.address, lat: item.lat, lng: item.lng, rating: item.rating }))
+    missed.value = []
+    picked.value = {}
+    isMyList.value = true
+  } catch (e) {
+    error.value = e.message
+  } finally {
+    loading.value = false
+  }
+}
+// 링크로 담은 곳은 내 장소에도 (이미 있거나 실패해도 담기는 그대로)
+function saveToMyPlaces(places) {
+  if (isMyList.value) return
+  for (const place of places) {
+    if (place.id) saveMyPlace({ placeId: place.id, fromName: MY_PLACE_FROM }).catch(() => {})
+  }
+}
 
 async function findPlaces() {
   const link = url.value.trim()
@@ -75,6 +106,7 @@ async function findPlaces() {
 }
 function cancel() {
   found.value = null
+  isMyList.value = false
   missed.value = []
   url.value = ''
   caption.value = ''
@@ -86,6 +118,7 @@ function setWish(names) {
 function addPicked() {
   const places = found.value.filter((place) => picked.value[place.name])
   setWish([...wish.value, ...places.map((place) => place.name)])
+  saveToMyPlaces(places)
   const area = setAreaFrom(places)
   cancel()
   showToast(places.length + '곳 담음' + (area ? ' · ' + area.fullName : ''))
@@ -125,6 +158,7 @@ function removeWish(name) {
       <textarea id="pa-caption" v-model="caption" class="wl-caption" rows="4" maxlength="2200" placeholder="글 붙여넣기"></textarea>
     </div>
     <button v-else type="button" class="wl-more" @click="showCaption = true">링크가 안 열리면 글을 붙여 넣어도 돼요</button>
+    <button type="button" class="btn btn--secondary btn--md btn--block" :disabled="loading" @click="openMyPlaces"><i class="ic ic--s i-bookmark" aria-hidden="true"></i>내 장소에서 고르기</button>
   </template>
 
   <div v-else class="wl-found" role="group" aria-label="찾은 장소">
