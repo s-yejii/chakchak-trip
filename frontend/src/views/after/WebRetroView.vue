@@ -64,7 +64,13 @@ const STREET_BACK_M = 3          // 거리 시점: 내 위치에서 이만큼 �
 const STREET_PITCH = 85          // 거리 시점: 기울기 (90이면 수평, 지도가 85까지 됨)
 const STREET_SPEED = 9           // 거리 시점: 1배속 이동 속도(초당 m). 걷는 느낌이 나게 천천히 (배속 버튼으로 빨리)
 const SPLIT_STAY_RADIUS_M = 30   // 나눈 머문 곳 조각의 동그라미 반경(m)
-const UNITY_TOP_SPEED = 25       // 3D 지도 위에서 보기: 1배속 이동 속도(초당 m). 11/19 멀미 피드백: 50(시속 180km)은 땅이 너무 빨리 흘러서 절반으로
+const VEHICLE_WINDOW = 3         // 3D 탈것 빨리 감기: 앞뒤 이만큼 구간을 묶어 실제 빠르기를 잼
+const RIDE_MS = 4                // 실제 초당 4m(시속 14km) 넘으면 탈것 (버스·택시·한강버스)
+const RIDE_BOOST = 3             // 탈것 구간은 3배 빨리
+const FAST_RIDE_MS = 9           // 실제 초당 9m(시속 32km) 넘으면 빠른 탈것 (지하철·빈 도로)
+const FAST_RIDE_BOOST = 5        // 빠른 탈것은 5배 빨리 (카메라도 탈것이면 더 높이 떠서 덜 어지러움)
+const MAX_SPEED = 8              // 배속 버튼 최대
+const UNITY_TOP_SPEED = 25      // 3D 지도 위에서 보기: 1배속 이동 속도(초당 m). 11/19 멀미 피드백: 50(시속 180km)은 땅이 너무 빨리 흘러서 절반으로
 const STREET_LOOK_AHEAD_M = 35   // 거리 시점: 경로를 따라 이만큼 앞을 바라봄 (모퉁이에서 늦지 않게)
 const STREET_MAX_TURN = 30       // 거리 시점: 1초에 돌 수 있는 최대 각도
 const STREET_TURN_SMOOTH = 0.5   // 거리 시점: 방향을 따라가는 부드러움
@@ -172,21 +178,25 @@ onMounted(async () => {
     retro.value = await get('/trips/' + id + '/retro')
     payments.value = await get('/trips/' + id + '/payments')
     companions.value = await get('/trips/' + id + '/companions')
-    document.title = retro.value.title + ' · 웹 회고'
+    document.title = retro.value.title + ' · 여행 기록'
   } catch (e) {
     if (e.status === 401) {
       router.replace({ path: '/web', query: { next: route.fullPath } }) // 웹 로그인 뒤 이 회고로 돌아옴
       return
     }
-    errorMessage.value = '회고를 불러오지 못했어요 (' + e.message + ')'
+    errorMessage.value = '여행 기록을 불러오지 못했어요 (' + e.message + ')'
     isLoading.value = false
     return
   }
   await loadPhotos()
   await loadGeo()
+  // 11/20: 불러오는 사이에 화면이 닫혔으면(뒤로 가기·개발 중 자동 새로 그리기) 지도 칸이 없음 → 지도를 만들지 않고 끝냄
+  //   (그냥 만들면 "container must be a String or HTMLElement" 오류 → 3D가 그 오류를 잡아 알림 창을 띄웠음)
+  if (!mapBox.value) return
   isLoading.value = false
   createMap()
-  if (isCesium) isUnity3d.value = true // 세슘으로 다시 열었으면 3D 지도를 바로 켬
+  // 세슘이면 3D 지도를 바로 켬. 세슘이 실패해서 cesium=0으로 다시 열었으면 기본 3D를 바로 켬 (안전장치: 평면 지도로 끝나지 않게)
+  if (isCesium || route.query.cesium === '0') isUnity3d.value = true
 })
 
 onUnmounted(() => {
@@ -1685,6 +1695,17 @@ watch(selectedDay, () => {
   fitTrip(1800)
 })
 
+// [2D · 위성 · 3D] 버튼: 고른 지도 하나만 켬. 3D가 아닌 걸 고르면 3D를 끄고 아래 평면 지도를 그 모양으로
+function chooseMap(kind) {
+  if (kind === '3d') {
+    if (!isUnity3d.value) toggleUnity3d()
+    return
+  }
+  if (isUnity3d.value) toggleUnity3d()
+  const wantsSatellite = kind === 'satellite'
+  if (isSatellite.value !== wantsSatellite) toggleSatellite()
+}
+
 function toggleSatellite() {
   isSatellite.value = !isSatellite.value
   map.setPaintProperty('satellite', 'raster-opacity', 1)
@@ -1806,15 +1827,35 @@ const playRoute = computed(() => {
   let secondsPerMeter = totalMeters > 0 ? PLAY_MOVE_SECONDS / totalMeters : 0
   if (isStreet()) secondsPerMeter = 1 / STREET_SPEED // 거리 시점은 거리와 상관없이 일정한 속도
   else if (isUnity3d.value) secondsPerMeter = 1 / UNITY_TOP_SPEED // 3D 위에서 보기도 일정한 속도 (평면보다 천천히)
+  // 11/20: 3D에서는 탈것 구간(버스·지하철·한강버스)을 빨리 지나감 → 4배속도 느리다는 의견. 걷는 곳은 그대로 (멀미 안 나게)
+  const isVehicleFast = isUnity3d.value
+  const perMeter = [] // 구간마다 1m에 쓰는 재생 초
+  for (let i = 0; i + 1 < nodes.length; i++) {
+    perMeter.push(isVehicleFast ? secondsPerMeter / vehicleBoost(nodes, meters, i) : secondsPerMeter)
+  }
   let clock = 0
   for (let i = 0; i < nodes.length; i++) {
     nodes[i].enter = clock
     if (nodes[i].isStay) clock += stayPauseSeconds(nodes, i)
     nodes[i].leave = clock
-    if (i + 1 < nodes.length) clock += (meters[i + 1] - meters[i]) * secondsPerMeter
+    if (i + 1 < nodes.length) clock += (meters[i + 1] - meters[i]) * perMeter[i]
   }
-  return { nodes: nodes, coordinates: coordinates, meters: meters, seconds: clock, secondsPerMeter: secondsPerMeter }
+  return { nodes: nodes, coordinates: coordinates, meters: meters, seconds: clock, perMeter: perMeter }
 })
+
+// i번째 구간을 몇 배 빨리 지나갈지: 실제로 그 둘레를 얼마나 빨리 움직였나(앞뒤 VEHICLE_WINDOW 구간을 묶어서 잼)로 정함
+//   묶어서 재는 이유: GPS 한 점이 튀면 걷다가 잠깐 "차"가 돼서 화면이 빨라졌다 느려졌다 함 → 멀미
+//   예) 앞뒤 3구간 600m를 2분에 감 = 초당 5m(시속 18km) → 버스로 보고 3배
+function vehicleBoost(nodes, meters, i) {
+  const from = Math.max(0, i - VEHICLE_WINDOW)
+  const to = Math.min(nodes.length - 1, i + 1 + VEHICLE_WINDOW)
+  const minutes = nodes[to].from - nodes[from].to
+  if (minutes <= 0) return 1
+  const realSpeed = (meters[to] - meters[from]) / (minutes * 60) // 실제 초당 m
+  if (realSpeed >= FAST_RIDE_MS) return FAST_RIDE_BOOST
+  if (realSpeed >= RIDE_MS) return RIDE_BOOST
+  return 1
+}
 
 const playEnd = computed(() => playRoute.value.seconds)
 const canPlay = computed(() => shownTrack.value.length >= 2 && playEnd.value > 0)
@@ -1854,9 +1895,9 @@ function pointAtMeters(target) {
 
 // 출발부터 이 거리(m)까지 오는 데 재생 몇 초째인지 (시점을 바꿔도 같은 자리에서 이어 가려고)
 function secondsAtMeters(target) {
-  const { nodes, meters, secondsPerMeter } = playRoute.value
+  const { nodes, meters, perMeter } = playRoute.value
   for (let i = 0; i + 1 < nodes.length; i++) {
-    if (target < meters[i + 1]) return nodes[i].leave + (target - meters[i]) * secondsPerMeter
+    if (target < meters[i + 1]) return nodes[i].leave + (target - meters[i]) * perMeter[i]
   }
   return playEnd.value
 }
@@ -2234,8 +2275,9 @@ function followCamera(at, frameSeconds) {
   map.jumpTo(cameraFor(cameraCenter, smoothBearing))
 }
 
+// 배속 버튼: 1 → 2 → 4 → 8 → 1 (11/20: 8배속 더함)
 function changeSpeed() {
-  speed.value = speed.value === 4 ? 1 : speed.value * 2
+  speed.value = speed.value === MAX_SPEED ? 1 : speed.value * 2
 }
 
 // 막대를 끌면 그 위치로
@@ -2363,7 +2405,7 @@ watch(shownPhotos, drawPhotoMarkers)
       </div>
 
       <div v-if="isLoading || errorMessage" class="wr-state">
-        <p>{{ errorMessage || '회고를 불러오는 중…' }}</p>
+        <p>{{ errorMessage || '여행 기록을 불러오는 중…' }}</p>
       </div>
 
       <template v-if="retro">
@@ -2375,11 +2417,12 @@ watch(shownPhotos, drawPhotoMarkers)
           <div class="wr-seg">
             <button v-for="item in dayButtons" :key="item.day" type="button" :class="{ 'is-on': selectedDay === item.day }" @click="changeDay(item.day)">{{ item.label }}</button>
           </div>
+          <!-- 지도 고르기 (11/20): 2D · 위성 · 3D 중 하나만 켜짐 (전에는 3D가 켜져도 2D가 같이 골라져 보였음) -->
           <div class="wr-seg">
-            <button type="button" :class="{ 'is-on': !isSatellite }" @click="isSatellite && toggleSatellite()">2D</button>
-            <button type="button" :class="{ 'is-on': isSatellite }" @click="!isSatellite && toggleSatellite()">위성</button>
+            <button type="button" :class="{ 'is-on': !isUnity3d && !isSatellite }" @click="chooseMap('2d')">2D</button>
+            <button type="button" :class="{ 'is-on': !isUnity3d && isSatellite }" @click="chooseMap('satellite')">위성</button>
+            <button type="button" :class="{ 'is-on': isUnity3d }" title="건물·한강·지형까지 보이는 3D 지도" @click="chooseMap('3d')">3D</button>
           </div>
-          <button type="button" class="wr-btn" :class="{ 'is-on': isUnity3d }" title="건물·한강·밤 불빛까지 보이는 3D 지도 (누르면 켜고 끔)" @click="toggleUnity3d">🏙 3D 지도</button>
           <button v-if="isUnity3d" type="button" class="wr-btn" :class="{ 'is-on': isDayNight }" title="재생 시각에 맞춰 밤낮 바꾸기 (끄면 늘 낮)" @click="isDayNight = !isDayNight">🌙 밤낮</button>          <!-- 11/13: 지도 버튼은 실감 3D와 기본/위성만 남김 (3D·2D, 사진, 해·하늘, 동네 다시 띄우기, 머문 곳, 가시권 버튼은 뺌. 기능 코드는 그대로) -->
         </div>
 
@@ -2531,7 +2574,7 @@ watch(shownPhotos, drawPhotoMarkers)
       <!-- 비용 -->
       <section class="wr-card">
         <h2>쓴 돈 <small>{{ toWon(summary.cost) }}</small></h2>
-        <p v-if="costByCategory.length === 0" class="wr-empty">결제 내역이 없어요. 앱 회고에서 넣을 수 있어요.</p>
+        <p v-if="costByCategory.length === 0" class="wr-empty">결제 내역이 없어요. 앱 여행 기록에서 넣을 수 있어요.</p>
         <div v-for="item in costByCategory" :key="item.name" class="wr-bar">
           <span class="wr-bar__name">{{ item.name }}</span>
           <span class="wr-bar__track"><i :style="{ width: item.percent + '%' }"></i></span>
