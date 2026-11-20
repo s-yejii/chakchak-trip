@@ -1035,7 +1035,7 @@ function finishTour() {
         <!-- 장면 2: 버스에서 내린 뒤 시간이 남으면 가운데 카드 (시연 계정만, 고르기 전엔 시계·[다음 장소로] 멈춤) -->
         <div v-if="restAsk && !isLostOpen" class="rest-pop" role="alertdialog" aria-modal="true" aria-label="시간이 남아요">
           <section class="rest-pop__card">
-            <b class="rest-pop__title">{{ restAsk.name }}까지 {{ toDuration(restAsk.slackMin) }} 남아요</b>
+            <b class="rest-pop__title">{{ restAsk.name }}까지 <span class="rest-pop__good">{{ toDuration(restAsk.slackMin) }}</span> 남아요</b>
             <span class="rest-pop__text">예약 시각까지 시간이 남아요. 근처 카페에서 쉬었다 갈까요?</span>
             <button type="button" class="btn btn--primary btn--lg btn--block" @click="findRestCafe">근처 카페 보기</button><!-- 11/19 주형: 예약 가게 근처 카페를 골라 넣기 -->
             <button type="button" class="btn btn--secondary btn--lg btn--block" @click="keepGoing">이대로 갈게요</button>
@@ -1225,6 +1225,10 @@ function finishTour() {
 .rest-pop { position: absolute; inset: 0; z-index: 58; display: grid; place-items: center; padding: 24px; background: rgba(15, 20, 35, 0.45); }
 .rest-pop__card { width: 100%; max-width: 320px; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 22px 18px 18px; border-radius: 20px; background: var(--surface-raised); box-shadow: 0 16px 40px -8px rgba(24, 33, 58, 0.45); text-align: center; }
 .rest-pop__title { font-size: 18px; line-height: 26px; color: var(--ink); }
+/* 11/20 주형(예지 OK): 카드 핵심을 색으로 — 남는 시간은 초록, 경고 알림은 주황 제목 + 왼쪽 띠 (문구·규칙은 그대로) */
+.rest-pop__good { color: var(--success); }
+.scr-Live .noti--warn { box-shadow: inset 4px 0 0 var(--warning), 0 8px 24px rgba(24, 33, 58, 0.18); }
+.scr-Live .noti--warn .noti__t { color: var(--warning); }
 .rest-pop__text { font-size: 14px; line-height: 20px; color: var(--ink-muted); margin-bottom: 6px; }
 .scr-Live .live-head .t-cap { font-size: 13px; line-height: 18px; color: var(--ink-muted); }
 .scr-Live .live-head .t-big { font-size: 28px; line-height: 36px; letter-spacing: -.03em; }

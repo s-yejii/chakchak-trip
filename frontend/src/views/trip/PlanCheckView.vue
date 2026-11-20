@@ -331,7 +331,10 @@ async function save() {
 <style>
 .scr-PlanCheck .pc-ask{position:absolute;inset:0;z-index:40} /* 묻는 창을 바텀시트·지도 버튼보다 위에 (ConfirmModal은 z-index 8~9라 그냥 두면 시트 아래로 깔림) */
 .scr-PlanCheck .pc-ask .modal{min-height:0} /* 공통 .modal은 min-height 404px라 글만 있는 창은 아래가 비어서, 이 화면에서만 0 */
-.scr-PlanCheck .pc-missed{display:flex;align-items:center;gap:8px;margin:0 16px 8px;padding:8px 12px;border-radius:10px;font-size:13px;font-weight:600;color:var(--warning);background:var(--warning-soft)}
+.scr-PlanCheck .pc-missed{display:flex;align-items:center;gap:8px;margin:0 16px 8px;padding:8px 12px;border-radius:10px;font-size:14px;font-weight:700;color:var(--warning);background:var(--warning-soft);box-shadow:inset 3px 0 0 var(--warning)}
+/* 11/20 ③ 주형(색만): 확인할 것 중 "늦게 도착해요"는 빨강 굵게 (CheckList가 kind 'late' 칸에 붙이는 이름) */
+.scr-PlanCheck .chk__item--late b{color:var(--danger)}
+.scr-PlanCheck .chk__item--late .ic{color:var(--danger)}
 .scr-PlanCheck .pc-missed .ic{flex:none}
 .scr-PlanCheck .pc-missed__text{flex:1;min-width:0}
 .scr-PlanCheck .pc-missed .btn{flex:none}

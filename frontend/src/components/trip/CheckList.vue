@@ -21,7 +21,7 @@ const bad = computed(() => props.items.some((item) => item.kind === 'late'))
       <i class="ic ic--s" :class="open ? 'i-up' : 'i-down'" aria-hidden="true"></i>
     </button>
     <ul v-if="open" class="chk__list">
-      <li v-for="item in items" :key="item.title">
+      <li v-for="item in items" :key="item.title" :class="{ 'chk__item--late': item.kind === 'late' }">
         <i class="ic ic--s" :class="item.icon" aria-hidden="true"></i>
         <span>
           <b>{{ item.title }}</b>
