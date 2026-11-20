@@ -457,7 +457,10 @@ async function rideHangang(option) {
   await setClock(date, toMinutes(option.leaveAt)) // ③ 내린 선착장 근처 한강공원에서 쉬기 (restMin)
   // ④ 버스로 예약한 가게
   const last = piers[piers.length - 1]
-  await moveAlong([[last.lat, last.lng], [next.lat, next.lng]], option.afterAlightMin)
+  // 11/20 주형: 내린 뒤 버스 길이 직선(점)과 서버가 다시 잰 길(선)로 따로 놀았어요 → 찻길(TMAP 자동차)을 받아 점·선을 같은 길로 고정
+  const busPath = await roadPath(last, next)
+  demoRoute.value = busPath
+  await moveAlong(busPath, option.afterAlightMin)
   await arrive(next, date, toMinutes(option.leaveAt) + option.afterAlightMin)
 }
 
