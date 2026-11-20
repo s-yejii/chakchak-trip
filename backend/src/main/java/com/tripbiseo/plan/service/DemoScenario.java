@@ -192,7 +192,7 @@ public class DemoScenario {
 
     /**
      * 시연 계정 날씨 카드: 진짜 오늘 = 1일차 맑음, 내일 = 2일차 13:00부터 비 (기온은 진짜 예보 그대로).
-     * 예보가 없는 날(3일 뒤보다 먼 날)은 그대로 둠
+     * 11/20: 3일보다 먼 날도 Open-Meteo·작년 관측으로 숫자가 와서 같은 규칙을 그대로 써요 (날씨를 못 받은 날만 그대로)
      */
     public void applyWeather(List<DayWeather> list) {
         // 11/19: 시연 시계 날짜가 아니라 여행 1일차 기준 (어느 날짜로 만든 여행이든 1일차 맑음 · 2일차 비 안내)
@@ -206,6 +206,7 @@ public class DemoScenario {
                 day.setSky(CLEAR_SKY);
                 day.setMaxPop(CLEAR_POP);
                 day.setRainFrom(null);
+                day.setOutfitNote(withoutUmbrella(day.getOutfitNote())); // 맑음인데 "우산 챙기기"가 남지 않게
             } else if (IS_RAIN_NOTICE_ON && date.equals(today.plusDays(RAIN_DAY - 1))) {
                 day.setSky(RAIN_SKY);
                 day.setMaxPop(RAIN_POP);
@@ -213,6 +214,14 @@ public class DemoScenario {
                 day.setOutfitNote(UMBRELLA_NOTE);
             }
         }
+    }
+
+    private String withoutUmbrella(String note) {
+        if (note == null) {
+            return null;
+        }
+        String rest = note.replace(" · 우산 챙기기", "").replace("우산 챙기기", "");
+        return rest.isBlank() ? null : rest;
     }
 
     private Stop toStop(Object[] row) {

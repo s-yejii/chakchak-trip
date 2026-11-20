@@ -111,7 +111,7 @@
 | `POST /api/plans/route-options` | [동선 최적화] 이동 시간이 짧은 순서 후보 최대 5개 | trip/TripDetailView, trip/PlanEditView | 있음 |
 | `POST /api/plans/route-order` | [동선 정리] 하루 일정의 새 순서 (최근접 이웃 + 2-opt). AI 일정과 같은 함수 | trip/PlanManualView | 있음 |
 | `POST /api/plans/links` | 인스타·유튜브·네이버(블로그·지도) 링크 → 장소 추출 | plan/PlanAiView (WishLinks) | 있음 |
-| `GET /api/plans/weather` | 여행 날짜 날씨(기온·습도·하늘·비 시작 시각) + 기온별 옷차림. 기상청 단기예보라 3일 뒤까지 | trip/PlanCheckView (TripWeather) | 있음 (11/06) |
+| `GET /api/plans/weather` | 여행 날짜 날씨(기온·습도·하늘·비 시작 시각) + 기온별 옷차림. 3일 안 기상청, 16일 안 Open-Meteo 예보, 그 뒤 작년 같은 날 관측(예년 기준) | trip/PlanCheckView (TripWeather) | 있음 (11/06) |
 | `GET /api/plans/hangang-bus` | 예약까지 시간이 많이 뜰 때 한강버스로 가는 방법 하나 (없으면 204) | after/RouteGuideView (HangangBusOption, ⑤ 석진 OK) | 있음 (11/16) |
 | (주소 미정) | 숙소 핀 | plan/StayPinView | 확인 필요 |
 | `GET /api/dev/status` | [개발자 모드] 시연 계정인지 + 시연 시계 상태 | member/MyView (VersionTap), live/DevDot | 있음 (11/06) |
@@ -1164,7 +1164,7 @@
 
 ### `GET /api/plans/weather` (11/06)
 
-여행 날짜마다 날씨와 옷차림. 기상청 단기예보(`KMA_SERVICE_KEY`)를 써요. 예보는 오늘부터 3일 뒤까지라 그 뒤 날짜는 숫자 없이 안내만 해요.
+여행 날짜마다 날씨와 옷차림. 3일 뒤까지는 기상청 단기예보(`KMA_SERVICE_KEY`), 16일 안은 Open-Meteo 예보(키 없음, `source: "Open-Meteo 예보"`), 그보다 먼 날은 작년 같은 날 실제 관측(`source: "예년 기준 (작년 같은 날 실제 날씨)"`, 화면에 "작년 이맘때") (11/20). 먼 날은 시간별 값이 없어 `humidity`·`rainFrom`은 null. 다 실패하면 숫자 없이 안내만 해요.
 
 - 요청: `?lat=37.5264&lng=126.9336&startDate=2026-11-07&endDate=2026-11-08` (endDate 없으면 하루, 최대 7일)
 - 응답: 날짜마다 한 줄
