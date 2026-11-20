@@ -37,6 +37,7 @@ import { readStyle } from '@/utils/mySettings'
 import { toDuration } from '@/utils/time'
 import { areasFromPlaces } from '@/utils/planArea'
 import { checkDay } from '@/utils/dayFit'
+import { fillPlanFromTrip } from '@/utils/planAgain'
 import youtubeLogo from '@/assets/brand/youtube.svg'
 import instagramLogo from '@/assets/brand/instagram.svg'
 import naverLogo from '@/assets/brand/naver.svg'
@@ -495,6 +496,17 @@ const wishCount = computed(() => (store.planConditions?.mustVisit || []).length)
 function markAutoNext() {
   store.planAutoNext = true
 }
+// 회고 [이 코스로 다시] (/plan/info?again=여행id, 11/20): 그 여행의 지역·인원·다녀온 가게를 채우고 날짜부터 (utils/planAgain.js)
+onMounted(async () => {
+  const againId = route.query.again
+  if (!againId) return
+  const isFilled = await fillPlanFromTrip(store, againId)
+  const query = { ...route.query }
+  delete query.again
+  query.step = String(store.planStep)
+  router.replace({ query })
+  if (isFilled) showToast('지난 여행 가게 ' + (store.planConditions.mustVisit || []).length + '곳을 담았어요 · 날짜만 골라 주세요')
+})
 // 공유로 들어온 링크(/share → ?link=)가 있으면 링크 칸에 채워 둠 (11/13). 찾기는 사용자가 글까지 넣고 눌러요 (11/14)
 onMounted(() => {
   if (typeof route.query.link === 'string' && wishLinks.value) wishLinks.value.fillShared(route.query.link)
