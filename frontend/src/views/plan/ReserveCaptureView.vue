@@ -7,6 +7,7 @@ import { readCapture } from '@/api/trips'
 import { fitYearToTrip } from '@/utils/captureYear'
 import ScanOverlay from '@/components/plan/ScanOverlay.vue'
 import { useTripStore } from '@/stores/trip'
+import { setAutoAreaFrom } from '@/utils/planArea'
 import { goBack } from '@/utils/back'
 import { showToast } from '@/utils/toast'
 
@@ -138,11 +139,20 @@ function isAlreadyAdded(placeName, reserveTime, day) {
   return false
 }
 
+function moveTripStart(firstDate) {
+  const nights = store.planEndDate ? Math.round((new Date(store.planEndDate) - new Date(store.planStartDate)) / DAY_MS) : 0
+  store.planStartDate = firstDate
+  store.planEndDate = nights ? new Date(new Date(firstDate).getTime() + nights * DAY_MS).toISOString().slice(0, 10) : null
+  store.planFromTime = '' // 여행 정보로 돌아가면 그날 기준 시간으로 다시 채워요 (PlanAiView setDefaultTimes)
+}
+
 function add() {
   const placeName = name.value.trim() || '예약한 곳'
   if (!TIME_PATTERN.test(time.value)) return showToast('시간을 HH:mm으로 적어 주세요')
   if (date.value && !DATE_PATTERN.test(date.value)) return showToast('날짜를 2026-11-15처럼 적어 주세요')
   // 예전엔 날짜를 버려서 2일차 예약도 1일차에 들어갔어요 (11/11 주형). 손으로 고친 날짜도 그대로 써요
+  // 11/20: 날짜를 고르기 전(꼭 갈 곳 칸)에 넣는 첫 예약이면 그 날짜를 여행 첫날로 (박 수는 그대로, 시간은 그날 기준으로 다시)
+  if (dayOfTrip(date.value) === 0 && !((store.planConditions || {}).fixed || []).length && date.value) moveTripStart(date.value)
   const day = dayOfTrip(date.value)
   if (day === 0) return showToast('예약 날짜가 여행 날짜 밖이에요 · 여행 날짜를 확인해 주세요')
   if (isAlreadyAdded(placeName, time.value, day)) return showToast('이미 넣은 예약이에요') // 11/13: 같은 캡처를 두 번 올리면 두 줄이 되던 문제
@@ -153,6 +163,7 @@ function add() {
   const conditions = store.planConditions || {}
   const fixed = conditions.fixed || []
   store.planConditions = { ...conditions, fixed: [...fixed, { name: placeName, time: time.value, day }] }
+  if (found.value) setAutoAreaFrom(store, { address: found.value.address, lat: found.value.lat, lng: found.value.lng })
   showToast(dayLabelOf(day) + placeName + ' ' + time.value + ' 고정했어요')
   goBack('/plan/info')
 }
