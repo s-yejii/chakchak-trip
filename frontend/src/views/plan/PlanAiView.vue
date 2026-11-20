@@ -6,7 +6,8 @@ let isRestoreChecked = false
 <script setup>
 // S06 여행 정보 입력 (③): 한 화면에 하나씩 묻고 "이전"·"다음"으로 넘겨요 (11/04: 긴 스크롤 → 단계별, 11/06: 건너뛰기 버튼 없앰)
 // 주소: /plan/info (AI로 짜기) · /plan/info?method=me (직접 고르기)
-//   순서: 가고 싶은 곳(인스타 링크) → 어디로 → 언제 → 몇 시부터 몇 시까지 → 어디서 출발 → 누구랑 → 어디 위주 → 이런 곳 → 무엇으로 → 꼭 지킬 시간
+//   순서 (11/20 피드백 "질문 줄이기": 11단계 → 7단계): 가고 싶은 곳(인스타 링크) → 어디로 → 언제(+숙소) → 어디서 출발 → 누구랑
+//     → 어디 위주·이런 곳(한 화면) → 꼭 지킬 시간. 동은 안 묻고 구 전체, 몇 시부터·무엇으로는 마지막 칸에 "이렇게 짜요 [바꾸기]"로
 //   인스타로 담으면 그 장소의 구가 지역으로 자동 선택돼서 "어디로"를 건너뛰어요 (WishLinks)
 //   꼭 알려 줘야 하는 건 지역 하나. 나머지는 안 고르고 "다음"을 눌러도 되고, 이동 수단은 안 고르면 지하철·도보·버스
 //   지금 칸·고른 값은 저장소(store)에 둬서 장소 검색에 다녀와도 그대로예요
@@ -21,7 +22,6 @@ import TripWeather from '@/components/plan/TripWeather.vue'
 import { goBack } from '@/utils/back'
 import { imageFor } from '@/utils/mapView'
 import GuMapPicker from '@/components/plan/GuMapPicker.vue'
-import DongPicker from '@/components/plan/DongPicker.vue'
 import OriginPicker from '@/components/plan/OriginPicker.vue'
 import ChoiceCard from '@/components/plan/ChoiceCard.vue'
 import TimeRangePicker from '@/components/plan/TimeRangePicker.vue'
@@ -32,25 +32,24 @@ import { showToast } from '@/utils/toast'
 import { recommendTimeFor } from '@/utils/timeRecommend'
 import { appNow, devMode } from '@/utils/devMode'
 import { getDevScenario } from '@/api/dev'
+import { PLAN_STEP_IDS } from '@/utils/planSteps'
 import youtubeLogo from '@/assets/brand/youtube.svg'
 import instagramLogo from '@/assets/brand/instagram.svg'
 import naverLogo from '@/assets/brand/naver.svg'
 
 const WORKSHOP_MIN_PEOPLE = 4 // 워크숍을 고르면 인원은 적어도 이만큼
 const DEFAULT_MOVES = ['지하철', '도보', '버스']
-const STEPS = [
-  { id: 'link', title: 'SNS에서 본 가게가 있나요?', sub: '인스타·유튜브·네이버 게시물 링크를 넣으면 나온 가게를 찾아 일정에 넣어요' }, // 11/18 사용성: "무슨 링크인지" 몰랐어요
-  { id: 'where', title: '어디로 가요?', sub: '', isRequired: true },
-  { id: 'dong', title: '어느 동이 좋아요?', sub: '안 고르면 구 전체' },
-  { id: 'when', title: '언제 가요?', sub: '' },
-  { id: 'time', title: '몇 시부터 몇 시까지 놀까요?', sub: '' },
-  { id: 'from', title: '어디서 출발해요?', sub: '' },
-  { id: 'who', title: '누구랑 가요?', sub: '' },
-  { id: 'kind', title: '어디 위주로 갈까요?', sub: '밥·카페는 알아서 넣어요' },
-  { id: 'tag', title: '이런 곳이면 더 좋아요', sub: '' },
-  { id: 'move', title: '무엇으로 다녀요?', sub: '안 고르면 지하철·도보·버스' },
-  { id: 'fixed', title: '예약한 곳이 있나요?', sub: '' },
-]
+// 11/20 피드백: 동(구 전체로)·몇 시부터(마이 > 여행 스타일 값)·무엇으로(지하철·도보·버스)는 따로 묻지 않고 마지막 칸에서 바꿀 수 있게
+const STEP_TEXT = {
+  link: { title: 'SNS에서 본 가게가 있나요?', sub: '인스타·유튜브·네이버 게시물 링크를 넣으면 나온 가게를 찾아 일정에 넣어요' }, // 11/18 사용성: "무슨 링크인지" 몰랐어요
+  where: { title: '어디로 가요?', sub: '', isRequired: true },
+  when: { title: '언제 가요?', sub: '' },
+  from: { title: '어디서 출발해요?', sub: '' },
+  who: { title: '누구랑 가요?', sub: '' },
+  kind: { title: '어디 위주로 갈까요?', sub: '' },
+  fixed: { title: '예약한 곳이 있나요?', sub: '' },
+}
+const STEPS = PLAN_STEP_IDS.map((id) => ({ id, ...STEP_TEXT[id] }))
 
 const TOP_GU_COUNT = 4 // 지도에 옅게 표시할 구 수
 
@@ -183,7 +182,7 @@ const withLook = (chip) => ({ ...chip, icon: CARD_LOOK[chip.code][0], desc: CARD
 const KIND_COLORS = { food: '#FF7A59', cafe: '#C8915B', bar: '#B4436C', tour: '#2FA67A', culture: '#7B61FF', shop: '#2F80ED' } // 어디 위주로: 종류마다 고유 색
 const KIND_CARDS = KIND_CHIPS.map((chip) => ({ ...withLook(chip), color: KIND_COLORS[chip.code] }))
 const TAG_CARDS = TAG_CHIPS.map(withLook)
-const CENTER_STEPS = ['time', 'who', 'kind', 'tag', 'move', 'fixed'] // 질문을 화면 가운데로 모으는 칸
+const CENTER_STEPS = ['who', 'fixed'] // 질문을 화면 가운데로 모으는 칸 (어디 위주는 카드가 많아 위에서부터)
 const isCentered = computed(() => CENTER_STEPS.includes(step.value.id))
 const moveList = [
   { label: '지하철', icon: 'i-subway', desc: '역 따라 이동' },
@@ -324,6 +323,12 @@ function toggleCode(list, code) {
   return list.includes(code) ? list.filter((item) => item !== code) : [...list, code]
 }
 
+// 마지막 칸 "이렇게 짜요" (11/20): 시간·이동 수단은 따로 안 묻고 여기서 바꾸기
+const openSum = ref('') // 펼친 칸: 'time' | 'move' | ''
+const shownMoves = computed(() => (store.planMoves.length ? store.planMoves : DEFAULT_MOVES)) // 안 고르면 기본값이 켜진 채로 보여요
+const movesText = computed(() => shownMoves.value.join('·') + '로 다녀요')
+const timeSource = computed(() => '하루 활동 시간')
+
 // 여기서 고른 값을 일정 만들기 조건(store.planConditions)으로 → 대화(③ chat)가 이어서 채우고, 만들기(③ generate)가 씀
 function saveConditions() {
   if (store.planMoves.length === 0) store.planMoves = [...DEFAULT_MOVES] // 안 고르면 대중교통 + 도보
@@ -357,10 +362,9 @@ function saveConditions() {
   }
 }
 
-// 한 칸 앞뒤로. 지도에서 구를 안 골랐으면 동 칸은 건너뜀
+// 한 칸 앞뒤로
 function moveStep(direction) {
-  let next = store.planStep + direction
-  if (STEPS[next] && STEPS[next].id === 'dong' && !store.planAreas.length) next += direction
+  const next = store.planStep + direction
   store.planStep = next
   // 11/13: 단계를 주소(?step=)에도 적어서 폰·브라우저 뒤로가기가 앞 단계로 가게. 앞으로 갈 때만 기록을 쌓고, 뒤로 갈 때는 바꾸기만
   const query = { ...route.query, step: String(next) }
@@ -541,8 +545,6 @@ function useRecommendedTime() {
 
         <GuMapPicker v-if="step.id === 'where'" :model-value="store.planAreas" :tops="topGus" @update:model-value="setAreas" />
 
-        <DongPicker v-else-if="step.id === 'dong'" :areas="store.planAreas" />
-
         <section v-else-if="step.id === 'when'" class="card card--pad pa-sec" aria-label="날짜">
           <RangeCalendar v-model:start="store.planStartDate" v-model:end="store.planEndDate" />
           <!-- 숙소: 1박 이상이면 담아요. 안 담아도 넘어갈 수 있어요 -->
@@ -570,11 +572,6 @@ function useRecommendedTime() {
           <p v-else-if="isWeatherLater" class="t-cap" style="margin: 0">날씨·옷차림은 여행 3일 전부터 보여요</p>
         </section>
 
-        <section v-else-if="step.id === 'time'" class="pa-cards" aria-label="시간">
-          <TimeRangePicker v-model:start="store.planFromTime" v-model:end="store.planToTime" :note="timeNote" />
-          <button type="button" class="chip" style="align-self: center" @click="useRecommendedTime"><i class="ic ic--s i-sparkle" aria-hidden="true"></i>시간 추천</button>
-        </section>
-
         <OriginPicker v-else-if="step.id === 'from'" />
 
         <section v-else-if="step.id === 'who'" class="pa-cards" aria-label="동행">
@@ -591,22 +588,37 @@ function useRecommendedTime() {
           </div>
         </section>
 
+        <!-- 11/20: 어디 위주 + 이런 곳을 한 화면에 (둘 다 안 골라도 돼요) -->
         <section v-else-if="step.id === 'kind'" class="pa-cards" aria-label="장소 종류">
           <div class="choice-grid">
             <ChoiceCard v-for="chip in KIND_CARDS" :key="chip.code" :icon="chip.icon" :title="chip.label" :desc="chip.desc" :color="chip.color" :selected="store.planKinds.includes(chip.code)" @click="store.planKinds = toggleCode(store.planKinds, chip.code)" />
           </div>
-          <p v-if="store.planKinds.length" class="t-cap tn" style="margin: 0; text-align: center">{{ store.planKinds.length }}개 골랐어요</p>
-        </section>
-
-        <section v-else-if="step.id === 'tag'" class="choice-grid" aria-label="분위기">
-          <ChoiceCard v-for="chip in TAG_CARDS" :key="chip.code" :icon="chip.icon" :title="chip.label" :desc="chip.desc" :selected="store.planTags.includes(chip.code)" @click="store.planTags = toggleCode(store.planTags, chip.code)" />
-        </section>
-
-        <section v-else-if="step.id === 'move'" class="choice-grid" aria-label="이동 수단">
-          <ChoiceCard v-for="m in moveList" :key="m.label" :icon="m.icon" :title="m.label" :desc="m.desc" :selected="store.planMoves.includes(m.label)" @click="store.planMoves = toggleCode(store.planMoves, m.label)" />
+          <p class="t-cap tn" style="margin: 0; text-align: center">{{ store.planKinds.length ? store.planKinds.length + '개 골랐어요' : '안 고르면 밥집·카페 위주로 짜요' }}</p>
+          <h2 class="t-sub" style="margin: 8px 0 0">이런 곳이면 더 좋아요</h2>
+          <div class="choice-grid" aria-label="분위기">
+            <ChoiceCard v-for="chip in TAG_CARDS" :key="chip.code" :icon="chip.icon" :title="chip.label" :desc="chip.desc" :selected="store.planTags.includes(chip.code)" @click="store.planTags = toggleCode(store.planTags, chip.code)" />
+          </div>
         </section>
 
         <section v-else-if="step.id === 'fixed'" class="pa-cards" aria-label="꼭 지킬 시간">
+          <!-- 11/20: 따로 묻지 않은 시간·이동 수단을 여기서 확인하고 바꿔요 -->
+          <div class="card card--pad pa-sum">
+            <div class="pa-sum__row">
+              <span class="pa-sum__text"><i class="ic ic--s i-clock" aria-hidden="true"></i><b class="tn">{{ store.planFromTime }}~{{ store.planToTime }}</b><span class="t-cap">{{ timeSource }}</span></span>
+              <button type="button" class="textlink" :aria-expanded="openSum === 'time'" @click="openSum = openSum === 'time' ? '' : 'time'">바꾸기</button>
+            </div>
+            <template v-if="openSum === 'time'">
+              <TimeRangePicker v-model:start="store.planFromTime" v-model:end="store.planToTime" :note="timeNote" />
+              <button type="button" class="chip" style="align-self: center" @click="useRecommendedTime"><i class="ic ic--s i-sparkle" aria-hidden="true"></i>시간 추천</button>
+            </template>
+            <div class="pa-sum__row">
+              <span class="pa-sum__text"><i class="ic ic--s i-subway" aria-hidden="true"></i><b>{{ movesText }}</b><span class="t-cap">{{ store.planMoves.length ? '' : '기본값' }}</span></span>
+              <button type="button" class="textlink" :aria-expanded="openSum === 'move'" @click="openSum = openSum === 'move' ? '' : 'move'">바꾸기</button>
+            </div>
+            <div v-if="openSum === 'move'" class="choice-grid" aria-label="이동 수단">
+              <ChoiceCard v-for="m in moveList" :key="m.label" :icon="m.icon" :title="m.label" :desc="m.desc" :selected="shownMoves.includes(m.label)" @click="store.planMoves = toggleCode(shownMoves, m.label)" />
+            </div>
+          </div>
           <div class="choice-grid">
             <ChoiceCard to="/plan/search?mode=fixed" icon="i-search" title="장소 검색" desc="식당·공연 이름으로" />
             <ChoiceCard to="/plan/capture" icon="i-camera" title="예약 캡처" desc="예약 문자·화면으로" />
@@ -699,4 +711,8 @@ function useRecommendedTime() {
 .scr-PlanAI .btn.is-wait{opacity:.5}
 .scr-PlanAI .pa-when-wx{display:flex;flex-direction:column;gap:8px;padding-top:4px}
 .scr-PlanAI .stays{display:flex;flex-direction:column;gap:8px;padding-top:4px}
+.scr-PlanAI .pa-sum{display:flex;flex-direction:column;gap:10px}
+.scr-PlanAI .pa-sum__row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.scr-PlanAI .pa-sum__text{display:flex;align-items:center;gap:6px;min-width:0}
+.scr-PlanAI .pa-sum__text .ic{color:var(--navy)}
 </style>
