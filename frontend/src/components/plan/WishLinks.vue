@@ -7,6 +7,7 @@
 import { computed, ref } from 'vue'
 import { findLinkPlaces } from '@/api/trips'
 import { getMyPlaceList, saveMyPlace } from '@/api/myPlaces'
+import { wishPlaces } from '@/utils/dayFit'
 import { useTripStore } from '@/stores/trip'
 import { areaFromPlaces } from '@/utils/planArea'
 import { showToast } from '@/utils/toast'
@@ -119,6 +120,7 @@ function addPicked() {
   const places = found.value.filter((place) => picked.value[place.name])
   setWish([...wish.value, ...places.map((place) => place.name)])
   saveToMyPlaces(places)
+  for (const place of places) wishPlaces[place.name] = { lat: place.lat, lng: place.lng, category: place.category } // 하루에 다 갈 수 있는지 어림에 씀
   const area = setAreaFrom(places)
   cancel()
   showToast(places.length + '곳 담음' + (area ? ' · ' + area.fullName : ''))
@@ -132,6 +134,7 @@ function setAreaFrom(places) {
   return area
 }
 function removeWish(name) {
+  delete wishPlaces[name]
   setWish(wish.value.filter((item) => item !== name))
 }
 </script>

@@ -35,6 +35,7 @@ import { getDevScenario } from '@/api/dev'
 import { PLAN_STEP_IDS } from '@/utils/planSteps'
 import { readStyle } from '@/utils/mySettings'
 import { areasFromPlaces } from '@/utils/planArea'
+import { checkDayFit } from '@/utils/dayFit'
 import youtubeLogo from '@/assets/brand/youtube.svg'
 import instagramLogo from '@/assets/brand/instagram.svg'
 import naverLogo from '@/assets/brand/naver.svg'
@@ -433,6 +434,7 @@ watch(() => route.query.step, (value) => {
 function goNext() {
   if (!canNext.value) return showToast('어디로 가는지 알려 주세요')
   if (isLast.value) {
+    if (needsDayFitAsk()) return
     if (hasOutsideFixed.value && !isOutsideWarned) {
       isOutsideWarned = true
       return showToast('여행 날짜·시간 밖 예약이 있어요 · 고치거나, 그대로 만들려면 한 번 더 눌러 주세요')
@@ -444,6 +446,30 @@ function goNext() {
   }
   moveStep(1)
 }
+// 11/20 피드백 "멀리 떨어진 곳이면 며칠 필요한지": 당일치기인데 담은 곳을 하루에 다 못 돌 것 같으면 만들기 전에 한 번 물어요
+//   시연 계정은 시나리오 일정이라 안 물어요 (utils/dayFit.js 어림: 1.5km 묶음 · 머무는 시간 · 동네 옮기는 대중교통 어림)
+const dayFit = ref(null) // 물어보는 중이면 어림 결과
+let isDayFitAnswered = false
+function needsDayFitAsk() {
+  if (byMe || devMode.isOn || isDayFitAnswered || nights.value > 0) return false
+  const dayMin = toMinutes(store.planToTime) - toMinutes(store.planFromTime)
+  const fit = checkDayFit(store.planConditions?.mustVisit || [], dayMin)
+  if (!fit.isOver) return false
+  dayFit.value = fit
+  return true
+}
+function splitToTwoDays() {
+  store.planEndDate = addDays(store.planStartDate, 1)
+  isDayFitAnswered = true
+  dayFit.value = null
+  showToast('1박 2일로 바꿨어요 · 숙소는 알아서 골라 줄게요')
+}
+function keepOneDay() {
+  isDayFitAnswered = true
+  dayFit.value = null
+  goNext()
+}
+
 function goPrev() {
   if (store.planStep === 0) return goBack('/new')
   moveStep(-1)
@@ -668,6 +694,14 @@ function useRecommendedTime() {
         </section>
 
         <section v-else-if="step.id === 'fixed'" class="pa-cards" aria-label="꼭 지킬 시간">
+          <div v-if="dayFit" class="card card--pad pa-dayfit" role="alert">
+            <b>하루에 다 못 가요 · 2일로 나눌까요?</b>
+            <span class="t-cap tn">담은 {{ store.planConditions.mustVisit.length }}곳이 {{ dayFit.groups }}개 동네에 있어서 약 {{ Math.round(dayFit.needMin / 6) / 10 }}시간 걸려요 (머무는 시간 {{ dayFit.stayMin }}분 + 걷기 {{ dayFit.walkMin }}분 + 동네 옮기기 {{ dayFit.moveMin }}분). 하루 활동 시간은 {{ Math.round(dayFit.dayMin / 6) / 10 }}시간이에요</span>
+            <div class="cta__row">
+              <button type="button" class="btn btn--secondary btn--md" @click="keepOneDay">그대로 하루로</button>
+              <button type="button" class="btn btn--primary btn--md" @click="splitToTwoDays">2일로 나누기</button>
+            </div>
+          </div>
           <!-- 11/20: 따로 묻지 않은 시간·이동 수단을 여기서 확인하고 바꿔요 -->
           <div class="card card--pad pa-sum">
             <div class="pa-sum__row">
@@ -779,6 +813,7 @@ function useRecommendedTime() {
 .scr-PlanAI .pa-when-wx{display:flex;flex-direction:column;gap:8px;padding-top:4px}
 .scr-PlanAI .stays{display:flex;flex-direction:column;gap:8px;padding-top:4px}
 .scr-PlanAI .pa-sum{display:flex;flex-direction:column;gap:10px}
+.scr-PlanAI .pa-dayfit{display:flex;flex-direction:column;gap:6px;border:1.5px solid var(--warning,#e8a33d)}
 .scr-PlanAI .pa-stay-auto{display:flex;align-items:center;gap:6px;margin:0;color:var(--navy);font-size:14px;font-weight:600}
 .scr-PlanAI .pa-stay-picks{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px}
 .scr-PlanAI .pa-stay-pick{flex:none;width:128px;display:flex;flex-direction:column;gap:2px;padding:0;border:0;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer}
