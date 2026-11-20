@@ -50,6 +50,7 @@ class LiveAlertTextTest {
         dinner.setId(7L);
         dinner.setTime("19:00");
         StatusContext context = new StatusContext();
+        context.setDemo(true); // 11/20: 이 기준은 시연 계정만
         context.setFixedStop(dinner);
         context.setLeaveAt(Geo.toMinutes("18:54"));
         context.getEtaMap().put(7L, Geo.toMinutes("18:55"));
@@ -89,5 +90,20 @@ class LiveAlertTextTest {
         cafe.setDepartedAt("2026-11-16T18:45:06");
         assertTrue(LiveAlertMaker.hasLeftAStop(List.of(cafe, sushi())));
         assertFalse(LiveAlertMaker.hasLeftAStop(List.of(sushi())));
+    }
+
+    // 11/20 주형: 일반 계정은 예전 기준 그대로 (여유 5분 이하면 바로 "지금 나가지 않으면 늦어요")
+    @Test
+    void 일반_계정은_여유_5분이면_예전처럼_바로() {
+        Stop dinner = sushi();
+        dinner.setId(7L);
+        dinner.setTime("19:00");
+        StatusContext context = new StatusContext();
+        context.setFixedStop(dinner);
+        context.setLeaveAt(Geo.toMinutes("18:54"));
+        context.getEtaMap().put(7L, Geo.toMinutes("18:55"));
+        context.setSlack(5);
+        context.setNow(Geo.toMinutes("18:09"));
+        assertTrue(maker.isMustLeaveNow(context));
     }
 }

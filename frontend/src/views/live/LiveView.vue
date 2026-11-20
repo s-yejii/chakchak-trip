@@ -324,7 +324,9 @@ function openAlert(alert) {
 watch(() => (!isReady.value ? undefined : currentStop.value ? currentStop.value.id : null), (currentId) => {
   if (currentId === undefined) return // 아직 상황을 못 받았으면 그대로
   removeLiveNotices((notice) => {
-    const match = (notice.key || '').match(/^(?:leave|overdue)-(\d+)/) // 11/19: 서버 "나갈 시간"(overdue-칸id)도 같이 (팔각정을 나와 산청 가는 길에 남아 있었어요)
+    // 11/19: 서버 "나갈 시간"(overdue-칸id)도 같이 (팔각정을 나와 산청 가는 길에 남아 있었어요). 11/20 주형: 이건 시연 계정만, 일반 계정은 예전 그대로 leave-만
+    const pattern = devMode.isOn ? /^(?:leave|overdue)-(\d+)/ : /^leave-(\d+)-/
+    const match = (notice.key || '').match(pattern)
     return !!match && Number(match[1]) !== currentId
   })
 })

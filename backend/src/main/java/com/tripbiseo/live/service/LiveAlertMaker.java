@@ -187,6 +187,9 @@ public class LiveAlertMaker {
      * 지금 나가면 도착 = 지금 + 이동 분(예약 도착 예상 − 떠날 시각). 그 전에는 출발 알림("N분 뒤 출발해요")만
      */
     boolean isMustLeaveNow(StatusContext context) {
+        if (!context.isDemo()) {
+            return context.getSlack() != null && context.getSlack() <= LEAVE_NOW_SLACK_MIN; // 11/20 주형: 일반 계정은 예지가 만든 예전 기준 그대로 (새 기준은 시연 계정만)
+        }
         Stop fixedStop = context.getFixedStop();
         Integer eta = fixedStop == null || fixedStop.getId() == null ? null : context.getEtaMap().get(fixedStop.getId());
         if (eta == null || context.getLeaveAt() == null || fixedStop.getTime() == null) {
