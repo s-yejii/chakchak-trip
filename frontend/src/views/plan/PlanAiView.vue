@@ -15,7 +15,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import RangeCalendar from '@/components/plan/RangeCalendar.vue'
 import WishLinks from '@/components/plan/WishLinks.vue'
-import { getAreaStats, getRecommendedLinks } from '@/api/trips'
+import { getAreaStats, getRecommendedLinks, getRecommendedStays } from '@/api/trips'
 import { useTripStore } from '@/stores/trip'
 import { addDays, daysBetween, toMonthDay, todayText } from '@/utils/dates'
 import TripWeather from '@/components/plan/TripWeather.vue'
@@ -298,6 +298,24 @@ function pickCompanion(name) {
   store.planPeople = name === '혼자' ? 1 : Math.max(fewest, store.planPeople)
   // 11/09: 고르자마자 넘기지 않음 (같은 화면에서 인원도 맞추고 [다음]으로 넘어가요)
 }
+// 날짜 칸 숙소 추천 3곳 (11/20): 고른 지역 가운데 기준, 시연 계정은 르메르디앙이 맨 앞 (GET /api/plans/stays/recommended)
+const STAY_PICK_COUNT = 3
+const stayPicks = ref([])
+watch(() => [step.value.id, store.planArea && store.planArea.lat], async ([id]) => {
+  if (id !== 'when' || !store.planArea || store.planArea.lat == null) return
+  try {
+    stayPicks.value = (await getRecommendedStays(store.planArea.lat, store.planArea.lng)).slice(0, STAY_PICK_COUNT)
+  } catch {
+    stayPicks.value = []
+  }
+}, { immediate: true })
+// 추천 카드를 누르면 여행 전체 기간 숙소로 바로 담아요 (첫날 15:00 체크인 ~ 마지막 날 11:00 체크아웃, 숙소 칸에서 고칠 수 있어요)
+function addStayPick(pick) {
+  store.planStays = [{ name: pick.name, address: pick.address, lat: pick.lat, lng: pick.lng,
+    checkInDate: store.planStartDate, checkInTime: '15:00', checkOutDate: store.planEndDate, checkOutTime: '11:00' }]
+  showToast(pick.name + ' 담았어요 · 눌러서 날짜·시각을 고칠 수 있어요')
+}
+
 // 담은 숙소의 박 수 합 (체크인~체크아웃 날짜 차이). 여행 박 수만큼 다 담으면 "숙소 더 담기"를 숨김
 const stayNights = computed(() => {
   let total = 0
@@ -595,9 +613,21 @@ function useRecommendedTime() {
               </span>
               <i class="ic i-edit subtle" aria-hidden="true"></i>
             </RouterLink>
+            <!-- 11/20 피드백: 숙소는 기본 자동 추천. 안 고르면 서버가 근처 추천 1위로 넣고, 여기서 바로 고르거나 예약한 숙소만 따로 넣어요 -->
+            <template v-if="!store.planStays.length">
+              <p class="pa-stay-auto"><i class="ic ic--s i-check" aria-hidden="true"></i>숙소는 알아서 골라 줄게요 · 원하는 곳이 있으면 눌러요</p>
+              <div v-if="stayPicks.length" class="pa-stay-picks">
+                <button v-for="pick in stayPicks" :key="pick.placeId" type="button" class="pa-stay-pick" @click="addStayPick(pick)">
+                  <img v-if="pick.imageUrl" :src="pick.imageUrl" alt="" loading="lazy" />
+                  <span v-else class="pa-stay-pick__none" aria-hidden="true"><i class="ic i-home"></i></span>
+                  <b>{{ pick.name }}</b>
+                  <span class="t-cap tn">{{ pick.kind || '숙박' }} · {{ pick.distance >= 1000 ? (pick.distance / 1000).toFixed(1) + 'km' : pick.distance + 'm' }}</span>
+                </button>
+              </div>
+            </template>
             <RouterLink v-if="stayNights < nights" to="/plan/stay" class="stayrow">
               <span class="ico-tile"><i class="ic i-plus" aria-hidden="true"></i></span>
-              <span class="row__body"><span class="row__title">{{ store.planStays.length ? '숙소 더 담기' : '숙소 잡기' }}</span></span>
+              <span class="row__body"><span class="row__title">{{ store.planStays.length ? '숙소 더 담기' : '예약한 숙소 넣기' }}</span></span>
               <i class="ic i-next subtle" aria-hidden="true"></i>
             </RouterLink>
           </div>
@@ -748,6 +778,12 @@ function useRecommendedTime() {
 .scr-PlanAI .pa-when-wx{display:flex;flex-direction:column;gap:8px;padding-top:4px}
 .scr-PlanAI .stays{display:flex;flex-direction:column;gap:8px;padding-top:4px}
 .scr-PlanAI .pa-sum{display:flex;flex-direction:column;gap:10px}
+.scr-PlanAI .pa-stay-auto{display:flex;align-items:center;gap:6px;margin:0;color:var(--navy);font-size:14px;font-weight:600}
+.scr-PlanAI .pa-stay-picks{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px}
+.scr-PlanAI .pa-stay-pick{flex:none;width:128px;display:flex;flex-direction:column;gap:2px;padding:0;border:0;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.scr-PlanAI .pa-stay-pick img,.scr-PlanAI .pa-stay-pick__none{width:128px;height:80px;border-radius:var(--radius-md);object-fit:cover;background:var(--surface-sunken)}
+.scr-PlanAI .pa-stay-pick__none{display:flex;align-items:center;justify-content:center;color:var(--ink-muted)}
+.scr-PlanAI .pa-stay-pick b{font-size:14px;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .scr-PlanAI .pa-auto-area{display:flex;align-items:center;gap:6px;margin:8px 0 0;padding:8px 12px;border-radius:var(--radius-md);background:var(--navy-soft);color:var(--navy);font-size:14px}
 .scr-PlanAI .pa-auto-area .textlink{margin-left:auto}
 .scr-PlanAI .pa-sum__row{display:flex;align-items:center;justify-content:space-between;gap:8px}
