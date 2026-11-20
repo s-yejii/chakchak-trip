@@ -34,6 +34,7 @@ import { appNow, devMode } from '@/utils/devMode'
 import { getDevScenario } from '@/api/dev'
 import { PLAN_STEP_IDS } from '@/utils/planSteps'
 import { readStyle } from '@/utils/mySettings'
+import { toDuration } from '@/utils/time'
 import { areasFromPlaces } from '@/utils/planArea'
 import { checkDay } from '@/utils/dayFit'
 import youtubeLogo from '@/assets/brand/youtube.svg'
@@ -458,6 +459,10 @@ async function needsDayFitAsk() {
   dayFit.value = fit
   return true
 }
+// "9.9시간" 대신 "9시간 50분" (10분 단위로 반올림, 11/20 주형)
+function roundedDuration(minutes) {
+  return toDuration(Math.round(minutes / 10) * 10)
+}
 function splitToTwoDays() {
   store.planEndDate = addDays(store.planStartDate, 1)
   isDayFitAnswered = true
@@ -696,7 +701,7 @@ function useRecommendedTime() {
         <section v-else-if="step.id === 'fixed'" class="pa-cards" aria-label="꼭 지킬 시간">
           <div v-if="dayFit" class="card card--pad pa-dayfit" role="alert">
             <b class="pa-dayfit__title"><i class="ic ic--s i-warning" aria-hidden="true"></i>하루에 다 못 가요 · 2일로 나눌까요?</b>
-            <span class="pa-dayfit__key tn">약 <b>{{ Math.round(dayFit.needMin / 6) / 10 }}시간</b> 필요 · 하루 {{ Math.round(dayFit.dayMin / 6) / 10 }}시간</span>
+            <span class="pa-dayfit__key tn">약 <b>{{ roundedDuration(dayFit.needMin) }}</b> 필요 · 하루 {{ roundedDuration(dayFit.dayMin) }}</span>
             <span class="t-cap tn">담은 {{ store.planConditions.mustVisit.length }}곳이 {{ dayFit.groups }}개 동네에 있어요 (머무는 시간 {{ dayFit.stayMin }}분 + 걷기 {{ dayFit.walkMin }}분 + 동네 옮기기 {{ dayFit.moveMin }}분)</span>
             <div class="cta__row">
               <button type="button" class="btn btn--secondary btn--md" @click="keepOneDay">그대로 하루로</button>
