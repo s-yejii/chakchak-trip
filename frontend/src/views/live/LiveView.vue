@@ -237,7 +237,8 @@ function openSimilar() {
   closeLost()
   asking.value = false
   info.value = null
-  similarStop.value = { id: stop.id, placeId: stop.placeId, name: stop.name, lat: stop.lat, lng: stop.lng }
+  // 11/20: fixed도 넘김 (시연 계정만 예약 자리면 비슷한 가게를 담을 때 예약 시각부터 묻는 데 씀, SimilarSearch)
+  similarStop.value = { id: stop.id, placeId: stop.placeId, name: stop.name, lat: stop.lat, lng: stop.lng, fixed: !!stop.fixed }
   similarNext.value = findNextFixed(stop)
   adding.value = true
 }
