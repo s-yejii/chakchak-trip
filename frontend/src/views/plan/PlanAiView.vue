@@ -827,7 +827,7 @@ function useRecommendedTime() {
 .scr-PlanAI .pa-auto-area{display:flex;align-items:center;gap:6px;margin:8px 0 0;padding:8px 12px;border-radius:var(--radius-md);background:var(--navy-soft);color:var(--navy);font-size:14px}
 .scr-PlanAI .pa-auto-area .textlink{margin-left:auto}
 /* 11/20 주형 "글씨가 작고 눈에 안 띈다": 이 화면 안에서만 크기·진하기를 올려요 (전역 CSS·공용 컴포넌트 파일은 그대로) */
-.scr-PlanAI .pa-title{font-size:24px;line-height:32px;font-weight:800;letter-spacing:-0.2px}
+.scr-PlanAI .pa-title{font-size:24px;line-height:32px;font-weight:700} /* 폰트(IBM Plex Sans KR)는 700까지만 있어서 800은 가짜 굵게로 깨져 보였어요 */
 .scr-PlanAI .pa-step .t-cap{font-size:14px;line-height:20px;color:var(--ink-muted)}
 .scr-PlanAI .pa-step .t-strong{font-size:16px}
 .scr-PlanAI .choice__title{font-size:16px;line-height:22px}
@@ -838,8 +838,8 @@ function useRecommendedTime() {
 .scr-PlanAI .pa-sum__row{display:flex;align-items:center;gap:12px;padding-top:10px;border-top:1px solid var(--line)}
 .scr-PlanAI .pa-sum__ic{flex:none;width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:var(--navy-soft);color:var(--navy)}
 .scr-PlanAI .pa-sum__body{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
-.scr-PlanAI .pa-sum__label{font-size:12px;line-height:16px;color:var(--ink-muted)}
+.scr-PlanAI .pa-sum__label{font-size:13px;line-height:18px;color:var(--ink-muted)}
 .scr-PlanAI .pa-sum__val{font-size:17px;line-height:24px;font-weight:700;color:var(--ink)}
-.scr-PlanAI .pa-sum__note{font-size:12px;line-height:16px;color:var(--navy)}
+.scr-PlanAI .pa-sum__note{font-size:13px;line-height:18px;font-weight:500;color:var(--navy)}
 .scr-PlanAI .pa-sum .btn--sm{flex:none}
 </style>
