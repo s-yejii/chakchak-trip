@@ -120,7 +120,9 @@ function addPicked() {
   const places = found.value.filter((place) => picked.value[place.name])
   setWish([...wish.value, ...places.map((place) => place.name)])
   saveToMyPlaces(places)
-  for (const place of places) wishPlaces[place.name] = { lat: place.lat, lng: place.lng, category: place.category } // 하루에 다 갈 수 있는지 어림에 씀
+  for (const place of places) {
+    if (place.id) wishPlaces[place.name] = place.id // 하루에 다 갈 수 있는지 서버에 물을 때 씀 (utils/dayFit.js)
+  }
   const area = setAreaFrom(places)
   cancel()
   showToast(places.length + '곳 담음' + (area ? ' · ' + area.fullName : ''))

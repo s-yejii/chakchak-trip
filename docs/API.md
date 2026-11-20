@@ -112,6 +112,7 @@
 | `POST /api/plans/route-order` | [동선 정리] 하루 일정의 새 순서 (최근접 이웃 + 2-opt). AI 일정과 같은 함수 | trip/PlanManualView | 있음 |
 | `POST /api/plans/links` | 인스타·유튜브·네이버(블로그·지도) 링크 → 장소 추출 | plan/PlanAiView (WishLinks) | 있음 |
 | `GET /api/plans/weather` | 여행 날짜 날씨(기온·습도·하늘·비 시작 시각) + 기온별 옷차림. 3일 안 기상청, 16일 안 Open-Meteo 예보, 그 뒤 작년 같은 날 관측(예년 기준) | trip/PlanCheckView (TripWeather) | 있음 (11/06) |
+| `POST /api/plans/day-check` | 일정 만들기: 담은 장소를 하루에 다 갈 수 있는지 (PostGIS 동네 묶기 + 시간 어림) | plan/PlanAiView | 있음 (11/20) |
 | `GET /api/plans/stays/recommended` | 숙소 추가 화면: 여행 지역 근처 추천 숙소 (관광공사 등록 숙박, 사진 있는 호텔 → 가까운 순) | plan/StayPinView | 있음 (11/20) |
 | `GET /api/plans/hangang-bus` | 예약까지 시간이 많이 뜰 때 한강버스로 가는 방법 하나 (없으면 204) | after/RouteGuideView (HangangBusOption, ⑤ 석진 OK) | 있음 (11/16) |
 | (주소 미정) | 숙소 핀 | plan/StayPinView | 확인 필요 |
@@ -1186,6 +1187,15 @@
 - `minTemp`·`maxTemp`: 기상청 최저·최고(TMN·TMX). 오늘이라 그 칸이 지났으면 남은 시간 기온 중 낮은·높은 값.
 - `rainFrom`: 낮에 비·눈(PTY ≠ 0)이거나 강수확률 60% 이상인 첫 시각. 없으면 null.
 - 오류: 날짜 범위가 이상하면 400, 기상청 키가 없으면 503, 기상청 오류 502.
+
+### `POST /api/plans/day-check` (11/20)
+
+일정 만들기 마지막 칸에서 [일정 만들기]를 누를 때, 당일치기인데 담은 장소(인스타·내 장소)를 하루에 다 못 돌 것 같으면 "2일로 나눌까요?"를 묻기 위한 어림. ① `retrip_place` 읽기만, 저장 없음, 길찾기 API 안 부름.
+
+- 요청: `{ "placeIds": ["naver-11721256", "naver-1241532707"], "dayMinutes": 540 }` (2~30곳) · 로그인 필요
+- 계산: `ST_ClusterDBSCAN(ST_Transform(geom::geometry, 5179), eps := 1500, minpoints := 1) OVER ()` 로 1.5km 안으로 이어진 곳끼리 한 동네 → 머무는 시간(카페 50분·그 밖 60분) + 동네 안 걷기(가까운 순, 4km/h) + 동네 옮기기(가까운 순, 15분 + 1km에 3분)
+- 응답: `{ "groups": 4, "groupNames": [["성수다락","소문난성수감자탕"], …], "stayMin": 470, "walkMin": 21, "moveMin": 97, "needMin": 588, "dayMin": 540, "over": true }`
+- 한 곳 이하·시연 계정은 계산 없이 `over: false`
 
 ### `GET /api/plans/stays/recommended` (11/20)
 

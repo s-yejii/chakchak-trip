@@ -35,7 +35,7 @@ import { getDevScenario } from '@/api/dev'
 import { PLAN_STEP_IDS } from '@/utils/planSteps'
 import { readStyle } from '@/utils/mySettings'
 import { areasFromPlaces } from '@/utils/planArea'
-import { checkDayFit } from '@/utils/dayFit'
+import { checkDay } from '@/utils/dayFit'
 import youtubeLogo from '@/assets/brand/youtube.svg'
 import instagramLogo from '@/assets/brand/instagram.svg'
 import naverLogo from '@/assets/brand/naver.svg'
@@ -431,10 +431,10 @@ watch(() => route.query.step, (value) => {
 
 // 다음 칸으로 (이미 고른 지역 칸은 건너뜀). 마지막 칸이면 바로 일정 만들기로
 // (11/06: 단계에서 다 물어봐서 "원하는 것 말하기" 대화 화면은 흐름에서 뺌. 화면 파일·주소는 남겨 둠)
-function goNext() {
+async function goNext() {
   if (!canNext.value) return showToast('어디로 가는지 알려 주세요')
   if (isLast.value) {
-    if (needsDayFitAsk()) return
+    if (await needsDayFitAsk()) return
     if (hasOutsideFixed.value && !isOutsideWarned) {
       isOutsideWarned = true
       return showToast('여행 날짜·시간 밖 예약이 있어요 · 고치거나, 그대로 만들려면 한 번 더 눌러 주세요')
@@ -447,14 +447,14 @@ function goNext() {
   moveStep(1)
 }
 // 11/20 피드백 "멀리 떨어진 곳이면 며칠 필요한지": 당일치기인데 담은 곳을 하루에 다 못 돌 것 같으면 만들기 전에 한 번 물어요
-//   시연 계정은 시나리오 일정이라 안 물어요 (utils/dayFit.js 어림: 1.5km 묶음 · 머무는 시간 · 동네 옮기는 대중교통 어림)
-const dayFit = ref(null) // 물어보는 중이면 어림 결과
+//   시연 계정은 시나리오 일정이라 안 물어요. 계산은 서버 POST /api/plans/day-check (PostGIS로 1.5km 동네 묶기), 실패하면 안 묻고 진행
+const dayFit = ref(null) // 물어보는 중이면 서버 결과
 let isDayFitAnswered = false
-function needsDayFitAsk() {
+async function needsDayFitAsk() {
   if (byMe || devMode.isOn || isDayFitAnswered || nights.value > 0) return false
   const dayMin = toMinutes(store.planToTime) - toMinutes(store.planFromTime)
-  const fit = checkDayFit(store.planConditions?.mustVisit || [], dayMin)
-  if (!fit.isOver) return false
+  const fit = await checkDay(store.planConditions?.mustVisit || [], dayMin)
+  if (!fit || !fit.over) return false
   dayFit.value = fit
   return true
 }
