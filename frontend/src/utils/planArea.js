@@ -39,3 +39,12 @@ export function areasFromPlaces(places) {
   }
   return areas
 }
+
+// 지역을 아직 안 골랐으면 예약한 곳(장소 검색·캡처)의 구로 자동 (11/20: 꼭 갈 곳 칸에서 예약만 넣어도 "어디로"를 건너뛰게)
+export function setAutoAreaFrom(store, place) {
+  if (store.planArea || !place || place.lat == null) return
+  const area = areaFromPlaces([place])
+  if (!area) return
+  store.planArea = area
+  store.planAreas = areasFromPlaces([place])
+}
