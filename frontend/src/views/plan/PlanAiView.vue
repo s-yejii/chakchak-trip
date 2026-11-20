@@ -695,8 +695,9 @@ function useRecommendedTime() {
 
         <section v-else-if="step.id === 'fixed'" class="pa-cards" aria-label="꼭 지킬 시간">
           <div v-if="dayFit" class="card card--pad pa-dayfit" role="alert">
-            <b>하루에 다 못 가요 · 2일로 나눌까요?</b>
-            <span class="t-cap tn">담은 {{ store.planConditions.mustVisit.length }}곳이 {{ dayFit.groups }}개 동네에 있어서 약 {{ Math.round(dayFit.needMin / 6) / 10 }}시간 걸려요 (머무는 시간 {{ dayFit.stayMin }}분 + 걷기 {{ dayFit.walkMin }}분 + 동네 옮기기 {{ dayFit.moveMin }}분). 하루 활동 시간은 {{ Math.round(dayFit.dayMin / 6) / 10 }}시간이에요</span>
+            <b class="pa-dayfit__title"><i class="ic ic--s i-warning" aria-hidden="true"></i>하루에 다 못 가요 · 2일로 나눌까요?</b>
+            <span class="pa-dayfit__key tn">약 <b>{{ Math.round(dayFit.needMin / 6) / 10 }}시간</b> 필요 · 하루 {{ Math.round(dayFit.dayMin / 6) / 10 }}시간</span>
+            <span class="t-cap tn">담은 {{ store.planConditions.mustVisit.length }}곳이 {{ dayFit.groups }}개 동네에 있어요 (머무는 시간 {{ dayFit.stayMin }}분 + 걷기 {{ dayFit.walkMin }}분 + 동네 옮기기 {{ dayFit.moveMin }}분)</span>
             <div class="cta__row">
               <button type="button" class="btn btn--secondary btn--md" @click="keepOneDay">그대로 하루로</button>
               <button type="button" class="btn btn--primary btn--md" @click="splitToTwoDays">2일로 나누기</button>
@@ -817,7 +818,10 @@ function useRecommendedTime() {
 .scr-PlanAI .pa-when-wx{display:flex;flex-direction:column;gap:8px;padding-top:4px}
 .scr-PlanAI .stays{display:flex;flex-direction:column;gap:8px;padding-top:4px}
 .scr-PlanAI .pa-sum{display:flex;flex-direction:column;gap:10px}
-.scr-PlanAI .pa-dayfit{display:flex;flex-direction:column;gap:6px;border:1.5px solid var(--warning,#e8a33d)}
+.scr-PlanAI .pa-dayfit{display:flex;flex-direction:column;gap:6px;border:1.5px solid var(--warning)}
+.scr-PlanAI .pa-dayfit__title{display:flex;align-items:center;gap:6px;color:var(--warning);font-size:16px}
+.scr-PlanAI .pa-dayfit__key{font-size:15px;color:var(--ink)}
+.scr-PlanAI .pa-dayfit__key b{font-size:18px;color:var(--warning)}
 .scr-PlanAI .pa-stay-auto{display:flex;align-items:center;gap:6px;margin:0;color:var(--navy);font-size:14px;font-weight:600}
 .scr-PlanAI .pa-stay-picks{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px}
 .scr-PlanAI .pa-stay-pick{flex:none;width:128px;display:flex;flex-direction:column;gap:2px;padding:0;border:0;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer}
