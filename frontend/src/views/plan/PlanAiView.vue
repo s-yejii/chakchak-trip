@@ -24,7 +24,6 @@ import { imageFor } from '@/utils/mapView'
 import GuMapPicker from '@/components/plan/GuMapPicker.vue'
 import OriginPicker from '@/components/plan/OriginPicker.vue'
 import ChoiceCard from '@/components/plan/ChoiceCard.vue'
-import TimeRangePicker from '@/components/plan/TimeRangePicker.vue'
 import { KIND_CHIPS, MOVE_CODES, TAG_CHIPS } from '@/utils/styleCodes'
 // 서비스 아이콘: Simple Icons (CC0, 상표는 각 회사 소유). 그 서비스 바로가기에만 써요
 import { toShortDate } from '@/utils/tripView'
@@ -34,8 +33,10 @@ import { appNow, devMode } from '@/utils/devMode'
 import { getDevScenario } from '@/api/dev'
 import { PLAN_STEP_IDS } from '@/utils/planSteps'
 import { readStyle } from '@/utils/mySettings'
+import { toDuration } from '@/utils/time'
 import { areasFromPlaces } from '@/utils/planArea'
 import { checkDay } from '@/utils/dayFit'
+import { fillPlanFromTrip } from '@/utils/planAgain'
 import youtubeLogo from '@/assets/brand/youtube.svg'
 import instagramLogo from '@/assets/brand/instagram.svg'
 import naverLogo from '@/assets/brand/naver.svg'
@@ -44,14 +45,14 @@ const WORKSHOP_MIN_PEOPLE = 4 // 워크숍을 고르면 인원은 적어도 이�
 const DEFAULT_MOVES = ['지하철', '도보', '버스']
 // 11/20 피드백: 동(구 전체로)·몇 시부터(마이 > 여행 스타일 값)·무엇으로(지하철·도보·버스)는 따로 묻지 않고 마지막 칸에서 바꿀 수 있게
 const STEP_TEXT = {
-  link: { title: 'SNS에서 본 가게가 있나요?', sub: '인스타·유튜브·네이버 게시물 링크를 넣으면 나온 가게를 찾아 일정에 넣어요' }, // 11/18 사용성: "무슨 링크인지" 몰랐어요
+  // 11/20 주형: SNS 링크와 예약(장소 검색·캡처)이 비슷해서 맨 앞 한 칸으로 합침
+  link: { title: '꼭 갈 곳이 있나요?', sub: 'SNS에서 본 가게·저장한 곳·예약한 곳을 한 번에 넣어요' },
   where: { title: '어디로 가요?', sub: '', isRequired: true },
   when: { title: '언제 가요?', sub: '' },
   from: { title: '어디서 출발해요?', sub: '' },
   who: { title: '누구랑 가요?', sub: '' },
-  kind: { title: '어디 위주로 갈까요?', sub: '' },
+  kind: { title: '어디 위주로 갈까요?', sub: '마지막이에요 · 고르고 [일정 만들기]' },
   // 11/20 피드백: "예약한 곳"이 인스타로 담은 곳과 헷갈려서 시간이 정해진 곳만이라고 분명히
-  fixed: { title: '시간이 정해진 곳이 있나요?', sub: '식당 예약·공연·기차처럼 그 시각에 꼭 가야 하는 곳만 · 인스타로 담은 곳은 알아서 시간 맞춰 넣어요' },
 }
 const STEPS = PLAN_STEP_IDS.map((id) => ({ id, ...STEP_TEXT[id] }))
 
@@ -105,8 +106,8 @@ const canNext = computed(() => !step.value.isRequired || !!store.planArea)
 // 다음 버튼 글자: 링크 단계에서 아직 담은 곳이 없으면 "넘어가기" (11/18 사용성: 링크가 없으면 눌러도 되는지 몰랐어요)
 const nextLabel = computed(() => {
   if (isLast.value) return '일정 만들기'
-  const hasWish = (store.planConditions?.mustVisit || []).length > 0
-  if (step.value.id === 'link') return hasWish ? '다 담았어요' : '링크 없어요, 넘어가기' // 11/20: 담은 뒤에도 링크를 더 넣을 수 있게 이 칸에 남아요
+  const hasWish = (store.planConditions?.mustVisit || []).length > 0 || fixedList.value.length > 0
+  if (step.value.id === 'link') return hasWish ? '다 담았어요' : '없어요, 넘어가기' // 11/20: 담은 뒤에도 더 넣을 수 있게 이 칸에 남아요
   return '다음'
 })
 
@@ -187,7 +188,7 @@ const withLook = (chip) => ({ ...chip, icon: CARD_LOOK[chip.code][0], desc: CARD
 const KIND_COLORS = { food: '#FF7A59', cafe: '#C8915B', bar: '#B4436C', tour: '#2FA67A', culture: '#7B61FF', shop: '#2F80ED' } // 어디 위주로: 종류마다 고유 색
 const KIND_CARDS = KIND_CHIPS.map((chip) => ({ ...withLook(chip), color: KIND_COLORS[chip.code] }))
 const TAG_CARDS = TAG_CHIPS.map(withLook)
-const CENTER_STEPS = ['who', 'fixed'] // 질문을 화면 가운데로 모으는 칸 (어디 위주는 카드가 많아 위에서부터)
+const CENTER_STEPS = ['who'] // 질문을 화면 가운데로 모으는 칸 (어디 위주는 카드가 많아 위에서부터)
 const isCentered = computed(() => CENTER_STEPS.includes(step.value.id))
 const moveList = [
   { label: '지하철', icon: 'i-subway', desc: '역 따라 이동' },
@@ -366,7 +367,7 @@ const shownMoves = computed(() => (store.planMoves.length ? store.planMoves : DE
 const movesText = computed(() => shownMoves.value.join('·') + '로 다녀요')
 const timeSource = computed(() => {
   if (isToday()) return '오늘은 지금부터'
-  return hasSavedStyle() ? '마이 > 여행 스타일 기준' : '기본값 · 마이 > 여행 스타일에서 바꿀 수 있어요'
+  return hasSavedStyle() ? '마이 > 여행 스타일 기준' : '기본값 (마이 > 여행 스타일에서 바꿔요)'
 })
 
 // 여기서 고른 값을 일정 만들기 조건(store.planConditions)으로 → 대화(③ chat)가 이어서 채우고, 만들기(③ generate)가 씀
@@ -458,6 +459,10 @@ async function needsDayFitAsk() {
   dayFit.value = fit
   return true
 }
+// "9.9시간" 대신 "9시간 50분" (10분 단위로 반올림, 11/20 주형)
+function roundedDuration(minutes) {
+  return toDuration(Math.round(minutes / 10) * 10)
+}
 function splitToTwoDays() {
   store.planEndDate = addDays(store.planStartDate, 1)
   isDayFitAnswered = true
@@ -490,6 +495,17 @@ const wishCount = computed(() => (store.planConditions?.mustVisit || []).length)
 function markAutoNext() {
   store.planAutoNext = true
 }
+// 회고 [이 코스로 다시] (/plan/info?again=여행id, 11/20): 그 여행의 지역·인원·다녀온 가게를 채우고 날짜부터 (utils/planAgain.js)
+onMounted(async () => {
+  const againId = route.query.again
+  if (!againId) return
+  const isFilled = await fillPlanFromTrip(store, againId)
+  const query = { ...route.query }
+  delete query.again
+  query.step = String(store.planStep)
+  router.replace({ query })
+  if (isFilled) showToast('지난 여행 가게 ' + (store.planConditions.mustVisit || []).length + '곳을 담았어요 · 날짜만 골라 주세요')
+})
 // 공유로 들어온 링크(/share → ?link=)가 있으면 링크 칸에 채워 둠 (11/13). 찾기는 사용자가 글까지 넣고 눌러요 (11/14)
 onMounted(() => {
   if (typeof route.query.link === 'string' && wishLinks.value) wishLinks.value.fillShared(route.query.link)
@@ -583,9 +599,26 @@ function useRecommendedTime() {
           <p v-else-if="step.sub" class="t-cap" style="margin: 4px 0 0">{{ step.sub }}</p>
         </div>
 
-        <section v-if="step.id === 'link'" class="card card--pad pa-sec" aria-label="인스타 링크">
+        <section v-if="step.id === 'link'" class="card card--pad pa-sec" aria-label="SNS 링크·내 장소">
+          <b class="pa-sec__head">SNS 링크 · 내 장소</b>
           <WishLinks ref="wishLinks" @added="onLinkAdded" />
-          <p v-if="wishCount" class="t-cap" style="margin: 0">{{ wishCount }}곳 담았어요 · 다른 게시물 링크도 더 넣을 수 있어요. 다 모았으면 [다 담았어요]</p>
+          <p v-if="wishCount" class="t-cap" style="margin: 0">{{ wishCount }}곳 담았어요 · 더 넣을 수 있어요. 다 모았으면 [다 담았어요]</p>
+        </section>
+        <!-- 11/20: 예약한 곳(시간 고정)도 같은 칸에서. 캡처로 읽은 날짜가 여행 첫날이 돼요 (ReserveCaptureView) -->
+        <section v-if="step.id === 'link'" class="pa-cards" aria-label="예약한 곳">
+          <b class="pa-sec__head">예약한 곳 (시간이 정해진 곳)</b>
+          <div class="choice-grid">
+            <ChoiceCard to="/plan/search?mode=fixed" icon="i-search" title="장소 검색" desc="식당·공연 이름으로" />
+            <ChoiceCard to="/plan/capture" icon="i-camera" title="예약 캡처" desc="예약 문자·화면으로" />
+          </div>
+          <div v-for="(item, index) in fixedList" :key="item.name + item.day + item.time" class="stop is-fixed" style="grid-template-columns: 1fr">
+            <div class="stop__card">
+              <span class="day-tile"><b>{{ dayTileOf(item.day).title }}</b><span>{{ dayTileOf(item.day).date }}</span></span>
+              <span class="stop__body"><span class="stop__name">{{ item.name }}</span><span class="stop__meta"><b class="c-navy tn">{{ item.time }}</b> · 시간 고정</span><span v-if="fixedOutsideText(item)" class="row__meta c-warning">{{ fixedOutsideText(item) }}</span></span>
+              <button type="button" class="iconbtn" :aria-label="item.name + ' 빼기'" @click="removeFixed(index)"><i class="ic i-close muted" aria-hidden="true"></i></button>
+            </div>
+          </div>
+          <button v-if="!fixedList.length && oldFixed.length" type="button" class="btn btn--secondary btn--md" @click="loadOldFixed">지난 여행 예약 {{ oldFixed.length }}개 불러오기</button>
         </section>
 
         <section v-if="step.id === 'link'" class="pa-sns-sec" aria-label="어디서 봤어요?">
@@ -693,46 +726,31 @@ function useRecommendedTime() {
           </div>
         </section>
 
-        <section v-else-if="step.id === 'fixed'" class="pa-cards" aria-label="꼭 지킬 시간">
+        <!-- 11/20: 마지막 칸(어디 위주) 아래에 하루 점검 카드 + 이렇게 짜요(이동 수단) -->
+        <section v-if="isLast" class="pa-cards" aria-label="이렇게 짜요">
           <div v-if="dayFit" class="card card--pad pa-dayfit" role="alert">
-            <b>하루에 다 못 가요 · 2일로 나눌까요?</b>
-            <span class="t-cap tn">담은 {{ store.planConditions.mustVisit.length }}곳이 {{ dayFit.groups }}개 동네에 있어서 약 {{ Math.round(dayFit.needMin / 6) / 10 }}시간 걸려요 (머무는 시간 {{ dayFit.stayMin }}분 + 걷기 {{ dayFit.walkMin }}분 + 동네 옮기기 {{ dayFit.moveMin }}분). 하루 활동 시간은 {{ Math.round(dayFit.dayMin / 6) / 10 }}시간이에요</span>
+            <b class="pa-dayfit__title"><i class="ic ic--s i-warning" aria-hidden="true"></i>하루에 다 못 가요 · 2일로 나눌까요?</b>
+            <span class="pa-dayfit__key tn">약 <b>{{ roundedDuration(dayFit.needMin) }}</b> 필요 · 하루 {{ roundedDuration(dayFit.dayMin) }}</span>
+            <span class="t-cap tn">담은 {{ store.planConditions.mustVisit.length }}곳이 {{ dayFit.groups }}개 동네에 있어요 (머무는 시간 {{ dayFit.stayMin }}분 + 걷기 {{ dayFit.walkMin }}분 + 동네 옮기기 {{ dayFit.moveMin }}분)</span>
             <div class="cta__row">
               <button type="button" class="btn btn--secondary btn--md" @click="keepOneDay">그대로 하루로</button>
               <button type="button" class="btn btn--primary btn--md" @click="splitToTwoDays">2일로 나누기</button>
             </div>
           </div>
           <!-- 11/20: 따로 묻지 않은 시간·이동 수단을 여기서 확인하고 바꿔요 -->
+          <!-- 11/20 주형: 글씨가 작고 눈에 안 띈다 → 제목 + 칸마다 아이콘 타일·큰 값·작은 설명·[바꾸기] 버튼 -->
           <div class="card card--pad pa-sum">
+            <b class="pa-sum__head">이렇게 짜요</b>
+            <!-- 11/20 주형: 하루 시간은 여기서 빼고 마이 > 여행 스타일에서만 바꿔요 (오늘 여행이면 지금부터 자동, setDefaultTimes) -->
             <div class="pa-sum__row">
-              <span class="pa-sum__text"><i class="ic ic--s i-clock" aria-hidden="true"></i><b class="tn">{{ store.planFromTime }}~{{ store.planToTime }}</b><span class="t-cap">{{ timeSource }}</span></span>
-              <button type="button" class="textlink" :aria-expanded="openSum === 'time'" @click="openSum = openSum === 'time' ? '' : 'time'">바꾸기</button>
-            </div>
-            <template v-if="openSum === 'time'">
-              <TimeRangePicker v-model:start="store.planFromTime" v-model:end="store.planToTime" :note="timeNote" />
-              <button type="button" class="chip" style="align-self: center" @click="useRecommendedTime"><i class="ic ic--s i-sparkle" aria-hidden="true"></i>시간 추천</button>
-            </template>
-            <div class="pa-sum__row">
-              <span class="pa-sum__text"><i class="ic ic--s i-subway" aria-hidden="true"></i><b>{{ movesText }}</b><span class="t-cap">{{ store.planMoves.length ? '' : '기본값으로 골라 뒀어요' }}</span></span>
-              <button type="button" class="textlink" :aria-expanded="openSum === 'move'" @click="openSum = openSum === 'move' ? '' : 'move'">바꾸기</button>
+              <span class="pa-sum__ic" aria-hidden="true"><i class="ic i-subway"></i></span>
+              <span class="pa-sum__body"><span class="pa-sum__label">이동 수단</span><b class="pa-sum__val">{{ shownMoves.join(' · ') }}</b><span class="pa-sum__note">{{ store.planMoves.length ? '직접 골랐어요' : '기본값으로 골라 뒀어요' }}</span></span>
+              <button type="button" class="btn btn--secondary btn--sm" :aria-expanded="openSum === 'move'" @click="openSum = openSum === 'move' ? '' : 'move'">{{ openSum === 'move' ? '닫기' : '바꾸기' }}</button>
             </div>
             <div v-if="openSum === 'move'" class="choice-grid" aria-label="이동 수단">
               <ChoiceCard v-for="m in moveList" :key="m.label" :icon="m.icon" :title="m.label" :desc="m.desc" :selected="shownMoves.includes(m.label)" @click="store.planMoves = toggleCode(shownMoves, m.label)" />
             </div>
           </div>
-          <div class="choice-grid">
-            <ChoiceCard to="/plan/search?mode=fixed" icon="i-search" title="장소 검색" desc="식당·공연 이름으로" />
-            <ChoiceCard to="/plan/capture" icon="i-camera" title="예약 캡처" desc="예약 문자·화면으로" />
-          </div>
-          <div v-for="(item, index) in fixedList" :key="item.name + item.day + item.time" class="stop is-fixed" style="grid-template-columns: 1fr">
-            <div class="stop__card">
-              <span class="day-tile"><b>{{ dayTileOf(item.day).title }}</b><span>{{ dayTileOf(item.day).date }}</span></span>
-              <span class="stop__body"><span class="stop__name">{{ item.name }}</span><span class="stop__meta"><b class="c-navy tn">{{ item.time }}</b> · 시간 고정</span><span v-if="fixedOutsideText(item)" class="row__meta c-warning">{{ fixedOutsideText(item) }}</span></span>
-              <button type="button" class="iconbtn" :aria-label="item.name + ' 빼기'" @click="removeFixed(index)"><i class="ic i-close muted" aria-hidden="true"></i></button>
-            </div>
-          </div>
-          <button v-if="!fixedList.length && oldFixed.length" type="button" class="btn btn--secondary btn--md" @click="loadOldFixed">지난 여행 예약 {{ oldFixed.length }}개 불러오기</button>
-          <button v-if="!fixedList.length" type="button" class="textlink" style="align-self: center" @click="goNext">예약 없어요</button>
         </section>
       </div>
 
@@ -813,7 +831,11 @@ function useRecommendedTime() {
 .scr-PlanAI .pa-when-wx{display:flex;flex-direction:column;gap:8px;padding-top:4px}
 .scr-PlanAI .stays{display:flex;flex-direction:column;gap:8px;padding-top:4px}
 .scr-PlanAI .pa-sum{display:flex;flex-direction:column;gap:10px}
-.scr-PlanAI .pa-dayfit{display:flex;flex-direction:column;gap:6px;border:1.5px solid var(--warning,#e8a33d)}
+.scr-PlanAI .pa-sec__head{font-size:15px;line-height:22px;font-weight:700;color:var(--ink)}
+.scr-PlanAI .pa-dayfit{display:flex;flex-direction:column;gap:6px;border:1.5px solid var(--warning)}
+.scr-PlanAI .pa-dayfit__title{display:flex;align-items:center;gap:6px;color:var(--warning);font-size:16px}
+.scr-PlanAI .pa-dayfit__key{font-size:15px;color:var(--ink)}
+.scr-PlanAI .pa-dayfit__key b{font-size:18px;color:var(--warning)}
 .scr-PlanAI .pa-stay-auto{display:flex;align-items:center;gap:6px;margin:0;color:var(--navy);font-size:14px;font-weight:600}
 .scr-PlanAI .pa-stay-picks{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px}
 .scr-PlanAI .pa-stay-pick{flex:none;width:128px;display:flex;flex-direction:column;gap:2px;padding:0;border:0;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer}
@@ -822,7 +844,20 @@ function useRecommendedTime() {
 .scr-PlanAI .pa-stay-pick b{font-size:14px;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .scr-PlanAI .pa-auto-area{display:flex;align-items:center;gap:6px;margin:8px 0 0;padding:8px 12px;border-radius:var(--radius-md);background:var(--navy-soft);color:var(--navy);font-size:14px}
 .scr-PlanAI .pa-auto-area .textlink{margin-left:auto}
-.scr-PlanAI .pa-sum__row{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.scr-PlanAI .pa-sum__text{display:flex;align-items:center;gap:6px;min-width:0}
-.scr-PlanAI .pa-sum__text .ic{color:var(--navy)}
+/* 11/20 주형 "글씨가 작고 눈에 안 띈다": 이 화면 안에서만 크기·진하기를 올려요 (전역 CSS·공용 컴포넌트 파일은 그대로) */
+.scr-PlanAI .pa-title{font-size:24px;line-height:32px;font-weight:700} /* 폰트(IBM Plex Sans KR)는 700까지만 있어서 800은 가짜 굵게로 깨져 보였어요 */
+.scr-PlanAI .pa-step .t-cap{font-size:14px;line-height:20px;color:var(--ink-muted)}
+.scr-PlanAI .pa-step .t-strong{font-size:16px}
+.scr-PlanAI .choice__title{font-size:16px;line-height:22px}
+.scr-PlanAI .choice__desc{font-size:13px;line-height:18px;color:var(--ink-muted)}
+.scr-PlanAI .time-pick .chip{min-height:44px;font-size:15px}
+.scr-PlanAI .pa-sum .btn--sm{min-height:44px;padding:0 14px;font-size:14px;font-weight:700}
+.scr-PlanAI .pa-sum__head{font-size:16px;line-height:22px;font-weight:700;color:var(--ink)}
+.scr-PlanAI .pa-sum__row{display:flex;align-items:center;gap:12px;padding-top:10px;border-top:1px solid var(--line)}
+.scr-PlanAI .pa-sum__ic{flex:none;width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:var(--navy-soft);color:var(--navy)}
+.scr-PlanAI .pa-sum__body{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.scr-PlanAI .pa-sum__label{font-size:13px;line-height:18px;color:var(--ink-muted)}
+.scr-PlanAI .pa-sum__val{font-size:17px;line-height:24px;font-weight:700;color:var(--ink)}
+.scr-PlanAI .pa-sum__note{font-size:13px;line-height:18px;font-weight:500;color:var(--navy)}
+.scr-PlanAI .pa-sum .btn--sm{flex:none}
 </style>
