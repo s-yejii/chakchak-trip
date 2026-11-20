@@ -34,6 +34,7 @@ import { appNow, devMode } from '@/utils/devMode'
 import { getDevScenario } from '@/api/dev'
 import { PLAN_STEP_IDS } from '@/utils/planSteps'
 import { readStyle } from '@/utils/mySettings'
+import { areasFromPlaces } from '@/utils/planArea'
 import youtubeLogo from '@/assets/brand/youtube.svg'
 import instagramLogo from '@/assets/brand/instagram.svg'
 import naverLogo from '@/assets/brand/naver.svg'
@@ -381,13 +382,23 @@ function saveConditions() {
   }
 }
 
-// 한 칸 앞뒤로
+// 한 칸 앞뒤로. 11/20 피드백: 인스타로 담은 곳이 있으면(지역 자동) "어디로"는 건너뛰고, 다음 칸 위 "담은 곳 기준 [바꾸기]"로 바꿔요
 function moveStep(direction) {
-  const next = store.planStep + direction
+  let next = store.planStep + direction
+  if (STEPS[next] && STEPS[next].id === 'where' && isAutoArea.value) next += direction
+  goStep(next, direction > 0)
+}
+const isAutoArea = computed(() => !!store.planArea && !!store.planArea.isAuto)
+const autoAreaText = computed(() => (store.planAreas.length ? store.planAreas.map((area) => area.name).join('·') : store.planArea ? store.planArea.name : ''))
+// "담은 곳 기준 [바꾸기]" → 어디로 칸으로 (직접 고르면 그 뒤로는 안 건너뜀)
+function openWhere() {
+  goStep(STEPS.findIndex((item) => item.id === 'where'), true)
+}
+function goStep(next, isForward) {
   store.planStep = next
   // 11/13: 단계를 주소(?step=)에도 적어서 폰·브라우저 뒤로가기가 앞 단계로 가게. 앞으로 갈 때만 기록을 쌓고, 뒤로 갈 때는 바꾸기만
   const query = { ...route.query, step: String(next) }
-  if (direction > 0) router.push({ query })
+  if (isForward) router.push({ query })
   else router.replace({ query })
 }
 
@@ -420,11 +431,14 @@ function goPrev() {
 }
 // 인스타로 담으면: 담은 곳의 구를 지도에도 미리 골라 둠 (다음 "어디로"에서 확인)
 // 11/20 피드백 "여러 게시물에서 모아 한꺼번에": 담자마자 넘기지 않고 이 칸에 남아 링크를 더 넣거나 [다 담았어요]
-function onLinkAdded() {
-  const area = store.planArea
-  if (area && area.isAuto && !store.planAreas.length) {
-    store.planAreas = [{ name: area.name, lat: area.lat, lng: area.lng, dongs: [] }] // 지도(GuMapPicker)가 쓰는 모양
+//   담은 곳이 여러 구면 그 구를 다 골라 둬요 (지역을 직접 고른 뒤면 그대로)
+function onLinkAdded(places) {
+  if (!isAutoArea.value) return
+  const merged = [...store.planAreas]
+  for (const area of areasFromPlaces(places || [])) {
+    if (!merged.some((item) => item.name === area.name)) merged.push(area)
   }
+  store.planAreas = merged
 }
 const wishCount = computed(() => (store.planConditions?.mustVisit || []).length)
 // 검색 화면으로 갈 때 표시해 두면, 고르고 돌아왔을 때 바로 다음 칸으로
@@ -520,6 +534,7 @@ function useRecommendedTime() {
         <div>
           <h1 class="h-title pa-title" style="margin: 0">{{ step.title }}</h1>
           <p v-if="step.id === 'when'" class="t-cap" style="margin: 4px 0 0">{{ whenLabel }}</p>
+          <p v-if="step.id === 'when' && isAutoArea" class="pa-auto-area"><i class="ic ic--s i-pin" aria-hidden="true"></i><span>담은 곳 기준: <b>{{ autoAreaText }}</b></span><button type="button" class="textlink" @click="openWhere">바꾸기</button></p>
           <p v-else-if="step.sub" class="t-cap" style="margin: 4px 0 0">{{ step.sub }}</p>
         </div>
 
@@ -733,6 +748,8 @@ function useRecommendedTime() {
 .scr-PlanAI .pa-when-wx{display:flex;flex-direction:column;gap:8px;padding-top:4px}
 .scr-PlanAI .stays{display:flex;flex-direction:column;gap:8px;padding-top:4px}
 .scr-PlanAI .pa-sum{display:flex;flex-direction:column;gap:10px}
+.scr-PlanAI .pa-auto-area{display:flex;align-items:center;gap:6px;margin:8px 0 0;padding:8px 12px;border-radius:var(--radius-md);background:var(--navy-soft);color:var(--navy);font-size:14px}
+.scr-PlanAI .pa-auto-area .textlink{margin-left:auto}
 .scr-PlanAI .pa-sum__row{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .scr-PlanAI .pa-sum__text{display:flex;align-items:center;gap:6px;min-width:0}
 .scr-PlanAI .pa-sum__text .ic{color:var(--navy)}

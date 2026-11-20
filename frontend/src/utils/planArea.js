@@ -20,3 +20,22 @@ export function areaFromPlaces(places) {
   const lng = best.list.reduce((sum, place) => sum + place.lng, 0) / count
   return { name: best.name, fullName: best.fullName, type: 'gu', lat, lng, isAuto: true }
 }
+
+// 담은 장소들이 있는 구 전부 [{ name, lat, lng, dongs: [] }] (11/20: 인스타로 담은 곳이 여러 구면 지도에 다 골라 두려고, GuMapPicker 모양)
+export function areasFromPlaces(places) {
+  const groups = {}
+  for (const place of places) {
+    const match = /^(\S+)\s+(\S+(?:구|군|시))(?:\s|$)/.exec(place.address || '')
+    if (!match || place.lat == null) continue
+    if (!groups[match[2]]) groups[match[2]] = []
+    groups[match[2]].push(place)
+  }
+  const areas = []
+  for (const name in groups) {
+    const list = groups[name]
+    const lat = list.reduce((sum, place) => sum + place.lat, 0) / list.length
+    const lng = list.reduce((sum, place) => sum + place.lng, 0) / list.length
+    areas.push({ name, lat, lng, dongs: [] })
+  }
+  return areas
+}
