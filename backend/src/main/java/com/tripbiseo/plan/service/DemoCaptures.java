@@ -2,12 +2,15 @@ package com.tripbiseo.plan.service;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.Map;
 
 import org.springframework.stereotype.Component;
 
+import com.tripbiseo.common.util.Geo;
 import com.tripbiseo.plan.dto.CaptureResponse;
 import com.tripbiseo.plan.dto.ReceiptResponse;
 
@@ -24,6 +27,7 @@ public class DemoCaptures {
 
     private final Map<String, CaptureResponse> reserves = new HashMap<>();
     private final Map<String, ReceiptResponse> receipts = new HashMap<>();
+    private static final String SHOOT_DAY_ONE = "2026-11-16"; // 아래 표 날짜의 1일차 (촬영일)
 
     // 11/13: 촬영 날짜가 11/16(월)~17(화)로 정해져서 시연 사진·날짜를 새로 만듦 (예전 사진은 바탕화면 착착트립_시연캡처/예전_1114_15)
     public DemoCaptures() {
@@ -38,9 +42,29 @@ public class DemoCaptures {
                 makeReceipt("산청숯불가든 을지로", "naver-1850187827", "2026-11-16 20:52", 150000, "서울 중구 을지로 114-6 1층", 37.5658389, 126.9906186));
     }
 
-    /** 시연용 예약 캡처면 정해 둔 값, 아니면 null */
-    public CaptureResponse findReserve(byte[] image) {
-        return reserves.get(toHash(image));
+    /**
+     * 시연용 예약 캡처면 정해 둔 값, 아니면 null.
+     * 11/20: 날짜는 촬영일(11/16 = 1일차) 기준 몇째 날인지만 남기고, 지금 만드는 여행 1일차(startDate, 없으면 오늘)에 맞춰요
+     * (시연 날짜 고정을 없앤 뒤 11/16·17이 그대로 와서 "예약 날짜가 여행 날짜 밖이에요"가 떴어요)
+     */
+    public CaptureResponse findReserve(byte[] image, String startDate) {
+        CaptureResponse found = reserves.get(toHash(image));
+        return found == null ? null : shiftToTrip(found, startDate);
+    }
+
+    /** 정해 둔 예약을 여행 1일차 기준 날짜로 옮긴 복사본 (원본 표는 그대로) */
+    CaptureResponse shiftToTrip(CaptureResponse found, String startDate) {
+        LocalDate dayOne = startDate == null || startDate.isBlank() ? Geo.now().toLocalDate() : LocalDate.parse(startDate);
+        long dayIndex = ChronoUnit.DAYS.between(LocalDate.parse(SHOOT_DAY_ONE), LocalDate.parse(found.getDate()));
+        CaptureResponse copy = new CaptureResponse();
+        copy.setName(found.getName());
+        copy.setPlaceId(found.getPlaceId());
+        copy.setDate(dayOne.plusDays(dayIndex).toString());
+        copy.setTime(found.getTime());
+        copy.setAddress(found.getAddress());
+        copy.setLat(found.getLat());
+        copy.setLng(found.getLng());
+        return copy;
     }
 
     /** 시연용 영수증이면 정해 둔 값, 아니면 null */

@@ -8,7 +8,7 @@ import com.tripbiseo.plan.dto.StayCaptureResponse;
 public interface CaptureService {
 
     /** 예약 캡처 사진을 읽어 고정 일정 후보로. 사진은 저장하지 않음. 시연 계정이 시연용 사진을 올리면 정해 둔 값 */
-    CaptureResponse readCapture(long memberId, byte[] image, String imageType);
+    CaptureResponse readCapture(long memberId, byte[] image, String imageType, String startDate); // startDate: 만드는 여행 1일차 (시연 캡처 날짜를 맞출 때만, 없으면 null)
 
     /** 숙소 예약 캡처를 읽어 숙소 후보로 (이름·주소·체크인·체크아웃 + 위치). 사진은 저장하지 않음 */
     StayCaptureResponse readStayCapture(byte[] image, String imageType);

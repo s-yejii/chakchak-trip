@@ -1,7 +1,7 @@
 <script setup>
 // 일정 완성 화면 (③, 11/06): 고른 날 날씨 한 줄 + 기온별 옷차림 한 줄 (GET /api/plans/weather)
 //   예) 12/5 흐림 · 5~16° · 습도 70% · 13시부터 비 / 자켓 · 트렌치코트 · 니트 · 청바지 · 우산 챙기기
-//   기상청 단기예보라 3일 뒤까지만 숫자가 나와요. 그 뒤 날짜는 "3일 전부터 보여요"만, 키가 없거나 실패하면 아무것도 안 보여요
+//   3일 안은 기상청, 16일 안은 Open-Meteo 예보, 더 먼 날은 작년 같은 날 실제 날씨("예년 기준"으로 표시, 11/20). 실패하면 안 보여요
 import { computed, ref, watch } from 'vue'
 import { get } from '@/api/http'
 
@@ -44,16 +44,20 @@ const monthDay = computed(() => {
 const summary = computed(() => {
   const w = weather.value
   const parts = []
+  if (isLastYear.value) parts.push('예년 기준')
   if (w.sky) parts.push(w.sky)
   if (w.minTemp != null && w.maxTemp != null) parts.push(`${w.minTemp}~${w.maxTemp}°`)
   if (w.humidity != null) parts.push(`습도 ${w.humidity}%`)
   if (w.rainFrom) parts.push(`${Number(w.rainFrom.slice(0, 2))}시부터 ${w.sky}`)
   return parts.join(' · ')
 })
+// 먼 날짜라 지난해 같은 날 관측값인지 (서버 source가 "예년 기준 (2025년 …)") → 예보처럼 안 보이게 앞에 "예년 기준"
+const isLastYear = computed(() => !!weather.value && (weather.value.source || '').startsWith('예년'))
 // compact 한 줄: 하늘 · 최저~최고° · (비 오면) N시부터 비 (습도는 빼요)
 const compactSummary = computed(() => {
   const w = weather.value
   const parts = []
+  if (isLastYear.value) parts.push('예년 기준')
   if (w.sky) parts.push(w.sky)
   if (w.minTemp != null && w.maxTemp != null) parts.push(`${w.minTemp}~${w.maxTemp}°`)
   if (w.rainFrom) parts.push(`${Number(w.rainFrom.slice(0, 2))}시부터 ${w.sky}`)

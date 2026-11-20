@@ -113,7 +113,7 @@ async function readFromServer(file) {
   time.value = ''
   date.value = ''
   try {
-    found.value = await readCapture(file)
+    found.value = await readCapture(file, store.planStartDate)
     name.value = found.value.name
     time.value = found.value.time || ''
     date.value = fitYearToTripDates(found.value.date) || '' // 11/16: 연도 없는 캡처는 여행 날짜 안의 같은 월·일로

@@ -111,7 +111,8 @@
 | `POST /api/plans/route-options` | [동선 최적화] 이동 시간이 짧은 순서 후보 최대 5개 | trip/TripDetailView, trip/PlanEditView | 있음 |
 | `POST /api/plans/route-order` | [동선 정리] 하루 일정의 새 순서 (최근접 이웃 + 2-opt). AI 일정과 같은 함수 | trip/PlanManualView | 있음 |
 | `POST /api/plans/links` | 인스타·유튜브·네이버(블로그·지도) 링크 → 장소 추출 | plan/PlanAiView (WishLinks) | 있음 |
-| `GET /api/plans/weather` | 여행 날짜 날씨(기온·습도·하늘·비 시작 시각) + 기온별 옷차림. 기상청 단기예보라 3일 뒤까지 | trip/PlanCheckView (TripWeather) | 있음 (11/06) |
+| `GET /api/plans/weather` | 여행 날짜 날씨(기온·습도·하늘·비 시작 시각) + 기온별 옷차림. 3일 안 기상청, 16일 안 Open-Meteo 예보, 그 뒤 작년 같은 날 관측(예년 기준) | trip/PlanCheckView (TripWeather) | 있음 (11/06) |
+| `GET /api/plans/stays/recommended` | 숙소 추가 화면: 여행 지역 근처 추천 숙소 (관광공사 등록 숙박, 사진 있는 호텔 → 가까운 순) | plan/StayPinView | 있음 (11/20) |
 | `GET /api/plans/hangang-bus` | 예약까지 시간이 많이 뜰 때 한강버스로 가는 방법 하나 (없으면 204) | after/RouteGuideView (HangangBusOption, ⑤ 석진 OK) | 있음 (11/16) |
 | (주소 미정) | 숙소 핀 | plan/StayPinView | 확인 필요 |
 | `GET /api/dev/status` | [개발자 모드] 시연 계정인지 + 시연 시계 상태 | member/MyView (VersionTap), live/DevDot | 있음 (11/06) |
@@ -1164,7 +1165,7 @@
 
 ### `GET /api/plans/weather` (11/06)
 
-여행 날짜마다 날씨와 옷차림. 기상청 단기예보(`KMA_SERVICE_KEY`)를 써요. 예보는 오늘부터 3일 뒤까지라 그 뒤 날짜는 숫자 없이 안내만 해요.
+여행 날짜마다 날씨와 옷차림. 3일 뒤까지는 기상청 단기예보(`KMA_SERVICE_KEY`), 16일 안은 Open-Meteo 예보(키 없음, `source: "Open-Meteo 예보"`), 그보다 먼 날은 작년(관측이 아직 안 올라온 날이면 재작년) 같은 날 실제 관측(`source: "예년 기준 (2025년 같은 날 실제 날씨)"`, 화면 줄 앞에 "예년 기준") (11/20). 먼 날은 시간별 값이 없어 `humidity`·`rainFrom`은 null. 다 실패하면 숫자 없이 안내만 해요.
 
 - 요청: `?lat=37.5264&lng=126.9336&startDate=2026-11-07&endDate=2026-11-08` (endDate 없으면 하루, 최대 7일)
 - 응답: 날짜마다 한 줄
@@ -1185,6 +1186,20 @@
 - `minTemp`·`maxTemp`: 기상청 최저·최고(TMN·TMX). 오늘이라 그 칸이 지났으면 남은 시간 기온 중 낮은·높은 값.
 - `rainFrom`: 낮에 비·눈(PTY ≠ 0)이거나 강수확률 60% 이상인 첫 시각. 없으면 null.
 - 오류: 날짜 범위가 이상하면 400, 기상청 키가 없으면 503, 기상청 오류 502.
+
+### `GET /api/plans/stays/recommended` (11/20)
+
+숙소 추가 화면 맨 위 "○○ 근처 숙소". 우리 DB 숙박은 관광공사(TourAPI) 등록분뿐이고 평점이 없어서 점수를 지어내지 않고 **사진 있는 호텔 먼저, 그 안에서 가까운 순**으로 골라요. ① `retrip_place` 읽기만. 시연 계정은 시나리오 숙소(르메르디앙 서울 명동)가 맨 위, 나머지는 같은 기준.
+
+- 요청: `?lat=37.5638&lng=126.9976` (여행 지역 가운데) · 로그인 필요
+- 응답: 2km 안 최대 5곳 (하나도 없으면 5km까지 넓힘). 그래도 없으면 `[]` (화면은 칸을 숨겨요)
+
+```json
+[ { "placeId": "tour-3341540", "name": "르메르디앙 서울 명동", "kind": "호텔", "address": "서울특별시 중구 …",
+    "lat": 37.56, "lng": 126.98, "imageUrl": "http://tong.visitkorea.or.kr/…", "distance": 254 } ]
+```
+
+- 고르면 화면이 검색으로 고른 것과 똑같이 위치 맞추기 → 날짜 확인 → 담기 (저장은 예전처럼 여행 저장 때)
 
 ### `GET /api/plans/hangang-bus` (11/16)
 
