@@ -160,7 +160,7 @@ async function moveToNext() {
   await showNotice(next, travelMin)
 
   // 이동: 경로선을 따라 움직이고, 그동안 시계는 이동 시간만큼 흐름
-  const path = (await demoPathFor(next, from)) || (route && route.coords && route.coords.length > 1 ? route.coords : [[from.lat, from.lng], [next.lat, next.lng]])
+  const path = (await demoPathFor(next, from)) || (hasRoadPoints(route) ? route.coords : await walkOrStraight(from, next))
   demoRoute.value = path // 이동하는 동안 지도의 남색 점선도 이 길로 고정 (11/09 ①: 중간에 다시 받은 길과 어긋나지 않게)
   await wait(FOLLOW_START_MS) // 지도가 내 위치로 다가가며 확대하는 동안 점은 출발점에서 기다림 (11/09 ①)
   // 떠나는 그 시각에 서버에 "떠났다"를 먼저 알림 (점 두 개가 칸 밖이어야 출발로 봄) → 늦게 떠났으면 서버가 뒤 일정을 밀거나 줄임
@@ -219,6 +219,17 @@ async function demoPathFor(next, from) {
   const first = await walkPath(from, CABLE_CAR_POINT)
   const second = await walkPath(CABLE_CAR_POINT, next)
   return first && second ? [...first, ...second] : NADEULGIL_PATH
+}
+// 서버가 준 다음 경로에 실제 길 점이 있는지 (두 점뿐이면 직선이라 없는 걸로)
+function hasRoadPoints(route) {
+  return !!route && !!route.coords && route.coords.length > 2
+}
+// 11/20 주형: 가는 길에 새로 넣은 카페(공간갑 등)는 서버 경로 점이 없어 일직선으로 갔어요 → 걸을 만한 거리면 TMAP 도보 길, 못 받으면 그때만 직선
+const WALK_PATH_MAX_M = 2000
+async function walkOrStraight(from, to) {
+  const straight = [[from.lat, from.lng], [to.lat, to.lng]]
+  if (distanceMeters(from, to) > WALK_PATH_MAX_M) return straight
+  return (await walkPath(from, to)) || straight
 }
 // 걸어가는 길 점들 (TMAP 도보). 실패하면 null
 async function walkPath(from, to) {
