@@ -132,6 +132,7 @@ public class RetroMap : MonoBehaviour
         ShowBuildings(data.buildings, area, props);
         ShowWater(data);
         AddPiers(data, props);
+        BusStopMaker.Add(data, Ground, props, area); // 버스 정류장: 노란 정차 구역 + 승차대 (11/19)
         BuildingFinder finder = new BuildingFinder(data.buildings); // "여기가 건물 안인가" (나무 자리 고르기) · 둘레 가장 높은 건물 (카메라 높이)
         Show("Props", props.BuildMesh(), new Material[] { Palette.Get("Props") });
         Show("BridgeLights", bridgeLights.BuildMesh(), new Material[] { LampMaterial() });
