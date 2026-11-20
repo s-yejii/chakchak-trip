@@ -25,7 +25,8 @@ import { showTrashToast } from '@/utils/trash'
 import StopThumb from '@/components/trip/StopThumb.vue'
 import { MOVE_CODES } from '@/utils/styleCodes'
 import { showToast } from '@/utils/toast'
-import { appNow } from '@/utils/devMode'
+import { appNow, devMode } from '@/utils/devMode'
+import { useStartTrip } from '@/utils/useStartTrip'
 import { daysLeft, isTodayTrip, pickHomeTrip, toShortDate, toTransportText, tripBadge, tripDetailLink } from '@/utils/tripView'
 import { withoutPractice } from '@/utils/practice'
 
@@ -269,6 +270,12 @@ async function loadLiveNext(position) {
   }
 }
 
+// 시연 계정 홈 [여행 시작]: 진행 중인 다른 여행이 있으면(드묾) 여행 상세로 보내 거기서 정리하게 (11/20)
+const { conflict: startConflict, start: startNow } = useStartTrip()
+watch(startConflict, (other) => {
+  if (other && trip.value) router.push('/trips/today?id=' + trip.value.id)
+})
+
 // 다시 짜기: 지금 여행 내용(지역·날짜·인원·이동 수단·꼭 갈 곳·고정 일정)을 채워 여행 정보로.
 //   지금 여행은 그대로 두고, 새 일정을 저장한 뒤에 바꿀지 물어봐요 (일정 점검 화면)
 function replan() {
@@ -429,6 +436,11 @@ async function loadSeoulPopular() {
           </div>
           <div class="home-actions">
             <RouterLink v-if="isOngoing" :to="mainAction.to" class="btn btn--primary btn--lg" style="flex: 1">{{ mainAction.text }}</RouterLink>
+            <!-- 11/20 주형: 시연 계정은 내일이든 1년 뒤든 홈에서 바로 [여행 시작] (시계를 그 여행 1일차로 옮김, useStartTrip) -->
+            <template v-else-if="devMode.isOn && trip.status === 'planned'">
+              <RouterLink :to="tripDetailLink(trip)" class="btn btn--secondary btn--lg" style="padding: 0 16px">일정 보기</RouterLink>
+              <button type="button" class="btn btn--primary btn--lg" style="flex: 1" @click="startNow(trip.id)">여행 시작</button>
+            </template>
             <RouterLink v-else :to="tripDetailLink(trip)" class="btn btn--primary btn--lg btn--block">일정 보기</RouterLink>
             <RouterLink v-if="isOngoing && nextStop" to="/live/route" class="btn btn--secondary btn--lg" style="padding: 0 16px"><i class="ic ic--s i-route" aria-hidden="true"></i>길 안내</RouterLink>
           </div>
