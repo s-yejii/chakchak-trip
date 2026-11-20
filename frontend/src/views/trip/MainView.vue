@@ -27,6 +27,7 @@ import { MOVE_CODES } from '@/utils/styleCodes'
 import { showToast } from '@/utils/toast'
 import { appNow, devMode } from '@/utils/devMode'
 import { useStartTrip } from '@/utils/useStartTrip'
+import { planStepIndex } from '@/utils/planSteps'
 import { daysLeft, isTodayTrip, pickHomeTrip, toShortDate, toTransportText, tripBadge, tripDetailLink } from '@/utils/tripView'
 import { withoutPractice } from '@/utils/practice'
 
@@ -39,8 +40,8 @@ const DAY_MIN = 24 * 60
 const HALF_DAY_MIN = 12 * 60
 const FIXED_NAME_MAX = 6 // 태그에 넣을 고정 일정 이름 길이
 const MAX_STOP_THUMBS = 6 // 카드에 보여 줄 일정 사진 수 (한 줄)
-const WHERE_STEP = 1 // 여행 정보 단계 번호: 어디로
-const WHEN_STEP = 3 // 여행 정보 단계 번호: 언제
+const WHERE_STEP = planStepIndex('where') // 여행 정보 단계 번호: 어디로 (11/20 ③: 단계가 줄어 번호 대신 이름으로)
+const WHEN_STEP = planStepIndex('when') // 여행 정보 단계 번호: 언제
 const MODE_ICON = { walk: 'i-walk', transit: 'i-subway', car: 'i-car' } // 서버 이동 수단 → 아이콘
 
 const isLoading = ref(true)

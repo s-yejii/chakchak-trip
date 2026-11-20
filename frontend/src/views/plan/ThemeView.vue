@@ -1,4 +1,5 @@
 <script setup>
+import { planStepIndex } from '@/utils/planSteps'
 // S04-d 테마 코스 (③): 주소 /theme?id=ikseon (data/themes.js의 id)
 // 11/13: "준비 중" 대신, 누르면 그 테마의 지역·종류를 채워서 AI 일정 만들기(날짜 고르기 단계)로 바로 보내요
 //   예전 테마 id(전참시 등)나 id 없이 오면 테마 목록만 보여 줘요
@@ -10,7 +11,7 @@ import ThemeCircles from '@/components/plan/ThemeCircles.vue'
 import { findTheme, themeList } from '@/data/themes'
 import { useTripStore } from '@/stores/trip'
 
-const WHEN_STEP = 3 // 여행 정보 11단계 중 "언제 가요?" (PlanAiView STEPS 순서)
+const WHEN_STEP = planStepIndex('when') // 여행 정보 단계 중 "언제 가요?" (11/20: 번호 대신 이름으로, utils/planSteps.js)
 
 const route = useRoute()
 const router = useRouter()

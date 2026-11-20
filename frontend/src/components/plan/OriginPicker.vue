@@ -10,6 +10,7 @@ import { showToast } from '@/utils/toast'
 const SEARCH_WAIT_MS = 300
 const WALK_M_PER_MIN = 67 // 걷는 속도 (4km/h)
 const WALK_LIMIT_M = 2000
+const NEAR_HUB_M = 800 // 현위치 이름: 이 안에 역·구청이 있으면 "○○역 근처"로 (11/20 피드백: 주소만 보여서 어디서 출발하는지 몰랐어요)
 const LINE_COLOR = { 1: '#0052A4', 2: '#00A84D', 3: '#EF7C1C', 4: '#00A5DE', 5: '#996CAC', 6: '#CD7C2F', 7: '#747F00', 8: '#E6186C', 9: '#BDB092' }
 
 const store = useTripStore()
@@ -90,13 +91,24 @@ async function useHere() {
     return
   }
   position = pos
-  loadHubs(pos)
+  await loadHubs(pos)
   try {
-    pick(await getLocationHere(pos.lat, pos.lng))
+    const here = await getLocationHere(pos.lat, pos.lng)
+    pick({ ...here, name: hereName(here) })
   } catch (e) {
     showToast(e.message)
   }
   isLocating.value = false
+}
+
+// "종로3가역 근처 (현위치)": 가장 가까운 역·구청이 걸어갈 만하면 그 이름, 없으면 주소
+function hereName(here) {
+  let nearest = null
+  for (const hub of hubs.value) {
+    if (hub.distance != null && (!nearest || hub.distance < nearest.distance)) nearest = hub
+  }
+  const isNear = nearest && nearest.distance != null && nearest.distance <= NEAR_HUB_M
+  return (isNear ? nearest.name + ' 근처' : here.name) + ' (현위치)'
 }
 
 function lineOf(item) {
@@ -113,12 +125,13 @@ function subText(item) {
 
 <template>
   <section class="card card--pad origin" aria-label="출발지">
+    <!-- 11/20: 고른 출발지를 맨 위에 크게 (현위치를 눌렀을 때 어디로 잡혔는지 바로 보이게) -->
+    <p v-if="store.planOrigin" class="origin__now" aria-live="polite"><i class="ic i-pin" aria-hidden="true"></i><span>출발: <b>{{ store.planOrigin.name }}</b></span></p>
     <div class="field">
       <label class="sr" for="origin-q">출발지 찾기</label>
       <div class="field__box"><i class="ic i-search subtle" aria-hidden="true"></i><input id="origin-q" v-model="keyword" type="search" placeholder="역·건물·주소 (예: 천호역 1번 출구)" autocomplete="off" @input="search" /></div>
     </div>
     <button type="button" class="btn btn--secondary btn--md btn--block" :disabled="isLocating" @click="useHere"><i class="ic i-locate" aria-hidden="true"></i>{{ isLocating ? '위치 찾는 중…' : '현재 위치에서 출발' }}</button>
-    <p v-if="store.planOrigin" class="origin__picked t-cap"><i class="ic ic--s i-check" aria-hidden="true"></i>{{ store.planOrigin.name }}에서 출발</p>
     <h2 v-if="listTitle && list.length" class="t-strong" style="margin: 0">{{ listTitle }}</h2>
     <p v-if="isLoading" class="t-cap" style="margin: 0">찾는 중이에요</p>
     <p v-else-if="error" class="t-cap c-danger" style="margin: 0">{{ error }}</p>
@@ -135,7 +148,8 @@ function subText(item) {
 
 <style>
 .origin { display: flex; flex-direction: column; gap: 12px; }
-.origin__picked { display: flex; align-items: center; gap: 4px; margin: 0; color: var(--navy); font-weight: 600; }
+.origin__now { display: flex; align-items: center; gap: 8px; margin: 0; padding: 12px 14px; border-radius: var(--radius-lg); background: var(--navy-soft); color: var(--navy); font-size: 15px; line-height: 22px; }
+.origin__now b { font-weight: 700; }
 .origin__list { display: flex; flex-direction: column; gap: 6px; }
 .origin__item { display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-raised); font: inherit; color: var(--ink); text-align: left; cursor: pointer; }
 .origin__item:hover { border-color: var(--navy); }
