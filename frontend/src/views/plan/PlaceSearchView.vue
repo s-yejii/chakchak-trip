@@ -12,6 +12,7 @@ import { computed, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import BottomSheet from '@/components/common/BottomSheet.vue'
 import { getLocationHere, getLocationHubs, searchAreas, searchLocations, searchPlaces } from '@/api/trips'
+import { setAutoAreaFrom } from '@/utils/planArea'
 import { useTripStore } from '@/stores/trip'
 import { goBack } from '@/utils/back'
 import { addDays, daysBetween, toMonthDay } from '@/utils/dates'
@@ -254,6 +255,7 @@ function addFixed(item) {
   }
   fixedList.push({ name: item.name, time: time.value, day: fixedDay.value })
   store.planConditions = { ...conditions, fixed: fixedList }
+  setAutoAreaFrom(store, item) // 11/20: 지역을 아직 안 골랐으면 이 예약의 구로 (어디로 건너뛰기)
   store.draft.stops = store.draft.stops.filter((stop) => !(stop.fixed && stop.name === item.name))
   const place = { name: item.name, category: item.category, address: item.address, lat: item.lat, lng: item.lng }
   store.addDraftPlace(place, true, time.value, fixedDay.value)
