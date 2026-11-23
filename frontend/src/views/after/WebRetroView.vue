@@ -124,6 +124,7 @@ const memoStopId = ref(null)     // 메모 카드에서 고른 장소 (핀·표�
 const memoSavedText = ref('')
 const isPhotoShown = ref(false)   // 지도에 사진 동그라미 보이기 (11/19 피드백: 지도에선 뺌. 사진은 재생 중 카드·장소 블럭으로)
 const floatPhoto = ref(null)      // 재생 중 잠깐 뜨는 사진 카드
+const isPlayStarted = ref(false)  // 재생을 한 번이라도 눌렀는지 ([처음으로]를 누르면 다시 false)
 const viewer = ref(null)          // 크게 보기 { list, index }
 const isNavFolded = ref(false)    // 내비 카드를 한 줄로 접었는지
 const isShortsOpen = ref(false)   // 쇼츠를 띄웠는지
@@ -607,6 +608,42 @@ function photosOfPlace(place) {
   }
   return list
 }
+
+// 3D 화면에서 재생을 시작했으면 오른쪽 칸 맨 위에 "지금 장소 사진"을 보여 주고 정산을 숨김 (11/23 피드백)
+//   재생을 누르기 전, [처음으로]를 누른 뒤에는 false → 예전 내용 그대로
+const isPhotoMode = computed(() => isUnity3d.value && isPlayStarted.value)
+
+// 3D 화면 오른쪽 칸 (11/23 피드백): 지금 있는(또는 방금 지난) 장소 = 지금 시각보다 먼저 도착한 장소 중 가장 늦게 도착한 곳
+//   예) 14:30에 카페를 떠나 이동 중이면 카페. 아직 첫 장소에 닿기 전이면 null
+const nowPlace = computed(() => {
+  let found = null
+  for (const place of shownPlaces.value) {
+    if (place.from <= nowMinutes.value && (found === null || place.from > found.from)) found = place
+  }
+  return found
+})
+// 그 장소의 사진: 그 장소에 닿은 뒤 ~ 다음 장소에 닿기 전까지 찍은 것 (이동하며 찍은 사진도 앞 장소에 붙여 보여 줌)
+//   재생이 찍은 시각을 지난 사진만 (재생을 눌러야 차례로 나옴). 가장 최근 사진이 맨 위
+const nowPlacePhotos = computed(() => {
+  const place = nowPlace.value
+  if (!place) return []
+  let until = Infinity // 다음 장소에 닿는 시각 (없으면 끝까지)
+  for (const other of shownPlaces.value) {
+    if (other.from > place.from && other.from < until) until = other.from
+  }
+  const list = []
+  for (const photo of shownPhotos.value) {
+    const isPassed = photo.minutes <= nowMinutes.value // 재생이 이 사진을 찍은 시각을 지났나
+    if (photo.minutes >= place.from && photo.minutes < until && isPassed) list.unshift(photo) // unshift: 맨 앞에 넣음
+  }
+  return list
+})
+
+// 오른쪽 칸에 크게 보여 줄 사진 한 장: 지금 띄우는 사진(재생이 방금 지난 것)이 먼저, 없으면 이 장소에서 마지막으로 지난 사진
+const nowPhoto = computed(() => {
+  if (floatPhoto.value) return floatPhoto.value
+  return nowPlacePhotos.value.length > 0 ? nowPlacePhotos.value[0] : null
+})
 
 // [＋ 사진]: 어느 장소에 올릴지 기억하고 숨겨 둔 파일 고르기 칸을 대신 눌러 줌
 //   place가 null이면(제목 옆 버튼) 장소를 안 정하고 사진 속 찍은 시각으로 서버가 찾음
@@ -1140,7 +1177,7 @@ function addBoundaryLayers() {
   map.addLayer({ id: 'dong-line', type: 'line', source: 'dong-rise', filter: ['==', ['get', 'kind'], 'visit'], paint: { 'line-color': '#A9412A', 'line-width': 2 } })
 }
 
-// 실제 경로(파랑), 재생으로 지나온 부분(진한 파랑). 계획 경로 선은 그리지 않음 (팀에서 빼기로 함)
+// 실제 경로(빨강), 재생으로 지나온 부분(진한 빨강, 11/23 피드백으로 파랑 → 빨강). 계획 경로 선은 그리지 않음 (팀에서 빼기로 함)
 function addRouteLayers() {
   const emptyLine = { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } }
   map.addSource('track', { type: 'geojson', data: emptyLine })
@@ -1148,9 +1185,9 @@ function addRouteLayers() {
   map.addLayer({ id: 'track-casing', type: 'line', source: 'track', layout: { 'line-join': 'round', 'line-cap': 'round' },
     paint: { 'line-color': '#FFFFFF', 'line-width': 8, 'line-opacity': 0.9 } })
   map.addLayer({ id: 'track-line', type: 'line', source: 'track', layout: { 'line-join': 'round', 'line-cap': 'round' },
-    paint: { 'line-color': '#2F7BFF', 'line-width': 5 } })
+    paint: { 'line-color': '#F26A6A', 'line-width': 5 } }) // 11/23 피드백: 경로 선은 빨강 (3D와 같은 색)
   map.addLayer({ id: 'track-done', type: 'line', source: 'track-done', layout: { 'line-join': 'round', 'line-cap': 'round' },
-    paint: { 'line-color': '#0B4FC4', 'line-width': 7 } })
+    paint: { 'line-color': '#D61F1F', 'line-width': 7 } }) // 지나온 길은 진한 빨강
 }
 
 // ============================== 풍경 분석 (11/11): 이동 경로 객체 분석
@@ -2032,6 +2069,7 @@ function startPlay() {
   clearIntro() // 처음 연출 중에 눌러도 카메라가 서로 싸우지 않게
   if (progress.value >= playEnd.value) resetPlay()
   playing.value = true
+  isPlayStarted.value = true // 오른쪽 칸을 "지금 장소 사진" 화면으로 (3D일 때)
   isFollow.value = true
   showDongs(false) // 동네 기둥을 숨겨서 길·건물이 보이게 (테두리만 남김)
   setStreetLook(isStreet())
@@ -2064,6 +2102,7 @@ function stopPlay() {
 // 재생을 맨 처음 상태로: 위치 0, 내 위치 점과 지나온 선 지우기
 function resetPlay() {
   stopPlay()
+  isPlayStarted.value = false // 오른쪽 칸을 예전 내용(정산 포함)으로
   progress.value = 0
   mePosition.value = null
   cameraCenter = null
@@ -2232,7 +2271,10 @@ function drawPlayPosition(at) {
   const done = []
   for (let i = 0; i < coordinates.length && meters[i] <= at.meters; i++) done.push(coordinates[i])
   done.push(at.position)
-  map.getSource('track-done').setData(toLine(done))
+  // 평면 지도가 아직 선 자리를 못 만들었으면(지도 그림을 받는 중·지도 종류를 바꾸는 중) 건너뜀
+  //   안 건너뛰면 오류가 나고, 3D가 그 오류를 잡아 알림 창을 띄우며 멈춤 (11/23)
+  const doneLine = map.getSource('track-done')
+  if (doneLine) doneLine.setData(toLine(done))
   if (isStreet()) updateStreetPins(at.position)
 }
 
@@ -2421,8 +2463,9 @@ watch(shownPhotos, drawPhotoMarkers)
         <div v-if="navCard" class="wr-nav" :class="{ 'wr-nav--street': viewMode === 'street' && !isNavFolded, 'is-folded': isNavFolded }">
           <button type="button" class="wr-nav__fold" :aria-expanded="!isNavFolded" :title="isNavFolded ? '안내 펼치기' : '안내 접기'" :aria-label="isNavFolded ? '안내 펼치기' : '안내 접기'" @click="isNavFolded = !isNavFolded">{{ isNavFolded ? '▾' : '▴' }}</button>
           <!-- 재생 중 사진을 찍은 시각을 지나면 내비 카드 바로 밑에 잠깐 뜨는 카드 (카드를 옮기면 같이 움직임) -->
+          <!-- 11/23 피드백: 3D 화면에서는 여기 띄우지 않고 오른쪽 칸(지금 장소 사진)에 보여 줌 -->
           <Transition name="wr-float">
-            <button v-if="floatPhoto" type="button" class="wr-float" @click="openViewer([floatPhoto], 0)">
+            <button v-if="floatPhoto && !isUnity3d" type="button" class="wr-float" @click="openViewer([floatPhoto], 0)">
               <!-- 영상: 소리까지 끝까지 틀고, 끝나면 다음 사진으로 (그동안 재생은 멈춰 있음) -->
               <video v-if="floatPhoto.mediaType === 'video'" :key="floatPhoto.id" :src="floatPhoto.url" autoplay playsinline @ended="showNextPhoto"></video>
               <img v-else :src="floatPhoto.url" alt="" />
@@ -2481,7 +2524,22 @@ watch(shownPhotos, drawPhotoMarkers)
     </section>
 
     <div v-if="retro" class="wr-split" role="separator" aria-orientation="vertical" aria-label="지도와 오른쪽 칸 너비 (끌거나 ← → 키)" :aria-valuenow="sideWidth" tabindex="0" title="끌어서 너비 바꾸기" @pointerdown="startSplitDrag" @keydown="onSplitKey"><i></i></div>
-    <aside v-if="retro" class="wr-side" :style="{ width: sideWidth + 'px' }">
+    <aside v-if="retro" class="wr-side" :class="{ 'is-photo': isPhotoMode }" :style="{ width: sideWidth + 'px' }">
+      <!-- 3D 화면에서 재생을 시작하면 (11/23 피드백): 지금 있는(또는 방금 지난) 장소의 사진과 그 아래 장소 목록만 보임. 나머지는 숨김 -->
+      <!--   재생을 누르기 전·[처음으로]를 누른 뒤에는 이 카드 없이 예전 내용(정산 포함)이 그대로 나옴 -->
+      <section v-if="isPhotoMode" class="wr-card wr-now">
+        <h2>{{ nowPlace ? nowPlace.name || '이름 없는 곳' : '출발 전' }} <small v-if="nowPlace">{{ toDayTime(nowPlace.from) }}부터 {{ toDuration(nowPlace.minutes) }}</small></h2>
+        <!-- 사진 한 장을 칸 너비에 꽉 차게: 재생이 찍은 시각을 지나면 그 사진으로 바뀜 (전에 남색 카드 밑에 뜨던 것과 같은 순서·시간) -->
+        <button v-if="nowPhoto" type="button" class="wr-now__photo" :aria-label="nowPhoto.takenAt + ' 사진 크게 보기'" @click="openViewer([nowPhoto], 0)">
+          <!-- 지금 보여 주는 영상: 소리까지 끝까지 틀고, 끝나면 다음 사진으로 (그동안 재생은 멈춰 있음) -->
+          <video v-if="nowPhoto.mediaType === 'video' && floatPhoto && floatPhoto.id === nowPhoto.id" :key="nowPhoto.id" :src="nowPhoto.url" autoplay playsinline @ended="showNextPhoto"></video>
+          <video v-else-if="nowPhoto.mediaType === 'video'" :src="nowPhoto.url + '#t=0.1'" muted preload="metadata"></video>
+          <img v-else :src="nowPhoto.url" alt="" />
+          <span>📷 {{ nowPhoto.takenAt }}</span>
+        </button>
+        <p v-else class="wr-now__empty">이 장소에 사진을 추가하면 여기에 나와요</p>
+      </section>
+
       <!-- 숫자 4개 -->
       <div class="wr-kpis">
         <div><b>{{ summary.visited }}<small>/{{ summary.total }}</small></b><span>다녀온 곳</span></div>
@@ -2500,7 +2558,7 @@ watch(shownPhotos, drawPhotoMarkers)
       </section>
 
       <!-- 장소 (11/19 피드백: '여행 분석'·'다닌 동네' 대신 실제로 머문 곳만 시간 순으로. 누르면 지도로, 3D면 그 시각으로) -->
-      <section v-if="shownPlaces.length > 0" class="wr-card">
+      <section v-if="shownPlaces.length > 0" class="wr-card wr-places">
         <!-- 제목 옆 [＋ 사진·영상] (11/19 피드백): 여러 장을 한 번에, 사진 속 찍은 시각으로 장소가 알아서 정해짐 -->
         <div class="wr-card__head">
           <h2>장소 <small>{{ shownPlaces.length }}곳 · 누르면 지도에서 보여요</small></h2>
@@ -2570,7 +2628,8 @@ watch(shownPhotos, drawPhotoMarkers)
       </section>
 
       <!-- 정산 (11/11: 여기서도 고쳐요. 앱 회고와 같은 API라 양쪽이 같이 바뀜) -->
-      <section class="wr-card">
+      <!-- 11/23 피드백: 3D에서 재생을 시작하면 정산은 숨김 (사진·장소를 보는 화면이라) -->
+      <section v-show="!isPhotoMode" class="wr-card">
         <div class="wr-card__head">
           <h2>정산 <small>{{ settleDay === 0 ? '여행 전체' : settleDay + '일차만' }} · 앱과 같이 바뀌어요</small></h2>
           <div v-if="dayButtons.length > 2" class="wr-seg wr-seg--small" role="group" aria-label="정산 날짜">
@@ -2741,7 +2800,7 @@ watch(shownPhotos, drawPhotoMarkers)
 
 .wr-legend { left: 16px; bottom: 92px; display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; font-size: 12px; }
 .wr-legend i { display: inline-block; width: 22px; height: 0; margin-right: 6px; vertical-align: middle; }
-.wr-legend__real { border-top: 5px solid #2F7BFF; }
+.wr-legend__real { border-top: 5px solid #E53030; }
 .wr-legend__dong { height: 10px !important; background: #E8603F; opacity: 0.7; }
 .wr-legend__pass { height: 10px !important; background: #8FA6CF; opacity: 0.7; }
 
@@ -2915,6 +2974,16 @@ watch(shownPhotos, drawPhotoMarkers)
 .wr-float { box-sizing: border-box; position: absolute; left: 0; top: calc(100% + 10px); width: 400px; /* 11/19: 지도 가운데(경로)를 가리지 않게 왼쪽 남색 바 밑에 붙임, 칸도 크게 */ padding: 0; overflow: hidden; border: 3px solid #fff; border-radius: var(--radius-lg); background: #000; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35); cursor: zoom-in; }
 .wr-float img, .wr-float video { display: block; width: 100%; height: 270px; object-fit: contain; background: #000; } /* contain: 사진이 잘리지 않게 */
 .wr-float span { display: block; padding: 6px 10px; background: #fff; color: var(--ink); font-size: 13px; text-align: left; }
+/* 3D 화면 오른쪽 칸: 지금 장소 사진만 (11/23) */
+/* 재생 중에는 사진과 장소만 보임: 숫자 4개·쇼츠·쓴 돈·정산은 숨김 (숨기기만 해서 값은 그대로 남음) */
+.wr-side.is-photo > *:not(.wr-now):not(.wr-places) { display: none; }
+.wr-side.is-photo .wr-now { margin-top: 0; }
+.wr-now { padding: 0; overflow: hidden; }                      /* 사진이 카드 끝까지 꽉 차게 (안쪽 여백 없음) */
+.wr-now h2 { margin: 0; padding: 12px 14px; }
+.wr-now__photo { display: block; width: 100%; padding: 0; border: 0; background: #fff; cursor: zoom-in; }
+.wr-now__photo img, .wr-now__photo video { display: block; width: 100%; height: auto; max-height: 62vh; object-fit: contain; background: #000; } /* 너비에 꽉 차게, 잘리지 않게 */
+.wr-now__photo span { display: block; padding: 6px 14px 10px; color: var(--ink); font-size: 13px; text-align: left; }
+.wr-now__empty { margin: 0; padding: 0 14px 14px; color: var(--ink-muted); font-size: 13px; }
 .wr-float-enter-active, .wr-float-leave-active { transition: opacity 0.3s, transform 0.3s; }
 .wr-float-enter-from, .wr-float-leave-to { opacity: 0; }
 
