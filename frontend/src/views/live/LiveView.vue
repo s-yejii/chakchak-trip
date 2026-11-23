@@ -831,6 +831,7 @@ async function onAdded(message) {
 const slotPlace = ref(null) // 넣을 장소 (시트가 열려 있으면)
 const slotPath = ref([]) // 고른 자리로 계산한 전체 경로선
 const slotIndex = ref(0) // 새 장소 자리 (0이면 남은 첫 칸 앞)
+const NO_PATHS = [] // 순서를 고르는 동안은 길을 안 그림. 매번 새 []를 넘기면 지도가 끝없이 다시 그려져서 한 번만 만들어 둠
 const slotFirstNo = computed(() => (remainingStops.value.length ? remainingStops.value[0].no : stops.value.length + 1)) // 남은 첫 칸 번호
 // 지도 핀 번호: 넣을 순서를 고르는 중이면 새 장소 자리부터 뒤 칸은 하나씩 밀림
 function shownNo(stop) {
@@ -1002,7 +1003,7 @@ function finishTour() {
           :follow="isFollowing"
           :smooth="devMode.isOn"
           :heading="devMode.isOn && isMoving ? heading : null"
-          :paths="slotPlace ? [] : nextPath"
+           :paths="slotPlace ? NO_PATHS : nextPath"
           :show-route="false"
           :ring="nearRing"
           :band="askBand"
