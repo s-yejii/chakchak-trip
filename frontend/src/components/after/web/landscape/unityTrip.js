@@ -27,7 +27,8 @@ export async function makeTripMap(tripId, retro, nodes, guNames, onStep) {
   if (made.has(tripId)) return made.get(tripId)
   const startClock = nodes[0].from // 경로 0분 = 첫 지점 시각
   const track = toTrack(nodes, startClock)
-  const stops = retro.stops.filter((stop) => stop.lat !== null && stop.lng !== null).map((stop) => ({ lng: stop.lng, lat: stop.lat }))
+  // 건너뛴 곳(안 간 곳)은 3D 핀을 세우지 않음. 지도 범위도 안 간 곳까지 넓히지 않음 (11/23)
+  const stops = retro.stops.filter((stop) => stop.lat !== null && stop.lng !== null && stop.state !== 'skipped').map((stop) => ({ lng: stop.lng, lat: stop.lat }))
   const area = areaAround([...track, ...stops]) // ...: 두 목록을 이어 붙인 새 목록
   const dayCount = Math.max(...retro.track.map((point) => point.day))
 
