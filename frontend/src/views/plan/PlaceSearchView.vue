@@ -13,6 +13,7 @@ import { useRoute } from 'vue-router'
 import BottomSheet from '@/components/common/BottomSheet.vue'
 import { getLocationHere, getLocationHubs, searchAreas, searchLocations, searchPlaces } from '@/api/trips'
 import { setAutoAreaFrom } from '@/utils/planArea'
+import { isBeforeWhenStep, stretchTripTo } from '@/utils/reserveDates'
 import { useTripStore } from '@/stores/trip'
 import { goBack } from '@/utils/back'
 import { addDays, daysBetween, toMonthDay } from '@/utils/dates'
@@ -51,6 +52,9 @@ const hubsTitle = ref('')
 const isHubFromGps = ref(false) // 내 위치 기준이면 걷는 시간을 보여 줌
 const time = ref('') // 꼭 지킬 시각 'HH:mm'
 const fixedDay = ref(1) // 꼭 지킬 시간이 며칠째인지 (여러 날 여행에서만 고름)
+// 11/20: 날짜를 고르기 전(1/6 꼭 갈 곳)이면 일차 대신 예약 날짜(달력)를 골라요. 그 날짜가 들어가게 여행 기간을 늘려요 (utils/reserveDates.js)
+const isDatePick = mode === 'fixed' && isBeforeWhenStep(store)
+const fixedDate = ref(store.planEndDate || store.planStartDate) // 처음엔 지금 기간의 마지막 날 (예약을 넣은 날 다음 예약이 이어지기 쉽게)
 // 여행 날짜 목록 [{ day: 1, label: '12/4(금)' }] (여행 정보 달력에서 고른 기간, 당일치기면 1개)
 const dayList = computed(() => {
   const count = store.planEndDate ? daysBetween(store.planStartDate, store.planEndDate) + 1 : 1
@@ -117,7 +121,7 @@ function hubText(hub) {
 }
 
 const picked = computed(() => pickedHub.value || found.value[pickedIndex.value] || null)
-const isTimeOk = computed(() => TIME_PATTERN.test(time.value))
+const isTimeOk = computed(() => TIME_PATTERN.test(time.value) && (!isDatePick || !!fixedDate.value))
 const fixedAdded = computed(() => store.planConditions?.fixed || []) // 지금까지 넣은 꼭 지킬 시간
 const isFixedDone = computed(() => mode === 'fixed' && picked.value === null) // 꼭 지킬 시간에서 고른 곳이 없으면 버튼은 "완료"
 // 꼭 지킬 시간은 시각까지 정해야 넣을 수 있어요 (고른 곳이 없으면 "완료"라서 늘 누를 수 있음)
@@ -248,6 +252,10 @@ function subOf(item) {
 // 꼭 지킬 시간 넣기: 일정 만들기 조건(fixed)에 { 이름, 시각 } + 직접 고르기 초안에 고정 칸 (예약 캡처와 같은 방식)
 // 같은 곳을 다시 넣으면 시각만 바꿔요 (두 줄 안 생기게)
 function addFixed(item) {
+  if (isDatePick) {
+    if (!stretchTripTo(store, fixedDate.value)) return false
+    fixedDay.value = daysBetween(store.planStartDate, fixedDate.value) + 1
+  }
   const conditions = store.planConditions || {}
   const fixedList = []
   for (const fixed of conditions.fixed || []) {
@@ -259,6 +267,7 @@ function addFixed(item) {
   store.draft.stops = store.draft.stops.filter((stop) => !(stop.fixed && stop.name === item.name))
   const place = { name: item.name, category: item.category, address: item.address, lat: item.lat, lng: item.lng }
   store.addDraftPlace(place, true, time.value, fixedDay.value)
+  return true
 }
 
 function done() {
@@ -274,7 +283,7 @@ function done() {
     store.planOrigin = { name: item.name, address: item.address, category: item.category, lat: item.lat, lng: item.lng }
     showToast(item.name + '에서 출발해요')
   } else {
-    addFixed(item)
+    if (!addFixed(item)) return showToast('여행은 30일까지 만들 수 있어요 · 예약 날짜를 확인해 주세요')
     showToast(item.name + ' ' + dayTextOf(fixedDay.value) + time.value + ' 고정했어요')
     search('') // 화면은 그대로 두고 검색창을 비움 → 넣은 목록이 보임
     time.value = ''
@@ -347,7 +356,11 @@ function removeFixed(name) {
             </button>
             <!-- 꼭 지킬 시간: 고른 곳 바로 아래에서 시각 정하기 -->
             <template v-if="mode === 'fixed' && pickedIndex === i">
-              <div v-if="dayList.length > 1" class="chips ps-days" role="radiogroup" aria-label="며칠째 일정인지">
+              <label v-if="isDatePick" class="field__box ps-date" for="ps-date">
+                <i class="ic i-calendar subtle" aria-hidden="true"></i>
+                <input id="ps-date" v-model="fixedDate" type="date" aria-label="예약 날짜" style="font-variant-numeric: tabular-nums" />
+              </label>
+              <div v-else-if="dayList.length > 1" class="chips ps-days" role="radiogroup" aria-label="며칠째 일정인지">
                 <button v-for="d in dayList" :key="d.day" type="button" role="radio" class="chip chip--sm" :class="{ 'is-on': fixedDay === d.day }" :aria-checked="fixedDay === d.day" @click="fixedDay = d.day">
                   {{ d.day }}일차 · {{ d.label }}
                 </button>
@@ -394,6 +407,7 @@ function removeFixed(name) {
 .scr-PlaceSearch .ps-hit{display:flex;align-items:center;gap:12px;padding:12px;border:0;background:none;text-align:left;font:inherit;color:inherit;cursor:pointer;width:100%;border-radius:var(--radius-lg)}
 .scr-PlaceSearch .sheet{bottom:0}
 .scr-PlaceSearch .ps-days{padding:0 12px;flex-wrap:wrap}
+.scr-PlaceSearch .ps-date{height:44px;margin:0 12px}
 .scr-PlaceSearch .ps-msg{text-align:center;padding:24px 0;line-height:20px}
 .scr-PlaceSearch input[type='search']::-webkit-search-cancel-button{-webkit-appearance:none;appearance:none} /* 브라우저 기본 X 숨김 (우리 지우기 버튼만) */
 .scr-PlaceSearch .ps-hubs{flex:none;display:flex;flex-direction:column;gap:8px}

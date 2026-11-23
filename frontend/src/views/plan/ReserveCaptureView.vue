@@ -8,6 +8,7 @@ import { fitYearToTrip } from '@/utils/captureYear'
 import ScanOverlay from '@/components/plan/ScanOverlay.vue'
 import { useTripStore } from '@/stores/trip'
 import { setAutoAreaFrom } from '@/utils/planArea'
+import { isBeforeWhenStep, stretchTripTo } from '@/utils/reserveDates'
 import { goBack } from '@/utils/back'
 import { showToast } from '@/utils/toast'
 
@@ -151,8 +152,9 @@ function add() {
   if (!TIME_PATTERN.test(time.value)) return showToast('시간을 HH:mm으로 적어 주세요')
   if (date.value && !DATE_PATTERN.test(date.value)) return showToast('날짜를 2026-11-15처럼 적어 주세요')
   // 예전엔 날짜를 버려서 2일차 예약도 1일차에 들어갔어요 (11/11 주형). 손으로 고친 날짜도 그대로 써요
-  // 11/20: 날짜를 고르기 전(꼭 갈 곳 칸)에 넣는 첫 예약이면 그 날짜를 여행 첫날로 (박 수는 그대로, 시간은 그날 기준으로 다시)
-  if (dayOfTrip(date.value) === 0 && !((store.planConditions || {}).fixed || []).length && date.value) moveTripStart(date.value)
+  // 11/20: 날짜를 고르기 전(꼭 갈 곳 칸)에 넣는 예약이면 그 날짜가 들어가게 여행 기간을 늘려요 (2일차 예약이 막히던 문제, utils/reserveDates.js)
+  if (isBeforeWhenStep(store) && date.value && !stretchTripTo(store, date.value)) return showToast('여행은 30일까지 만들 수 있어요 · 예약 날짜를 확인해 주세요')
+  if (!isBeforeWhenStep(store) && dayOfTrip(date.value) === 0 && !((store.planConditions || {}).fixed || []).length && date.value) moveTripStart(date.value)
   const day = dayOfTrip(date.value)
   if (day === 0) return showToast('예약 날짜가 여행 날짜 밖이에요 · 여행 날짜를 확인해 주세요')
   if (isAlreadyAdded(placeName, time.value, day)) return showToast('이미 넣은 예약이에요') // 11/13: 같은 캡처를 두 번 올리면 두 줄이 되던 문제
