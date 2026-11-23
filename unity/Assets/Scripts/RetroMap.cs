@@ -21,6 +21,7 @@ public class RetroMap : MonoBehaviour
     private const float SHADOW_DISTANCE_M = 2500; // 이 거리까지 그림자를 그림 (멀리서 내려다봐도 그림자가 보이게)
     private const float FAR_GROUND_M = 30000;     // 지도 바깥에 까는 넓은 바닥 한 변
     private const float ROAD_LIFT_M = 0.4f;       // 길을 땅에서 띄우는 높이
+    private const int CHUNK_POINTS = 2;           // 경로 띠를 이만큼의 GPS 점씩 잘라 조각으로 만듦 (지나온 조각만 보이게, 11/23)
     private const float ROUTE_LIFT_M = 0.75f;     // 걸은 경로 선을 땅에서 띄우는 높이 (길·인도보다 조금 위)
     private const float DECK_CHECK_STEP_M = 8f;   // 경로가 다리 위인지 이 간격마다 확인
     private const float VEHICLE_LINE_UP_M = 0.05f; // 버스·택시 띠는 걷기 띠보다 이만큼 위 (같은 높이면 겹친 곳이 번갈아 보여 들쭉날쭉)
@@ -387,10 +388,10 @@ public class RetroMap : MonoBehaviour
         GameObject lines = new GameObject("RouteLines");
         lines.transform.SetParent(transform, false);
 
-        // 길 만드는 도구를 그대로 씀: 걸은 구간을 "걷는 길"로 넣으면 땅을 따라가는 띠가 됨
-        RoadMaker walkLine = new RoadMaker(Ground, ROUTE_LIFT_M);
-        RoadMaker busLine = new RoadMaker(Ground, ROUTE_LIFT_M + VEHICLE_LINE_UP_M);  // 버스: 도로를 따라 초록 띠
-        RoadMaker taxiLine = new RoadMaker(Ground, ROUTE_LIFT_M + VEHICLE_LINE_UP_M); // 택시: 도로를 따라 주황 띠
+        // 경로 줄을 조각조각 따로 만들어 "Run" 아래에 둠 → 그날 지금까지 다닌 길만 보이게 (11/23)
+        //   예) 걸어 올라가는 중에는 나중에 탈 버스의 초록 줄이 안 보이고, 2일차에는 1일차 줄이 안 보임
+        List<int> runStarts = new List<int>();              // 조각마다 시작 점 번호
+        List<GameObject> runLines = new List<GameObject>(); // 조각마다 줄 묶음
         float level = data.water != null ? data.water.level : 0;
         int runStart = 0; // 같은 방법으로 움직인 구간이 시작된 점
         int count = route.minutes.Length;
@@ -399,19 +400,31 @@ public class RetroMap : MonoBehaviour
             bool isRunEnd = i == count - 1 || route.ModeAt(i) != route.ModeAt(runStart);
             if (!isRunEnd) continue;
             int mode = route.ModeAt(runStart);
-            if (mode == RouteData.WALK) AddRouteRun(walkLine, lines.transform, route, runStart, i, ROUTE_WIDTH_M, "Route", 0);
-            if (mode == RouteData.BOAT) AddFlatLine(lines.transform, BoatLinePositions(route, runStart, i, level), "BoatLine", BOAT_LINE_WIDTH_M); // 눕힌 선 (배 위 눈높이에서 벽처럼 안 보이게)
-            if (mode == RouteData.SUBWAY) AddLine(lines.transform, RideLinePositions(route, runStart, i), "SubwayLine", RIDE_LINE_WIDTH_M); // 땅속 → 하늘로 휜 선
-            if (mode == RouteData.BUS) AddRouteRun(busLine, lines.transform, route, runStart, i, VEHICLE_LINE_WIDTH_M, "BusLine", VEHICLE_LINE_UP_M);
-            if (mode == RouteData.RIDE) AddRouteRun(taxiLine, lines.transform, route, runStart, i, VEHICLE_LINE_WIDTH_M, "RideLine", VEHICLE_LINE_UP_M);
+            // 띠(걷기·버스·택시)는 CHUNK_POINTS 점씩 잘라 조각마다 따로 만듦 → 지나온 조각만 켜서 "지금까지 다닌 길"만 보이게
+            // 배·지하철 선은 한 번에 휜 모양이라 자르지 않고 구간 통째로 한 조각
+            bool isBand = mode == RouteData.WALK || mode == RouteData.BUS || mode == RouteData.RIDE;
+            int step = isBand ? CHUNK_POINTS : i - runStart;
+            for (int from = runStart; from < i; from += step)
+            {
+                int to = Mathf.Min(from + step, i);
+                GameObject piece = new GameObject("Run");
+                piece.transform.SetParent(lines.transform, false);
+                if (mode == RouteData.WALK) AddRunBand(piece.transform, route, from, to, ROUTE_WIDTH_M, "Route", 0); // 걷기: 땅을 따라가는 파란 띠
+                if (mode == RouteData.BOAT) AddFlatLine(piece.transform, BoatLinePositions(route, from, to, level), "BoatLine", BOAT_LINE_WIDTH_M); // 눕힌 선 (배 위 눈높이에서 벽처럼 안 보이게)
+                if (mode == RouteData.SUBWAY) AddLine(piece.transform, RideLinePositions(route, from, to), "SubwayLine", RIDE_LINE_WIDTH_M); // 땅속 → 하늘로 휜 선
+                if (mode == RouteData.BUS) AddRunBand(piece.transform, route, from, to, VEHICLE_LINE_WIDTH_M, "BusLine", VEHICLE_LINE_UP_M);   // 버스: 도로를 따라 초록 띠
+                if (mode == RouteData.RIDE) AddRunBand(piece.transform, route, from, to, VEHICLE_LINE_WIDTH_M, "RideLine", VEHICLE_LINE_UP_M); // 택시: 도로를 따라 주황 띠
+                runStarts.Add(from);
+                runLines.Add(piece);
+            }
             runStart = i;
         }
-        Material blue = Palette.Get("Route");
-        Material[] blues = new Material[RoadMaker.MATERIAL_COUNT];
-        for (int i = 0; i < blues.Length; i++) blues[i] = blue;
-        Show("Route", walkLine.BuildMesh(), blues);
-        Show("RouteBus", busLine.BuildMesh(), SameMaterial("BusLine"));
-        Show("RouteTaxi", taxiLine.BuildMesh(), SameMaterial("RideLine"));
+        // 전에는 줄을 방법별로 한 덩어리(Route·RouteBus·RouteTaxi)로 만들었음. 남아 있으면 지움
+        foreach (string oldName in new string[] { "Route", "RouteBus", "RouteTaxi" })
+        {
+            Transform oldMesh = transform.Find(oldName);
+            if (oldMesh != null) DestroyImmediate(oldMesh.gameObject);
+        }
 
         Transform old = transform.Find("Pins");
         if (old != null) DestroyImmediate(old.gameObject);
@@ -421,6 +434,7 @@ public class RetroMap : MonoBehaviour
 
         RoutePlayer player = GetComponent<RoutePlayer>();
         if (player == null) player = gameObject.AddComponent<RoutePlayer>();
+        player.SetRuns(runStarts.ToArray(), runLines.ToArray()); // Show보다 먼저: Show가 처음 자리를 잡을 때 그 구간 줄만 켬
         player.Show(Ground, route, level, data.startClock, finder, bridges);
     }
 
@@ -428,6 +442,17 @@ public class RetroMap : MonoBehaviour
     //   GPS 점이 다리 위에 하나도 없을 수 있어서 DECK_CHECK_STEP_M마다 점을 더 찍어 확인함
     //   같은 상태(땅 / 다리)인 점끼리 묶어 그림. 묶음끼리는 경계 점을 같이 써서 끊기지 않게
     //   extraLift: 걷기 띠보다 더 띄울 높이 (버스·택시)
+    // 한 구간의 띠(걷기·버스·택시)를 만들어 parent 아래에 둠. 길 만드는 도구(RoadMaker)를 그대로 써서 땅을 따라가는 띠가 됨
+    private void AddRunBand(Transform parent, RouteData route, int from, int to, float width, string materialName, float extraLift)
+    {
+        RoadMaker maker = new RoadMaker(Ground, ROUTE_LIFT_M + extraLift);
+        AddRouteRun(maker, parent, route, from, to, width, materialName, extraLift);
+        GameObject item = new GameObject(materialName + "Band");
+        item.transform.SetParent(parent, false);
+        item.AddComponent<MeshFilter>().sharedMesh = maker.BuildMesh();                         // 모양
+        item.AddComponent<MeshRenderer>().sharedMaterials = SameMaterial(materialName);         // 색
+    }
+
     private void AddRouteRun(RoadMaker maker, Transform lines, RouteData route, int from, int to, float width, string materialName, float extraLift)
     {
         List<Vector2> points = DensePoints(route, from, to);
