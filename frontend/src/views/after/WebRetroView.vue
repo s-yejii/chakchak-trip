@@ -425,15 +425,6 @@ const movedText = computed(() => {
   return meters < 1000 ? Math.round(meters) + 'm' : (meters / 1000).toFixed(1) + 'km'
 })
 
-// 가장 많이 늦어진 곳 (회고 한 줄)
-const biggestOver = computed(() => {
-  let best = null
-  for (const row of shownStops.value) {
-    if (row.diff !== null && row.diff > 0 && (best === null || row.diff > best.diff)) best = row
-  }
-  return best
-})
-
 // 분류별 비용 (일정 칸 분류의 첫 낱말, 칸이 없는 결제는 "이동·기타")
 const costByCategory = computed(() => {
   const sums = {}
@@ -2498,10 +2489,6 @@ watch(shownPhotos, drawPhotoMarkers)
         <div><b>{{ toWon(summary.cost) }}</b><span>쓴 돈</span></div>
         <div><b>{{ toWon(summary.perPerson) }}</b><span>1인당</span></div>
       </div>
-      <p v-if="biggestOver" class="wr-insight">
-        <b>{{ biggestOver.name }}</b>에서 계획보다 <b>{{ toDuration(biggestOver.diff) }}</b> 더 머물렀어요.
-        <template v-if="summary.skipped > 0"> 건너뛴 곳 {{ summary.skipped }}곳.</template>
-      </p>
 
       <!-- 쇼츠 (11/19 피드백: 오른쪽 칸에): 대표 사진을 누르면 이 여행 사진을 화면 가득 자동으로 넘겨 봄 -->
       <section class="wr-card">
@@ -2781,7 +2768,6 @@ watch(shownPhotos, drawPhotoMarkers)
 .wr-kpis b { display: block; font-size: 17px; line-height: 24px; }
 .wr-kpis small { font-size: 12px; color: var(--ink-muted); }
 .wr-kpis span { font-size: 12px; color: var(--ink-muted); }
-.wr-insight { margin: 12px 0 0; padding: 10px 12px; border-radius: var(--radius-lg); background: var(--coral-soft); color: var(--coral-ink); }
 
 .wr-card { margin-top: 12px; padding: 14px; border-radius: var(--radius-lg); background: #fff; box-shadow: var(--shadow-card); }
 .wr-card h2 { margin: 0 0 10px; font-size: 16px; }
