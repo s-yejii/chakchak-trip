@@ -53,3 +53,12 @@ END $$;
 GRANT SELECT ON ask_place, ask_review TO ask_reader;                           -- 이 2개만 읽기
 GRANT EXECUTE ON FUNCTION detour_minutes(geography, geography) TO ask_reader;
 GRANT ask_reader TO CURRENT_USER;  -- 앱이 postgres가 아닌 계정으로 붙는 PC에서도 바꿔 들 수 있게
+
+-- 11/23 ④ 신예지: 위 CURRENT_USER는 "이 SQL을 실행한 계정"이라, 도커가 postgres로 실행하면 앱 계정에는 권한이 안 가요
+--  배포 서버는 앱이 tripbiseo 계정으로 붙어서 SET LOCAL ROLE ask_reader가 막혔어요 (permission denied to set role "ask_reader")
+--  tripbiseo 계정이 있는 DB에서만 권한을 주고, 없는 PC(로컬 도커는 postgres로 붙음)에서는 아무 일도 안 해요
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'tripbiseo') THEN
+    GRANT ask_reader TO tripbiseo;
+  END IF;
+END $$;
