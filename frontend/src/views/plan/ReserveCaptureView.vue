@@ -10,6 +10,7 @@ import { useTripStore } from '@/stores/trip'
 import { setAutoAreaFrom } from '@/utils/planArea'
 import { isBeforeWhenStep, stretchTripTo } from '@/utils/reserveDates'
 import { goBack } from '@/utils/back'
+import { todayText } from '@/utils/dates'
 import { showToast } from '@/utils/toast'
 
 const store = useTripStore()
@@ -48,6 +49,8 @@ function missingFields(result) {
   return missing.join('·')
 }
 const DAY_MS = 24 * 60 * 60 * 1000 // 하루를 밀리초로
+// 날짜 칸 예시: 지금 고른 여행 첫날, 없으면 오늘 (11/23 주형: 고정 예시 2026-11-15가 지난 날짜처럼 보였어요. 시연 계정은 시연 시계 날짜)
+const exampleDate = computed(() => store.planStartDate || todayText())
 
 // 읽은 날짜(yyyy-MM-dd)가 여행 며칠째인지 (여행 시작일 기준). 날짜를 못 읽었으면 1일차, 여행 날짜 밖이면 0
 function dayOfTrip(readDate) {
@@ -150,7 +153,7 @@ function moveTripStart(firstDate) {
 function add() {
   const placeName = name.value.trim() || '예약한 곳'
   if (!TIME_PATTERN.test(time.value)) return showToast('시간을 HH:mm으로 적어 주세요')
-  if (date.value && !DATE_PATTERN.test(date.value)) return showToast('날짜를 2026-11-15처럼 적어 주세요')
+  if (date.value && !DATE_PATTERN.test(date.value)) return showToast('날짜를 ' + exampleDate.value + '처럼 적어 주세요')
   // 예전엔 날짜를 버려서 2일차 예약도 1일차에 들어갔어요 (11/11 주형). 손으로 고친 날짜도 그대로 써요
   // 11/20: 날짜를 고르기 전(꼭 갈 곳 칸)에 넣는 예약이면 그 날짜가 들어가게 여행 기간을 늘려요 (2일차 예약이 막히던 문제, utils/reserveDates.js)
   if (isBeforeWhenStep(store) && date.value && !stretchTripTo(store, date.value)) return showToast('여행은 30일까지 만들 수 있어요 · 예약 날짜를 확인해 주세요')
@@ -205,7 +208,7 @@ function add() {
 
         <div class="field"><label class="field__label" for="rc-name">장소</label><div class="field__box"><input id="rc-name" v-model="name" type="text" /></div></div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
-          <div class="field"><label class="field__label" for="rc-date">날짜</label><div class="field__box"><input id="rc-date" v-model="date" type="text" inputmode="numeric" maxlength="10" placeholder="2026-11-15" /></div></div>
+          <div class="field"><label class="field__label" for="rc-date">날짜</label><div class="field__box"><input id="rc-date" v-model="date" type="text" inputmode="numeric" maxlength="10" :placeholder="exampleDate" /></div></div>
           <div class="field"><label class="field__label" for="rc-time">도착할 시간</label><div class="field__box"><input id="rc-time" v-model="time" type="text" inputmode="numeric" maxlength="5" placeholder="19:00" /></div></div>
         </div>
       </div>
