@@ -157,14 +157,15 @@ function toggle() {
 }
 
 function onPointerDown(e) {
-  const grab = e.target.closest(GRAB_AREA)
+  let grab = e.target.closest(GRAB_AREA)
+  if (!grab && isCollapsed.value) grab = sheet.value // 내려간 띠는 어디를 잡아도 됨 (손잡이 막대가 작아 손가락으로 맞히기 어려움, 11/24)
   if (!grab || !sheet.value.contains(grab)) return
   if (e.target.closest(NOT_GRAB)) return // 머리 안의 버튼·링크는 그대로 눌리게
   const scale = sheet.value.getBoundingClientRect().height / sheet.value.offsetHeight || 1 // 화면이 축소돼 보일 때 보정
   const max = maxOffset()
   let base = isCollapsed.value ? max : 0
   if (props.expandable) base = sheet.value.offsetTop // 펼치는 시트: 지금 위쪽 끝(px)에서 시작
-  drag = { startY: e.clientY, scale, base, offset: 0, max, isMoved: false, isHandle: grab.classList.contains('handle') }
+  drag = { startY: e.clientY, scale, base, offset: 0, max, isMoved: false, isHandle: grab.classList.contains('handle') || grab === sheet.value }
   e.preventDefault()
   window.addEventListener('pointermove', onPointerMove, { passive: false })
   window.addEventListener('pointerup', onPointerUp)
@@ -248,4 +249,5 @@ onUnmounted(removeListeners)
 <style>
 .sheet [data-drag], .sheet[data-drag] { touch-action: none; cursor: grab; }
 .sheet .handle { touch-action: none; cursor: grab; }
+.sheet.is-collapsed { touch-action: none; cursor: grab; } /* 내려간 띠 전체를 끌 수 있게 */
 </style>

@@ -1134,7 +1134,8 @@ function toggleMapType() {
       </div>
 
       <!-- 정보 시트: 손잡이나 제목 부분(data-drag)을 끌면 내려가고 올라옴 -->
-      <BottomSheet class="sheet--peek retro-sheet" aria-labelledby="retro-title" >
+      <!-- expandable: 위로 끌면 맨 위까지 펼쳐져서 다녀온 길·정산을 넓게 봄 (11/24, 예전엔 중간 ↔ 내리기만 됐음) -->
+      <BottomSheet class="sheet--peek retro-sheet" aria-labelledby="retro-title" expandable>
         <!-- 여행 제목과 날짜를 API 값으로 보여 줌 -->
         <div class="retro-sheet__head" data-drag>
           <h1 v-if="retro" id="retro-title" class="h-title">{{ retro.title }}</h1>
@@ -1387,7 +1388,7 @@ function toggleMapType() {
 .scr-Retro .retro-tl__extra.is-sel{background:var(--coral-soft,#FDECE8)}
 .scr-Retro .retro-xpin__name{position:absolute;left:26px;top:50%;transform:translateY(-50%);white-space:nowrap;font-size:11px;font-weight:700;color:var(--ink);background:rgba(255,255,255,.92);padding:1px 6px;border-radius:6px}
 /* 정보 시트: 처음엔 지도 아래(340px)부터. 안쪽만 스크롤 (TripPage의 trip-sheet와 같은 모양) */
-.scr-Retro .retro-sheet{top:460px;padding:8px 0 0;gap:10px} /* 11/19: 340 → 460, 지도 칸을 더 넓게 */
+.scr-Retro .retro-sheet{top:460px;padding:8px 0 0;gap:10px;z-index:4} /* 11/19: 340 → 460, 지도 칸을 더 넓게. z-index 4: 맨 위로 펼치면 확대 버튼(3)을 덮음 (11/24) */
 .scr-Retro .retro-zoom{position:absolute;right:16px;top:280px;z-index:3;display:flex;flex-direction:column;gap:6px}
 .scr-Retro .retro-zoom .iconbtn{width:40px;height:40px;font-size:20px;font-weight:700;color:var(--navy)}
 .scr-Retro .retro-sheet__head{padding:0 16px}
