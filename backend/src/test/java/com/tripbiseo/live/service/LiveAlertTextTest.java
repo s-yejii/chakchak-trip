@@ -1,6 +1,8 @@
 package com.tripbiseo.live.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -41,11 +43,67 @@ class LiveAlertTextTest {
         assertEquals("가장 빠른 방법으로 가도 약속 시각(12:30)보다 15분 늦어요", maker.makeLostText(context, sushi()));
     }
 
+    // 11/19 주형: 예약 49m 앞 카페 (1분 거리, 계획은 18:54에 나가 18:55 도착) → 18:09엔 "늦어요" 없음, 18:54엔 있음
+    @Test
+    void 바로_앞_카페면_나갈_때가_돼야_지금_나가라고() {
+        Stop dinner = sushi();
+        dinner.setId(7L);
+        dinner.setTime("19:00");
+        StatusContext context = new StatusContext();
+        context.setDemo(true); // 11/20: 이 기준은 시연 계정만
+        context.setFixedStop(dinner);
+        context.setLeaveAt(Geo.toMinutes("18:54"));
+        context.getEtaMap().put(7L, Geo.toMinutes("18:55"));
+        context.setSlack(5);
+        context.setNow(Geo.toMinutes("18:09"));
+        assertFalse(maker.isMustLeaveNow(context));
+        context.setNow(Geo.toMinutes("18:54"));
+        assertTrue(maker.isMustLeaveNow(context));
+    }
+
+    // 11/19 주형: 예약 앞 카페에선 출발 알림을 5분 전 한 번만
+    @Test
+    void 시연_계정_카페에선_출발_알림이_5분_전_한_번만() {
+        Stop cafe = new Stop();
+        cafe.setName("공간갑");
+        cafe.setCategory("카페,디저트");
+        Stop dinner = sushi();
+        dinner.setId(7L);
+        dinner.setFixed(true);
+        StatusContext context = new StatusContext();
+        context.setCurrent(cafe);
+        context.setNextStop(dinner);
+        context.setLeaveAt(Geo.toMinutes("18:54"));
+        context.setNow(Geo.toMinutes("18:45")); // 9분 전
+        assertNotNull(maker.makeLeave(context)); // 일반 계정은 예전처럼 10분 전부터
+        context.setDemo(true);
+        assertNull(maker.makeLeave(context));
+        context.setNow(Geo.toMinutes("18:50")); // 4분 전
+        assertNotNull(maker.makeLeave(context));
+        context.setNow(Geo.toMinutes("18:54")); // 지금
+        assertNull(maker.makeLeave(context));
+    }
+
     @Test
     void 앞_칸을_떠났으면_이동_중() {
         Stop cafe = new Stop();
         cafe.setDepartedAt("2026-11-16T18:45:06");
         assertTrue(LiveAlertMaker.hasLeftAStop(List.of(cafe, sushi())));
         assertFalse(LiveAlertMaker.hasLeftAStop(List.of(sushi())));
+    }
+
+    // 11/20 주형: 일반 계정은 예전 기준 그대로 (여유 5분 이하면 바로 "지금 나가지 않으면 늦어요")
+    @Test
+    void 일반_계정은_여유_5분이면_예전처럼_바로() {
+        Stop dinner = sushi();
+        dinner.setId(7L);
+        dinner.setTime("19:00");
+        StatusContext context = new StatusContext();
+        context.setFixedStop(dinner);
+        context.setLeaveAt(Geo.toMinutes("18:54"));
+        context.getEtaMap().put(7L, Geo.toMinutes("18:55"));
+        context.setSlack(5);
+        context.setNow(Geo.toMinutes("18:09"));
+        assertTrue(maker.isMustLeaveNow(context));
     }
 }

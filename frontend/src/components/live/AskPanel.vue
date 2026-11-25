@@ -17,6 +17,7 @@ import * as api from '@/api/trips'
 import { distanceMeters } from '@/utils/geo'
 import { loadPhotos, photoFor } from '@/utils/placePhoto'
 import { loadChat, saveChat } from '@/utils/askChat'
+import { devMode } from '@/utils/devMode'
 import '@/assets/css/live-panel.css' // 지도 위 패널 생김새 (근처 찾기·비슷한 가게와 같이)
 
 const props = defineProps({
@@ -28,7 +29,31 @@ const props = defineProps({
   chatKey: { type: String, default: 'demo' }, // 대화를 남길 이름 (utils/askChat.js chatKey: 여행 id + 시작 날짜)
   initialDraft: { type: String, default: '' }, // 11/17: 열 때 입력칸에 미리 넣을 질문 (시연 "고기집 가는 길에 카페")
   planned: { type: Array, default: () => [] }, // 지금 있는 곳·남은 일정의 장소 id (이미 일정에 있으면 [일정에 넣기] 대신 '일정에 있어요')
+  cafeNear: { type: Object, default: null }, // 11/19 ③: 열자마자 이 곳({ name, lat, lng }) 근처 카페를 바로 찾아 보여 줌 ("시간이 남아요" 카드)
 })
+const CAFE_NEAR_M = 200 // 예약 가게 근처 카페 반경 (걸어서 3분쯤, 11/19 주형: 더 가까운 곳으로)
+const CAFE_WIDE_M = 500 // 그 안에 없으면 이만큼 (걸어서 7분쯤)
+const CAFE_FAR_M = 1000 // 11/20 주형(시연 계정만): 그래도 없으면 1km (걸어서 15분쯤, 동서울 터미널 500m 안엔 DB 카페가 없어요)
+const CAFE_CATEGORY = '카페'
+// 예약 가게 근처 카페: AI 말 이해를 거치지 않고 바로 반경 추천 (11/19 주형: "가는 길에 들를 곳"이 펍을 골랐어요)
+async function showCafesNear(place) {
+  addMessage({ role: 'me', text: place.name + ' 근처 카페' })
+  const reply = addMessage({ role: 'ai', text: '', isTyping: true })
+  isBusy.value = true
+  try {
+    let res = await api.askRecommend(props.tripId, place.lat, place.lng, CAFE_NEAR_M, CAFE_CATEGORY, [])
+    if (!res.places.length) res = await api.askRecommend(props.tripId, place.lat, place.lng, CAFE_WIDE_M, CAFE_CATEGORY, [])
+    if (!res.places.length && devMode.isOn) res = await api.askRecommend(props.tripId, place.lat, place.lng, CAFE_FAR_M, CAFE_CATEGORY, [])
+    const notFound = devMode.isOn ? place.name + ' 근처에 쉬어 갈 카페가 없어요 · 그대로 가도 괜찮아요' : place.name + ' 근처에 지금 열려 있는 카페를 찾지 못했어요'
+    const text = res.places.length ? place.name + ' 근처 카페 ' + res.places.length + '곳이에요 · 골라서 일정에 넣으면 예약 5분 전에 도착하게 맞춰요'
+                                   : notFound
+    showPlaces(reply, text, res.places, null, place.name + ' 근처 카페')
+  } catch (e) {
+    finishReply(reply, e.message)
+  } finally {
+    isBusy.value = false
+  }
+}
 const SCROLL_END_MS = 120 // 카드 줄을 넘기고 이만큼 멈추면 왼쪽 카드를 고름
 const THINK_MS = 500 // AI가 생각하는 것처럼 잠깐 기다림 (가짜)
 // found: 지금 보고 있는 답의 결과(없으면 null) → LiveView가 지도에 핀, pick: 카드를 고름 → 지도 핀도 같이, choose: 일정에 넣기 → 순서 정하기
@@ -53,6 +78,9 @@ watch(messages, () => saveChat(props.chatKey, messages.value), { deep: true })
 
 // 다시 열면: 대화 맨 아래로, 마지막으로 찾은 결과를 지도에 다시 보여 줌
 onMounted(() => {
+  // 11/20 주형(시연 계정만): "근처 카페 보기"로 열면 지난 대화(다른 날·다른 예약의 카페 카드)는 지우고 새로 찾아요
+  if (props.cafeNear && isServer.value && devMode.isOn) messages.value = []
+  if (props.cafeNear && isServer.value) showCafesNear(props.cafeNear)
   scrollThreadToEnd()
   for (let i = messages.value.length - 1; i >= 0; i--) {
     if (messages.value[i].places && messages.value[i].places.length) {

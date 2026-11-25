@@ -53,9 +53,9 @@ public class CaptureServiceImpl implements CaptureService {
 
     /** 사진 검사 → Gemini로 읽기 → 형식 검사 → DB 장소 찾기 */
     @Override
-    public CaptureResponse readCapture(long memberId, byte[] image, String imageType) {
+    public CaptureResponse readCapture(long memberId, byte[] image, String imageType, String startDate) {
         checkImage(image, imageType);
-        CaptureResponse demo = devService.isDemoAccount(memberId) ? demoCaptures.findReserve(image) : null;
+        CaptureResponse demo = devService.isDemoAccount(memberId) ? demoCaptures.findReserve(image, startDate) : null;
         if (demo != null) { // 시연 계정 + 시연용 사진이면 Gemini 대신 정해 둔 값 (11/12)
             demoCaptures.waitForScan();
             return demo;

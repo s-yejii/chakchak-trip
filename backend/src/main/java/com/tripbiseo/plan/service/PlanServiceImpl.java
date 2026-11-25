@@ -23,6 +23,7 @@ import com.tripbiseo.common.exception.ApiException;
 import com.tripbiseo.common.external.FoundArea;
 import com.tripbiseo.common.util.Geo;
 import com.tripbiseo.live.dto.PlaceTagCount;
+import com.tripbiseo.plan.dto.StayPick;
 import com.tripbiseo.plan.dto.AiConditions;
 import com.tripbiseo.plan.dto.AiDraft;
 import com.tripbiseo.plan.dto.AiDraftStop;
@@ -71,6 +72,12 @@ public class PlanServiceImpl implements PlanService {
     private static final java.util.regex.Pattern COUPLE_WORDS = java.util.regex.Pattern.compile("데이트|연인|커플");
     private static final java.util.regex.Pattern SOLO_WORDS = java.util.regex.Pattern.compile("혼밥|혼자|1인");
     private static final int MAX_REASON_LENGTH = 40;      // Gemini 이유 한 줄
+    private static final int MIDNIGHT_MIN = 24 * 60;       // 오늘 일정은 자정까지 (11/18)
+    private static final String MIDNIGHT_TEXT = "24:00";
+    private static final int TEN_MIN = 10;
+    private static final int HOUR_MIN = 60;
+    private static final int LATE_NIGHT_MIN = 21 * 60;     // 이 뒤에 시작하면 "지금 열린 곳 위주로" 안내
+    private static final String MEMORIAL_MEMO = "역사를 기억하는 추모 공간이에요 · 조용히 둘러봐 주세요"; // 11/18 추모 공간 안내
     private static final java.util.regex.Pattern GUESS_REASON = java.util.regex.Pattern.compile("걸어서|도보|가까|가깝|인접|근처|바로 옆|인근|위치|동선|니다$|평점|리뷰 ?[\\d,]+개|에 있어|에 있는|편리|즐길 수 있|다양한|유명한|대표적|의미가 있|의미 있는|꼭 방문|가득한"); // 확인 안 된 거리 말·숫자·뻔한 말 (11/14)
     private static final int MAX_MEMO_LENGTH = 200;       // trip_stop.memo 저장 규칙
     private static final java.util.regex.Pattern WEAK_EVIDENCE = java.util.regex.Pattern.compile("리뷰 \\d+개 중 (\\d+)개");
@@ -104,6 +111,8 @@ public class PlanServiceImpl implements PlanService {
     private static final String MUST = "must";       // 일정 칸 중요도 (trip_stop.importance)
     private static final String MAYBE = "maybe";
 
+    private static final String AUTO_CHECK_IN = "15:00";  // 자동으로 넣는 숙소 체크인·체크아웃 (흔한 시각, 11/20)
+    private static final String AUTO_CHECK_OUT = "11:00";
     private final AiService aiService;
     private final PlaceService placeService;
     private final PlanCandidateFinder planCandidateFinder; // 후보 장소 찾기 (RAG의 찾기)
@@ -118,6 +127,7 @@ public class PlanServiceImpl implements PlanService {
     private final PlanWordGuesser planWordGuesser;         // Gemini가 안 될 때 낱말로만 조건 (11/04)
     private final DevService devService;                   // 시연 계정인지 (11/08)
     private final DemoScenario demoScenario;               // 시연 계정이면 이 시나리오 일정 (11/08)
+    private final StayPickService stayPickService;         // 숙소를 안 고른 1박 이상 여행은 근처 추천 숙소로 (11/20)
 
     /** 사용자 말 → 여행 조건. 보낸 조건은 남기고 Gemini가 새로 뽑은 값만 덮어씀. Gemini 실패는 오류 그대로 (API.md) */
     @Override
@@ -206,11 +216,15 @@ public class PlanServiceImpl implements PlanService {
         if (devService.isDemoAccount(memberId)) {
             return makeDemoDraft(conditions, progress); // 시연 계정은 발표 시나리오 일정 (11/08 주형)
         }
-        boolean isMoved = moveToTomorrowIfLate(conditions);
+        String autoStay = fillStayIfEmpty(memberId, conditions); // 시연 계정은 위에서 끝나서 여기 안 옴 (시나리오 숙소 그대로)
+        boolean isLateNow = startFromNow(conditions);
         PlanGenerateResponse response = makeEmptyDraft(conditions);
+        if (autoStay != null) {
+            response.getNotes().add(makeNote("숙소를 안 골라서 근처 " + autoStay + "로 넣었어요 · 일정에서 바꿀 수 있어요", null));
+        }
         addBoardingBuffer(conditions, response.getNotes());
-        if (isMoved) {
-            response.getNotes().add(makeNote("오늘은 늦어서 내일 일정으로 짰어요", null));
+        if (isLateNow) {
+            response.getNotes().add(makeNote("밤이라 지금 열린 곳 위주로 골랐어요", null));
         }
         int days = (int) ChronoUnit.DAYS.between(LocalDate.parse(response.getStartDate()), LocalDate.parse(response.getEndDate())) + 1;
         String region = conditions.getRegion() == null ? "" : conditions.getRegion();
@@ -240,9 +254,12 @@ public class PlanServiceImpl implements PlanService {
         addKeptAndSort(conditions, response, days);
         planRuleMaker.fixTravelTimes(response); // 순서를 바꾼 뒤 이동 시간이 모자란 칸을 밀거나 줄임 (11/12)
         planRuleMaker.addStayStops(response, conditions, days);
+        planRuleMaker.markOpenEnds(response, conditions, days); // 끝 장소가 없으면 그날 마지막 칸은 끝 시간 없음 (11/18)
+        planRuleMaker.addStopNotes(response, conditions); // 칸별 안내: 빈 시간·이른 예약 (11/18)
         if (response.getStops().isEmpty()) {
             boolean isMissingLocation = isNearMe && request.getLat() == null;
             throw fail(422, isMissingLocation ? "내 위치를 받지 못했어요. 브라우저 위치 권한을 허용하거나 지역 이름을 말해 주세요."
+                                              : isLateNow ? "지금은 문 연 곳을 찾지 못했어요. 술집을 고르거나 내일로 짜 보세요."
                                               : "일정에 넣을 장소를 찾지 못했어요. 가고 싶은 곳을 조금 더 자세히 말해 주세요.");
         }
         applyLimits(conditions, response, days, finish, progress);
@@ -341,20 +358,36 @@ public class PlanServiceImpl implements PlanService {
     }
 
     /** 오늘 하루 일정인데 남은 칸이 없으면(밤늦게) 내일로 옮김. 예약(고정 일정)이 있으면 그날을 지켜야 해서 안 옮김 */
-    private boolean moveToTomorrowIfLate(PlanConditions conditions) {
-        LocalDate today = Geo.now().toLocalDate();
-        String start = hasText(conditions.getStartDate()) ? conditions.getStartDate() : today.toString();
+    /**
+     * 오늘 여행이면 지금부터 짜기 (11/18 주형: "여행을 지금부터 할 수 있는데"). 예전엔 늦으면 내일로 넘겼어요.
+     *  - 시작이 지금보다 이르면(또는 시간을 안 골랐는데 남은 칸이 없으면) 시작 = 지금을 10분 단위로 올린 시각
+     *  - 끝이 시작보다 1시간도 안 남으면 자정(24:00)까지. 자정을 넘는 일정은 만들지 않음
+     * 밤(21시 넘어 시작)이면 true → "지금 열린 곳 위주로" 안내. 예약이 있으면 사용자가 정한 대로 둠
+     */
+    private boolean startFromNow(PlanConditions conditions) {
+        String today = Geo.now().toLocalDate().toString();
+        String start = hasText(conditions.getStartDate()) ? conditions.getStartDate() : today;
         boolean hasFixed = conditions.getFixed() != null && !conditions.getFixed().isEmpty();
-        if (!start.equals(today.toString()) || hasFixed || !planRuleMaker.isTodayOver(conditions)) {
+        if (!start.equals(today) || hasFixed) {
             return false;
         }
-        String tomorrow = today.plusDays(1).toString();
-        boolean isOneDay = !hasText(conditions.getEndDate()) || conditions.getEndDate().equals(start);
-        conditions.setStartDate(tomorrow);
-        if (isOneDay) {
-            conditions.setEndDate(tomorrow);
+        int now = roundUpTen(Geo.nowMinutes());
+        boolean hasTime = hasText(conditions.getStartTime()) && hasText(conditions.getEndTime());
+        if (!hasTime && !planRuleMaker.isTodayOver(conditions)) {
+            return false; // 시간을 안 골랐고 남은 칸이 있으면 예전처럼 지금 뒤 칸으로 당겨 짬
         }
-        return true;
+        if (!hasTime || Geo.toMinutes(conditions.getStartTime()) < now) {
+            conditions.setStartTime(Geo.toHhmm(Math.min(now, MIDNIGHT_MIN - TEN_MIN)));
+        }
+        int startMin = Geo.toMinutes(conditions.getStartTime());
+        if (!hasText(conditions.getEndTime()) || Geo.toMinutes(conditions.getEndTime()) - startMin < HOUR_MIN) {
+            conditions.setEndTime(MIDNIGHT_TEXT); // Geo.toHhmm(24:00)은 "00:00"이 돼서 끝이 시작보다 빨라졌어요 (11/19 점검)
+        }
+        return startMin >= LATE_NIGHT_MIN;
+    }
+
+    private int roundUpTen(int minutes) {
+        return (minutes + TEN_MIN - 1) / TEN_MIN * TEN_MIN;
     }
 
     /** Gemini 고르기(실패하면 규칙) → 칸 검사·빈 칸 채우기. 두 단계를 알림 */
@@ -488,6 +521,9 @@ public class PlanServiceImpl implements PlanService {
     /** 만든 일정 이름은 짧게: "문래동 하루", "영등포구 1박 2일". 지역을 모르면 Gemini가 지은 이름 그대로 */
     private void setShortTitle(PlanConditions conditions, PlanGenerateResponse response, int days) {
         String region = conditions.getRegion();
+        if ((region == null || region.isBlank()) && conditions.getAreas() != null && !conditions.getAreas().isEmpty()) {
+            region = conditions.getAreas().get(0).getName(); // 11/19: 지도로 구만 고르면 region이 비어 "새 여행 여행은 어땠나요?"가 됐어요
+        }
         if (region == null || region.isBlank()) {
             return;
         }
@@ -574,6 +610,36 @@ public class PlanServiceImpl implements PlanService {
     }
 
     /** 시연 계정: 진행 단계를 평소처럼 몇 초 보여 준 뒤 시나리오 일정(DemoScenario)을 돌려줌 */
+    /**
+     * 11/20 피드백 "숙소는 기본 자동 추천": 1박 이상인데 숙소를 하나도 안 넣었으면 지역 가운데 근처 추천 1위 숙소를
+     * 첫날 15:00 체크인 ~ 마지막 날 11:00 체크아웃으로 넣어요 (StayPickService: 관광공사 등록 숙박, 사진 있는 호텔 → 가까운 순).
+     * 넣었으면 그 이름, 아니면 null
+     */
+    private String fillStayIfEmpty(long memberId, PlanConditions conditions) {
+        boolean hasStay = conditions.getStays() != null && !conditions.getStays().isEmpty();
+        String start = conditions.getStartDate();
+        String end = conditions.getEndDate();
+        if (hasStay || start == null || end == null || end.compareTo(start) <= 0 || conditions.getAreaLat() == null) {
+            return null;
+        }
+        List<StayPick> picks = stayPickService.getStayList(memberId, conditions.getAreaLat(), conditions.getAreaLng());
+        if (picks.isEmpty()) {
+            return null;
+        }
+        StayPick pick = picks.get(0);
+        PlanStay stay = new PlanStay();
+        stay.setName(pick.getName());
+        stay.setAddress(pick.getAddress());
+        stay.setLat(pick.getLat());
+        stay.setLng(pick.getLng());
+        stay.setCheckInDate(start);
+        stay.setCheckInTime(AUTO_CHECK_IN);
+        stay.setCheckOutDate(end);
+        stay.setCheckOutTime(AUTO_CHECK_OUT);
+        conditions.setStays(new ArrayList<>(List.of(stay)));
+        return pick.getName();
+    }
+
     private PlanGenerateResponse makeDemoDraft(PlanConditions conditions, Consumer<PlanProgress> progress) {
         String[][] steps = {
             { "candidates", "20", "장소 후보 찾기" },
@@ -586,6 +652,9 @@ public class PlanServiceImpl implements PlanService {
             progress.accept(makeProgress(step[0], "done", Integer.parseInt(step[1]), step[2], null));
         }
         PlanGenerateResponse demo = demoScenario.makeDraft(conditions);
+        // 11/19 피드백: 고정 제목("아카데미 동기 서울 1박 2일")이 짜고 친 것처럼 보여서, 일반 계정과 같은 규칙(지역 + 기간)으로
+        int demoDays = (int) ChronoUnit.DAYS.between(LocalDate.parse(demo.getStartDate()), LocalDate.parse(demo.getEndDate())) + 1;
+        setShortTitle(conditions, demo, demoDays);
         planVerifier.addVerifyNotes(demo); // 시연 일정도 진짜 DB 값으로 확인 줄 (11/13)
         return demo;
     }
@@ -1088,6 +1157,9 @@ public class PlanServiceImpl implements PlanService {
 
     /** Gemini가 고른 칸 중 시간 고정 일정은 사용자가 정한 날·시각으로 다시 맞춤 (Gemini가 날을 틀려도 서버가 지킴, 11/04) */
     private void pinFixedDays(PlanConditions conditions, List<AiDraftStop> picks) {
+        for (AiDraftStop pick : picks) {
+            pick.setFixed(false); // 11/18: 예약(🔒)은 사용자가 시각을 정한 일정만. Gemini가 꼭 갈 곳에 붙인 fixed는 믿지 않음 (아래에서 예약만 다시 켬)
+        }
         if (conditions.getFixed() == null) {
             return;
         }
@@ -1233,6 +1305,9 @@ public class PlanServiceImpl implements PlanService {
                 response.getNotes().add(makeNote(place.getName() + "은(는) 방문 전에 연락이 필요해요", placeService.getNaverUrl(place.getName(), null)));
             }
             stop.setMemo(makeMemo(pick.getReason(), reasons.get(place.getId()), conditions.getCompanion()));
+            if (planCandidateFinder.isMemorialName(place.getName())) {
+                stop.setMemo(MEMORIAL_MEMO); // 추모 공간엔 "산책하기 좋아요" 같은 여가 문구 대신 (11/18)
+            }
             stop.setImportance(isMustStop(pick, place, conditions, mustKindsLeft) ? MUST : MAYBE); // 여행 중 대안이 꼭은 안 줄임 (11/04)
             response.getStops().add(stop);
         }

@@ -97,7 +97,7 @@ function periodText(card) {
             <p class="wt-meta">{{ periodText(card) }} · {{ card.people }}명 · 장소 {{ card.stopCount }}곳</p>
             <p v-if="card.diaryLine" class="wt-diary">“{{ card.diaryLine }}”</p>
             <div class="wt-actions">
-              <RouterLink :to="'/web/retro?id=' + card.id" class="wt-btn wt-btn--main">3D 회고 보기</RouterLink>
+              <RouterLink :to="'/web/retro?id=' + card.id" class="wt-btn wt-btn--main">여행 기록 보기</RouterLink>
             </div>
           </div>
         </article>

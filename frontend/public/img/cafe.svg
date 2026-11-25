@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice">
+  <!-- 사진 없는 카페 칸 기본 그림 (11/19 ①): 커피잔 -->
+  <rect width="400" height="300" fill="#E8EEF7"/>
+  <g fill="none" stroke="#1F3A68" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M135 120h110v45a45 45 0 0 1-45 45h-20a45 45 0 0 1-45-45z"/>
+    <path d="M245 135h12a20 20 0 0 1 0 40h-14"/>
+    <path d="M165 85v15M195 80v20"/>
+  </g>
+</svg>

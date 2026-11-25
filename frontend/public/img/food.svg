@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice">
+  <!-- 사진 없는 음식점 칸 기본 그림 (11/19 ①): 포크·나이프 -->
+  <rect width="400" height="300" fill="#E8EEF7"/>
+  <g fill="none" stroke="#1F3A68" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M165 90v40a20 20 0 0 0 40 0V90M185 90v120"/>
+    <path d="M235 210V90c-18 8-25 30-25 55h25"/>
+  </g>
+</svg>

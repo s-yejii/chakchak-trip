@@ -6,7 +6,8 @@ let isRestoreChecked = false
 <script setup>
 // S06 여행 정보 입력 (③): 한 화면에 하나씩 묻고 "이전"·"다음"으로 넘겨요 (11/04: 긴 스크롤 → 단계별, 11/06: 건너뛰기 버튼 없앰)
 // 주소: /plan/info (AI로 짜기) · /plan/info?method=me (직접 고르기)
-//   순서: 가고 싶은 곳(인스타 링크) → 어디로 → 언제 → 몇 시부터 몇 시까지 → 어디서 출발 → 누구랑 → 어디 위주 → 이런 곳 → 무엇으로 → 꼭 지킬 시간
+//   순서 (11/20 피드백 "질문 줄이기": 11단계 → 7단계): 가고 싶은 곳(인스타 링크) → 어디로 → 언제(+숙소) → 어디서 출발 → 누구랑
+//     → 어디 위주·이런 곳(한 화면) → 꼭 지킬 시간. 동은 안 묻고 구 전체, 몇 시부터·무엇으로는 마지막 칸에 "이렇게 짜요 [바꾸기]"로
 //   인스타로 담으면 그 장소의 구가 지역으로 자동 선택돼서 "어디로"를 건너뛰어요 (WishLinks)
 //   꼭 알려 줘야 하는 건 지역 하나. 나머지는 안 고르고 "다음"을 눌러도 되고, 이동 수단은 안 고르면 지하철·도보·버스
 //   지금 칸·고른 값은 저장소(store)에 둬서 장소 검색에 다녀와도 그대로예요
@@ -14,43 +15,46 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import RangeCalendar from '@/components/plan/RangeCalendar.vue'
 import WishLinks from '@/components/plan/WishLinks.vue'
-import { getAreaStats, getRecommendedLinks } from '@/api/trips'
+import { getAreaStats, getRecommendedLinks, getRecommendedStays } from '@/api/trips'
 import { useTripStore } from '@/stores/trip'
 import { addDays, daysBetween, toMonthDay, todayText } from '@/utils/dates'
 import TripWeather from '@/components/plan/TripWeather.vue'
 import { goBack } from '@/utils/back'
 import { imageFor } from '@/utils/mapView'
 import GuMapPicker from '@/components/plan/GuMapPicker.vue'
-import DongPicker from '@/components/plan/DongPicker.vue'
 import OriginPicker from '@/components/plan/OriginPicker.vue'
 import ChoiceCard from '@/components/plan/ChoiceCard.vue'
-import TimeRangePicker from '@/components/plan/TimeRangePicker.vue'
 import { KIND_CHIPS, MOVE_CODES, TAG_CHIPS } from '@/utils/styleCodes'
 // 서비스 아이콘: Simple Icons (CC0, 상표는 각 회사 소유). 그 서비스 바로가기에만 써요
-import youtubeLogo from '@/assets/brand/youtube.svg'
-import instagramLogo from '@/assets/brand/instagram.svg'
-import naverLogo from '@/assets/brand/naver.svg'
 import { toShortDate } from '@/utils/tripView'
 import { showToast } from '@/utils/toast'
 import { recommendTimeFor } from '@/utils/timeRecommend'
 import { appNow, devMode } from '@/utils/devMode'
 import { getDevScenario } from '@/api/dev'
+import { PLAN_STEP_IDS } from '@/utils/planSteps'
+import { readStyle } from '@/utils/mySettings'
+import { toDuration } from '@/utils/time'
+import { areasFromPlaces } from '@/utils/planArea'
+import { checkDay } from '@/utils/dayFit'
+import { fillPlanFromTrip } from '@/utils/planAgain'
+import youtubeLogo from '@/assets/brand/youtube.svg'
+import instagramLogo from '@/assets/brand/instagram.svg'
+import naverLogo from '@/assets/brand/naver.svg'
 
 const WORKSHOP_MIN_PEOPLE = 4 // 워크숍을 고르면 인원은 적어도 이만큼
 const DEFAULT_MOVES = ['지하철', '도보', '버스']
-const STEPS = [
-  { id: 'link', title: '가고 싶은 곳이 있나요?', sub: '링크로 넣어보세요' },
-  { id: 'where', title: '어디로 가요?', sub: '', isRequired: true },
-  { id: 'dong', title: '어느 동이 좋아요?', sub: '안 고르면 구 전체' },
-  { id: 'when', title: '언제 가요?', sub: '' },
-  { id: 'time', title: '몇 시부터 몇 시까지 놀까요?', sub: '' },
-  { id: 'from', title: '어디서 출발해요?', sub: '' },
-  { id: 'who', title: '누구랑 가요?', sub: '' },
-  { id: 'kind', title: '어디 위주로 갈까요?', sub: '밥·카페는 알아서 넣어요' },
-  { id: 'tag', title: '이런 곳이면 더 좋아요', sub: '' },
-  { id: 'move', title: '무엇으로 다녀요?', sub: '안 고르면 지하철·도보·버스' },
-  { id: 'fixed', title: '예약한 곳이 있나요?', sub: '' },
-]
+// 11/20 피드백: 동(구 전체로)·몇 시부터(마이 > 여행 스타일 값)·무엇으로(지하철·도보·버스)는 따로 묻지 않고 마지막 칸에서 바꿀 수 있게
+const STEP_TEXT = {
+  // 11/20 주형: SNS 링크와 예약(장소 검색·캡처)이 비슷해서 맨 앞 한 칸으로 합침
+  link: { title: '꼭 갈 곳이 있나요?', sub: 'SNS에서 본 가게·저장한 곳·예약한 곳을 한 번에 넣어요' },
+  where: { title: '어디로 가요?', sub: '', isRequired: true },
+  when: { title: '언제 가요?', sub: '' },
+  from: { title: '어디서 출발해요?', sub: '' },
+  who: { title: '누구랑 가요?', sub: '' },
+  kind: { title: '어디 위주로 갈까요?', sub: '마지막이에요 · 고르고 [일정 만들기]' },
+  // 11/20 피드백: "예약한 곳"이 인스타로 담은 곳과 헷갈려서 시간이 정해진 곳만이라고 분명히
+}
+const STEPS = PLAN_STEP_IDS.map((id) => ({ id, ...STEP_TEXT[id] }))
 
 const TOP_GU_COUNT = 4 // 지도에 옅게 표시할 구 수
 
@@ -99,6 +103,13 @@ const isLast = computed(() => store.planStep === STEPS.length - 1)
 const progress = computed(() => Math.round(((store.planStep + 1) / STEPS.length) * 100) + '%')
 // 다음 버튼: 어디로는 지역을 고른 뒤에. 출발지는 안 골라도 돼요 (그러면 첫 장소에서 시작)
 const canNext = computed(() => !step.value.isRequired || !!store.planArea)
+// 다음 버튼 글자: 링크 단계에서 아직 담은 곳이 없으면 "넘어가기" (11/18 사용성: 링크가 없으면 눌러도 되는지 몰랐어요)
+const nextLabel = computed(() => {
+  if (isLast.value) return '일정 만들기'
+  const hasWish = (store.planConditions?.mustVisit || []).length > 0 || fixedList.value.length > 0
+  if (step.value.id === 'link') return hasWish ? '다 담았어요' : '없어요, 넘어가기' // 11/20: 담은 뒤에도 더 넣을 수 있게 이 칸에 남아요
+  return '다음'
+})
 
 // 1단계: 플랫폼 검색 바로가기 (새 창). 이 칸에선 아직 지역을 안 골라서 검색어는 늘 서울로 고정 (지난번 지역이 저장소에 남아 있어요)
 const YOUTUBE_WORD = '서울 핫플 브이로그'
@@ -154,6 +165,11 @@ function setAreas(areas) {
 
 // 꼭 지킬 시간: 장소 검색·예약 캡처가 store.planConditions.fixed 에 넣은 { name, time } 목록
 const fixedList = computed(() => store.planConditions?.fixed || [])
+// 다시 짜기로 왔으면 지난 여행의 예약 (11/19 피드백: 자동으로 넣지 않고 눌렀을 때만, 날짜가 다르면 아래 안내로 다시 고르게)
+const oldFixed = computed(() => store.replanFrom?.fixed || [])
+function loadOldFixed() {
+  store.planConditions = { ...(store.planConditions || {}), fixed: [...oldFixed.value] }
+}
 
 const companions = [
   { name: '혼자', icon: 'i-user', desc: '내 속도대로' },
@@ -172,7 +188,7 @@ const withLook = (chip) => ({ ...chip, icon: CARD_LOOK[chip.code][0], desc: CARD
 const KIND_COLORS = { food: '#FF7A59', cafe: '#C8915B', bar: '#B4436C', tour: '#2FA67A', culture: '#7B61FF', shop: '#2F80ED' } // 어디 위주로: 종류마다 고유 색
 const KIND_CARDS = KIND_CHIPS.map((chip) => ({ ...withLook(chip), color: KIND_COLORS[chip.code] }))
 const TAG_CARDS = TAG_CHIPS.map(withLook)
-const CENTER_STEPS = ['time', 'who', 'kind', 'tag', 'move', 'fixed'] // 질문을 화면 가운데로 모으는 칸
+const CENTER_STEPS = ['who'] // 질문을 화면 가운데로 모으는 칸 (어디 위주는 카드가 많아 위에서부터)
 const isCentered = computed(() => CENTER_STEPS.includes(step.value.id))
 const moveList = [
   { label: '지하철', icon: 'i-subway', desc: '역 따라 이동' },
@@ -206,9 +222,9 @@ function isOutside(stay) {
 }
 
 // 시작·끝 시간 기본값: 오늘이면 지금+30분을 30분 단위로 올린 시각부터(22:00 넘으면 내일), 다른 날이면 10:00~20:00
-const TIME_STEP_MIN = 30
+const NOW_STEP_MIN = 10 // 오늘 시작 기본값: 지금을 10분 단위로
 const MIN_SPAN_MIN = 120
-const LAST_START_MIN = 22 * 60
+const LAST_START_MIN = 23 * 60 + 50 // 11/18 주형: 오늘은 지금부터 언제든 (예전 22:00 넘으면 내일로). 23:50 넘으면만 내일
 const LAST_END_MIN = 24 * 60
 const DEFAULT_END_MIN = 20 * 60
 const LATE_NOTE = '오늘은 늦어서 내일로 바꿨어요'
@@ -236,7 +252,7 @@ function moveToTomorrow() {
 }
 function setDefaultTimes() {
   if (isToday()) {
-    const start = Math.ceil((nowMinutes() + TIME_STEP_MIN) / TIME_STEP_MIN) * TIME_STEP_MIN
+    const start = Math.ceil(nowMinutes() / NOW_STEP_MIN) * NOW_STEP_MIN // 지금을 10분 단위로 올림 (11/18)
     if (start <= LAST_START_MIN) {
       store.planFromTime = toTime(start)
       store.planToTime = toTime(Math.min(LAST_END_MIN, Math.max(DEFAULT_END_MIN, start + MIN_SPAN_MIN)))
@@ -244,8 +260,18 @@ function setDefaultTimes() {
     }
     moveToTomorrow()
   }
-  store.planFromTime = '10:00'
-  store.planToTime = toTime(DEFAULT_END_MIN)
+  // 11/20 피드백: 매번 묻지 않고 마이 > 여행 스타일의 하루 활동 시간대(① 상재, 이 브라우저에 저장)를 써요. 없으면 10:00~20:00
+  const style = readStyle()
+  store.planFromTime = style.dayFrom || '10:00'
+  store.planToTime = style.dayTo || toTime(DEFAULT_END_MIN)
+}
+// 마이 > 여행 스타일을 저장한 적이 있는지 (없으면 "기본값"이라고 알려요)
+function hasSavedStyle() {
+  try {
+    return !!localStorage.getItem('myStyle') // utils/mySettings.js STYLE_KEY와 같은 이름
+  } catch (e) {
+    return false
+  }
 }
 // 달력에서 날짜를 바꾸면 기본값으로 (늦어서 자동으로 옮긴 건 빼고)
 watch(() => store.planStartDate, () => {
@@ -256,11 +282,11 @@ watch(() => store.planStartDate, () => {
   timeNote.value = ''
   setDefaultTimes()
 })
-// 오늘인데 이미 지난 시작 시각을 고르면 내일로
+// 오늘인데 이미 지난 시작 시각을 고르면 지금으로 맞춤 (11/18: 예전엔 내일로 넘겼어요)
 //   시연 계정은 빼요: 시나리오 출발 15:00을 [시간 추천]으로 넣을 때 시연 시계가 15:07이면 첫날이 11/11로 밀리던 문제 (11/09)
 watch(() => store.planFromTime, (time) => {
   if (scenario.value) return
-  if (time && isToday() && toMinutes(time) < nowMinutes()) moveToTomorrow()
+  if (time && isToday() && toMinutes(time) < nowMinutes()) store.planFromTime = toTime(Math.min(LAST_START_MIN, Math.ceil(nowMinutes() / NOW_STEP_MIN) * NOW_STEP_MIN))
 })
 if (!store.planFromTime) setDefaultTimes()
 
@@ -275,6 +301,24 @@ function pickCompanion(name) {
   store.planPeople = name === '혼자' ? 1 : Math.max(fewest, store.planPeople)
   // 11/09: 고르자마자 넘기지 않음 (같은 화면에서 인원도 맞추고 [다음]으로 넘어가요)
 }
+// 날짜 칸 숙소 추천 3곳 (11/20): 고른 지역 가운데 기준, 시연 계정은 르메르디앙이 맨 앞 (GET /api/plans/stays/recommended)
+const STAY_PICK_COUNT = 3
+const stayPicks = ref([])
+watch(() => [step.value.id, store.planArea && store.planArea.lat], async ([id]) => {
+  if (id !== 'when' || !store.planArea || store.planArea.lat == null) return
+  try {
+    stayPicks.value = (await getRecommendedStays(store.planArea.lat, store.planArea.lng)).slice(0, STAY_PICK_COUNT)
+  } catch {
+    stayPicks.value = []
+  }
+}, { immediate: true })
+// 추천 카드를 누르면 여행 전체 기간 숙소로 바로 담아요 (첫날 15:00 체크인 ~ 마지막 날 11:00 체크아웃, 숙소 칸에서 고칠 수 있어요)
+function addStayPick(pick) {
+  store.planStays = [{ name: pick.name, address: pick.address, lat: pick.lat, lng: pick.lng,
+    checkInDate: store.planStartDate, checkInTime: '15:00', checkOutDate: store.planEndDate, checkOutTime: '11:00' }]
+  showToast(pick.name + ' 담았어요 · 눌러서 날짜·시각을 고칠 수 있어요')
+}
+
 // 담은 숙소의 박 수 합 (체크인~체크아웃 날짜 차이). 여행 박 수만큼 다 담으면 "숙소 더 담기"를 숨김
 const stayNights = computed(() => {
   let total = 0
@@ -313,6 +357,19 @@ function toggleCode(list, code) {
   return list.includes(code) ? list.filter((item) => item !== code) : [...list, code]
 }
 
+// 마지막 칸 "이렇게 짜요" (11/20): 시간·이동 수단은 따로 안 묻고 여기서 바꾸기
+const openSum = ref('') // 펼친 칸: 'time' | 'move' | ''
+// 11/20 피드백 "건너뛰면 기본값이 골라진 채로": 안 고르면 서버 기본(밥집·카페, PlanRuleMaker DEFAULT_KINDS)이 켜진 채로 보여요
+//   보여 주기만 하고 보내는 값은 그대로 빈 목록 (누르면 그때부터 고른 값)
+const DEFAULT_KINDS = ['food', 'cafe']
+const shownKinds = computed(() => (store.planKinds.length ? store.planKinds : DEFAULT_KINDS))
+const shownMoves = computed(() => (store.planMoves.length ? store.planMoves : DEFAULT_MOVES)) // 안 고르면 기본값이 켜진 채로 보여요
+const movesText = computed(() => shownMoves.value.join('·') + '로 다녀요')
+const timeSource = computed(() => {
+  if (isToday()) return '오늘은 지금부터'
+  return hasSavedStyle() ? '마이 > 여행 스타일 기준' : '기본값 (마이 > 여행 스타일에서 바꿔요)'
+})
+
 // 여기서 고른 값을 일정 만들기 조건(store.planConditions)으로 → 대화(③ chat)가 이어서 채우고, 만들기(③ generate)가 씀
 function saveConditions() {
   if (store.planMoves.length === 0) store.planMoves = [...DEFAULT_MOVES] // 안 고르면 대중교통 + 도보
@@ -346,14 +403,23 @@ function saveConditions() {
   }
 }
 
-// 한 칸 앞뒤로. 지도에서 구를 안 골랐으면 동 칸은 건너뜀
+// 한 칸 앞뒤로. 11/20 피드백: 인스타로 담은 곳이 있으면(지역 자동) "어디로"는 건너뛰고, 다음 칸 위 "담은 곳 기준 [바꾸기]"로 바꿔요
 function moveStep(direction) {
   let next = store.planStep + direction
-  if (STEPS[next] && STEPS[next].id === 'dong' && !store.planAreas.length) next += direction
+  if (STEPS[next] && STEPS[next].id === 'where' && isAutoArea.value) next += direction
+  goStep(next, direction > 0)
+}
+const isAutoArea = computed(() => !!store.planArea && !!store.planArea.isAuto)
+const autoAreaText = computed(() => (store.planAreas.length ? store.planAreas.map((area) => area.name).join('·') : store.planArea ? store.planArea.name : ''))
+// "담은 곳 기준 [바꾸기]" → 어디로 칸으로 (직접 고르면 그 뒤로는 안 건너뜀)
+function openWhere() {
+  goStep(STEPS.findIndex((item) => item.id === 'where'), true)
+}
+function goStep(next, isForward) {
   store.planStep = next
   // 11/13: 단계를 주소(?step=)에도 적어서 폰·브라우저 뒤로가기가 앞 단계로 가게. 앞으로 갈 때만 기록을 쌓고, 뒤로 갈 때는 바꾸기만
   const query = { ...route.query, step: String(next) }
-  if (direction > 0) router.push({ query })
+  if (isForward) router.push({ query })
   else router.replace({ query })
 }
 
@@ -366,9 +432,10 @@ watch(() => route.query.step, (value) => {
 
 // 다음 칸으로 (이미 고른 지역 칸은 건너뜀). 마지막 칸이면 바로 일정 만들기로
 // (11/06: 단계에서 다 물어봐서 "원하는 것 말하기" 대화 화면은 흐름에서 뺌. 화면 파일·주소는 남겨 둠)
-function goNext() {
+async function goNext() {
   if (!canNext.value) return showToast('어디로 가는지 알려 주세요')
   if (isLast.value) {
+    if (await needsDayFitAsk()) return
     if (hasOutsideFixed.value && !isOutsideWarned) {
       isOutsideWarned = true
       return showToast('여행 날짜·시간 밖 예약이 있어요 · 고치거나, 그대로 만들려면 한 번 더 눌러 주세요')
@@ -380,22 +447,65 @@ function goNext() {
   }
   moveStep(1)
 }
+// 11/20 피드백 "멀리 떨어진 곳이면 며칠 필요한지": 당일치기인데 담은 곳을 하루에 다 못 돌 것 같으면 만들기 전에 한 번 물어요
+//   시연 계정은 시나리오 일정이라 안 물어요. 계산은 서버 POST /api/plans/day-check (PostGIS로 1.5km 동네 묶기), 실패하면 안 묻고 진행
+const dayFit = ref(null) // 물어보는 중이면 서버 결과
+let isDayFitAnswered = false
+async function needsDayFitAsk() {
+  if (byMe || devMode.isOn || isDayFitAnswered || nights.value > 0) return false
+  const dayMin = toMinutes(store.planToTime) - toMinutes(store.planFromTime)
+  const fit = await checkDay(store.planConditions?.mustVisit || [], dayMin)
+  if (!fit || !fit.over) return false
+  dayFit.value = fit
+  return true
+}
+// "9.9시간" 대신 "9시간 50분" (10분 단위로 반올림, 11/20 주형)
+function roundedDuration(minutes) {
+  return toDuration(Math.round(minutes / 10) * 10)
+}
+function splitToTwoDays() {
+  store.planEndDate = addDays(store.planStartDate, 1)
+  isDayFitAnswered = true
+  dayFit.value = null
+  showToast('1박 2일로 바꿨어요 · 숙소는 알아서 골라 줄게요')
+}
+function keepOneDay() {
+  isDayFitAnswered = true
+  dayFit.value = null
+  goNext()
+}
+
 function goPrev() {
   if (store.planStep === 0) return goBack('/new')
   moveStep(-1)
 }
-// 인스타로 담으면: 담은 곳의 구를 지도에도 미리 골라 두고 "어디로" 단계로 (11/13: 예전엔 "어디로·동"을 건너뛰어서 지역을 확인할 수 없었어요)
-function onLinkAdded() {
-  const area = store.planArea
-  if (area && area.isAuto && !store.planAreas.length) {
-    store.planAreas = [{ name: area.name, lat: area.lat, lng: area.lng, dongs: [] }] // 지도(GuMapPicker)가 쓰는 모양
+// 인스타로 담으면: 담은 곳의 구를 지도에도 미리 골라 둠 (다음 "어디로"에서 확인)
+// 11/20 피드백 "여러 게시물에서 모아 한꺼번에": 담자마자 넘기지 않고 이 칸에 남아 링크를 더 넣거나 [다 담았어요]
+//   담은 곳이 여러 구면 그 구를 다 골라 둬요 (지역을 직접 고른 뒤면 그대로)
+function onLinkAdded(places) {
+  if (!isAutoArea.value) return
+  const merged = [...store.planAreas]
+  for (const area of areasFromPlaces(places || [])) {
+    if (!merged.some((item) => item.name === area.name)) merged.push(area)
   }
-  store.planStep = STEPS.findIndex((item) => item.id === 'where')
+  store.planAreas = merged
 }
+const wishCount = computed(() => (store.planConditions?.mustVisit || []).length)
 // 검색 화면으로 갈 때 표시해 두면, 고르고 돌아왔을 때 바로 다음 칸으로
 function markAutoNext() {
   store.planAutoNext = true
 }
+// 회고 [이 코스로 다시] (/plan/info?again=여행id, 11/20): 그 여행의 지역·인원·다녀온 가게를 채우고 날짜부터 (utils/planAgain.js)
+onMounted(async () => {
+  const againId = route.query.again
+  if (!againId) return
+  const isFilled = await fillPlanFromTrip(store, againId)
+  const query = { ...route.query }
+  delete query.again
+  query.step = String(store.planStep)
+  router.replace({ query })
+  if (isFilled) showToast('지난 여행 가게 ' + (store.planConditions.mustVisit || []).length + '곳을 담았어요 · 날짜만 골라 주세요')
+})
 // 공유로 들어온 링크(/share → ?link=)가 있으면 링크 칸에 채워 둠 (11/13). 찾기는 사용자가 글까지 넣고 눌러요 (11/14)
 onMounted(() => {
   if (typeof route.query.link === 'string' && wishLinks.value) wishLinks.value.fillShared(route.query.link)
@@ -426,12 +536,14 @@ onMounted(async () => {
   }
   const setup = scenario.value
   if (!store.planOrigin) store.planOrigin = { name: setup.originName, address: setup.originAddress, category: '출발지', lat: setup.originLat, lng: setup.originLng }
-  // 11/17 주형: 날짜가 진짜 오늘(11/17, 시연 시계를 맞추기 전에 잡힌 기본값)이면 시연 날짜(11/16)로 → 만든 여행이 'D-1'이 되어 [여행 시작]이 안 보이던 문제
+  // 11/19 주형: 날짜 고정 없음. 기본 날짜가 시연 시계 날짜(앞 여행을 시작하며 옮겨 둔 날)면 진짜 오늘로 → 달력·날씨·남은 날이 한 기준
+  //   어느 날짜로 만들든 [여행 시작]하면 시계가 그 여행 1일차로 옮겨져 바로 시작돼요 (devMode.prepareTripStart)
   const realToday = dateText(new Date())
-  if (setup.demoDate && store.planStartDate === realToday && setup.demoDate !== realToday) {
+  const clockToday = dateText(appNow())
+  if (store.planStartDate === clockToday && clockToday !== realToday) {
     const nights = store.planEndDate ? daysBetween(store.planStartDate, store.planEndDate) : 0
-    store.planStartDate = setup.demoDate
-    if (store.planEndDate) store.planEndDate = addDays(setup.demoDate, nights)
+    store.planStartDate = realToday
+    if (store.planEndDate) store.planEndDate = addDays(realToday, nights)
   }
   // 예약(산청숯불가든 회식·스시도)은 미리 넣지 않음. 발표자가 "예약한 곳" 단계에서 장소 검색으로 직접 넣어요 (11/09 상재 제보)
 })
@@ -483,11 +595,30 @@ function useRecommendedTime() {
         <div>
           <h1 class="h-title pa-title" style="margin: 0">{{ step.title }}</h1>
           <p v-if="step.id === 'when'" class="t-cap" style="margin: 4px 0 0">{{ whenLabel }}</p>
+          <p v-if="step.id === 'when' && isAutoArea" class="pa-auto-area"><i class="ic ic--s i-pin" aria-hidden="true"></i><span>담은 곳 기준: <b>{{ autoAreaText }}</b></span><button type="button" class="textlink" @click="openWhere">바꾸기</button></p>
           <p v-else-if="step.sub" class="t-cap" style="margin: 4px 0 0">{{ step.sub }}</p>
         </div>
 
-        <section v-if="step.id === 'link'" class="card card--pad pa-sec" aria-label="인스타 링크">
+        <section v-if="step.id === 'link'" class="card card--pad pa-sec" aria-label="SNS 링크·내 장소">
+          <b class="pa-sec__head">SNS 링크 · 내 장소</b>
           <WishLinks ref="wishLinks" @added="onLinkAdded" />
+          <p v-if="wishCount" class="t-cap" style="margin: 0">{{ wishCount }}곳 담았어요 · 더 넣을 수 있어요. 다 모았으면 [다 담았어요]</p>
+        </section>
+        <!-- 11/20: 예약한 곳(시간 고정)도 같은 칸에서. 캡처로 읽은 날짜가 여행 첫날이 돼요 (ReserveCaptureView) -->
+        <section v-if="step.id === 'link'" class="pa-cards" aria-label="예약한 곳">
+          <b class="pa-sec__head">예약한 곳 (시간이 정해진 곳)</b>
+          <div class="choice-grid">
+            <ChoiceCard to="/plan/search?mode=fixed" icon="i-search" title="장소 검색" desc="식당·공연 이름으로" />
+            <ChoiceCard to="/plan/capture" icon="i-camera" title="예약 캡처" desc="예약 문자·화면으로" />
+          </div>
+          <div v-for="(item, index) in fixedList" :key="item.name + item.day + item.time" class="stop is-fixed" style="grid-template-columns: 1fr">
+            <div class="stop__card">
+              <span class="day-tile"><b>{{ dayTileOf(item.day).title }}</b><span>{{ dayTileOf(item.day).date }}</span></span>
+              <span class="stop__body"><span class="stop__name">{{ item.name }}</span><span class="stop__meta"><b class="c-navy tn">{{ item.time }}</b> · 시간 고정</span><span v-if="fixedOutsideText(item)" class="row__meta c-warning">{{ fixedOutsideText(item) }}</span></span>
+              <button type="button" class="iconbtn" :aria-label="item.name + ' 빼기'" @click="removeFixed(index)"><i class="ic i-close muted" aria-hidden="true"></i></button>
+            </div>
+          </div>
+          <button v-if="!fixedList.length && oldFixed.length" type="button" class="btn btn--secondary btn--md" @click="loadOldFixed">지난 여행 예약 {{ oldFixed.length }}개 불러오기</button>
         </section>
 
         <section v-if="step.id === 'link'" class="pa-sns-sec" aria-label="어디서 봤어요?">
@@ -528,8 +659,6 @@ function useRecommendedTime() {
 
         <GuMapPicker v-if="step.id === 'where'" :model-value="store.planAreas" :tops="topGus" @update:model-value="setAreas" />
 
-        <DongPicker v-else-if="step.id === 'dong'" :areas="store.planAreas" />
-
         <section v-else-if="step.id === 'when'" class="card card--pad pa-sec" aria-label="날짜">
           <RangeCalendar v-model:start="store.planStartDate" v-model:end="store.planEndDate" />
           <!-- 숙소: 1박 이상이면 담아요. 안 담아도 넘어갈 수 있어요 -->
@@ -544,9 +673,21 @@ function useRecommendedTime() {
               </span>
               <i class="ic i-edit subtle" aria-hidden="true"></i>
             </RouterLink>
+            <!-- 11/20 피드백: 숙소는 기본 자동 추천. 안 고르면 서버가 근처 추천 1위로 넣고, 여기서 바로 고르거나 예약한 숙소만 따로 넣어요 -->
+            <template v-if="!store.planStays.length">
+              <p class="pa-stay-auto"><i class="ic ic--s i-check" aria-hidden="true"></i>숙소는 알아서 골라 줄게요 · 원하는 곳이 있으면 눌러요</p>
+              <div v-if="stayPicks.length" class="pa-stay-picks">
+                <button v-for="pick in stayPicks" :key="pick.placeId" type="button" class="pa-stay-pick" @click="addStayPick(pick)">
+                  <img v-if="pick.imageUrl" :src="pick.imageUrl" alt="" loading="lazy" />
+                  <span v-else class="pa-stay-pick__none" aria-hidden="true"><i class="ic i-home"></i></span>
+                  <b>{{ pick.name }}</b>
+                  <span class="t-cap tn">{{ pick.kind || '숙박' }} · {{ pick.distance >= 1000 ? (pick.distance / 1000).toFixed(1) + 'km' : pick.distance + 'm' }}</span>
+                </button>
+              </div>
+            </template>
             <RouterLink v-if="stayNights < nights" to="/plan/stay" class="stayrow">
               <span class="ico-tile"><i class="ic i-plus" aria-hidden="true"></i></span>
-              <span class="row__body"><span class="row__title">{{ store.planStays.length ? '숙소 더 담기' : '숙소 잡기' }}</span></span>
+              <span class="row__body"><span class="row__title">{{ store.planStays.length ? '숙소 더 담기' : '예약한 숙소 넣기' }}</span></span>
               <i class="ic i-next subtle" aria-hidden="true"></i>
             </RouterLink>
           </div>
@@ -555,11 +696,6 @@ function useRecommendedTime() {
             <TripWeather v-for="date in weatherDays" :key="date" :date="date" :stops="[weatherSpot]" />
           </div>
           <p v-else-if="isWeatherLater" class="t-cap" style="margin: 0">날씨·옷차림은 여행 3일 전부터 보여요</p>
-        </section>
-
-        <section v-else-if="step.id === 'time'" class="pa-cards" aria-label="시간">
-          <TimeRangePicker v-model:start="store.planFromTime" v-model:end="store.planToTime" :note="timeNote" />
-          <button type="button" class="chip" style="align-self: center" @click="useRecommendedTime"><i class="ic ic--s i-sparkle" aria-hidden="true"></i>시간 추천</button>
         </section>
 
         <OriginPicker v-else-if="step.id === 'from'" />
@@ -578,41 +714,50 @@ function useRecommendedTime() {
           </div>
         </section>
 
+        <!-- 11/20: 어디 위주 + 이런 곳을 한 화면에 (둘 다 안 골라도 돼요) -->
         <section v-else-if="step.id === 'kind'" class="pa-cards" aria-label="장소 종류">
           <div class="choice-grid">
-            <ChoiceCard v-for="chip in KIND_CARDS" :key="chip.code" :icon="chip.icon" :title="chip.label" :desc="chip.desc" :color="chip.color" :selected="store.planKinds.includes(chip.code)" @click="store.planKinds = toggleCode(store.planKinds, chip.code)" />
+            <ChoiceCard v-for="chip in KIND_CARDS" :key="chip.code" :icon="chip.icon" :title="chip.label" :desc="chip.desc" :color="chip.color" :selected="shownKinds.includes(chip.code)" @click="store.planKinds = toggleCode(shownKinds, chip.code)" />
           </div>
-          <p v-if="store.planKinds.length" class="t-cap tn" style="margin: 0; text-align: center">{{ store.planKinds.length }}개 골랐어요</p>
-        </section>
-
-        <section v-else-if="step.id === 'tag'" class="choice-grid" aria-label="분위기">
-          <ChoiceCard v-for="chip in TAG_CARDS" :key="chip.code" :icon="chip.icon" :title="chip.label" :desc="chip.desc" :selected="store.planTags.includes(chip.code)" @click="store.planTags = toggleCode(store.planTags, chip.code)" />
-        </section>
-
-        <section v-else-if="step.id === 'move'" class="choice-grid" aria-label="이동 수단">
-          <ChoiceCard v-for="m in moveList" :key="m.label" :icon="m.icon" :title="m.label" :desc="m.desc" :selected="store.planMoves.includes(m.label)" @click="store.planMoves = toggleCode(store.planMoves, m.label)" />
-        </section>
-
-        <section v-else-if="step.id === 'fixed'" class="pa-cards" aria-label="꼭 지킬 시간">
-          <div class="choice-grid">
-            <ChoiceCard to="/plan/search?mode=fixed" icon="i-search" title="장소 검색" desc="식당·공연 이름으로" />
-            <ChoiceCard to="/plan/capture" icon="i-camera" title="예약 캡처" desc="예약 문자·화면으로" />
+          <p class="t-cap tn" style="margin: 0; text-align: center">{{ store.planKinds.length ? store.planKinds.length + '개 골랐어요' : '기본값으로 골라 뒀어요 · 바꾸려면 눌러요' }}</p>
+          <h2 class="t-sub" style="margin: 8px 0 0">이런 곳이면 더 좋아요</h2>
+          <div class="choice-grid" aria-label="분위기">
+            <ChoiceCard v-for="chip in TAG_CARDS" :key="chip.code" :icon="chip.icon" :title="chip.label" :desc="chip.desc" :selected="store.planTags.includes(chip.code)" @click="store.planTags = toggleCode(store.planTags, chip.code)" />
           </div>
-          <div v-for="(item, index) in fixedList" :key="item.name + item.day + item.time" class="stop is-fixed" style="grid-template-columns: 1fr">
-            <div class="stop__card">
-              <span class="day-tile"><b>{{ dayTileOf(item.day).title }}</b><span>{{ dayTileOf(item.day).date }}</span></span>
-              <span class="stop__body"><span class="stop__name">{{ item.name }}</span><span class="stop__meta"><b class="c-navy tn">{{ item.time }}</b> · 시간 고정</span><span v-if="fixedOutsideText(item)" class="row__meta c-warning">{{ fixedOutsideText(item) }}</span></span>
-              <button type="button" class="iconbtn" :aria-label="item.name + ' 빼기'" @click="removeFixed(index)"><i class="ic i-close muted" aria-hidden="true"></i></button>
+        </section>
+
+        <!-- 11/20: 마지막 칸(어디 위주) 아래에 하루 점검 카드 + 이렇게 짜요(이동 수단) -->
+        <section v-if="isLast" class="pa-cards" aria-label="이렇게 짜요">
+          <div v-if="dayFit" class="card card--pad pa-dayfit" role="alert">
+            <b class="pa-dayfit__title"><i class="ic ic--s i-warning" aria-hidden="true"></i>하루에 다 못 가요 · 2일로 나눌까요?</b>
+            <span class="pa-dayfit__key tn">약 <b>{{ roundedDuration(dayFit.needMin) }}</b> 필요 · 하루 {{ roundedDuration(dayFit.dayMin) }}</span>
+            <span class="t-cap tn">담은 {{ store.planConditions.mustVisit.length }}곳이 {{ dayFit.groups }}개 동네에 있어요 (머무는 시간 {{ dayFit.stayMin }}분 + 걷기 {{ dayFit.walkMin }}분 + 동네 옮기기 {{ dayFit.moveMin }}분)</span>
+            <div class="cta__row">
+              <button type="button" class="btn btn--secondary btn--md" @click="keepOneDay">그대로 하루로</button>
+              <button type="button" class="btn btn--primary btn--md" @click="splitToTwoDays">2일로 나누기</button>
             </div>
           </div>
-          <button v-if="!fixedList.length" type="button" class="textlink" style="align-self: center" @click="goNext">예약 없어요</button>
+          <!-- 11/20: 따로 묻지 않은 시간·이동 수단을 여기서 확인하고 바꿔요 -->
+          <!-- 11/20 주형: 글씨가 작고 눈에 안 띈다 → 제목 + 칸마다 아이콘 타일·큰 값·작은 설명·[바꾸기] 버튼 -->
+          <div class="card card--pad pa-sum">
+            <b class="pa-sum__head">이렇게 짜요</b>
+            <!-- 11/20 주형: 하루 시간은 여기서 빼고 마이 > 여행 스타일에서만 바꿔요 (오늘 여행이면 지금부터 자동, setDefaultTimes) -->
+            <div class="pa-sum__row">
+              <span class="pa-sum__ic" aria-hidden="true"><i class="ic i-subway"></i></span>
+              <span class="pa-sum__body"><span class="pa-sum__label">이동 수단</span><b class="pa-sum__val">{{ shownMoves.join(' · ') }}</b><span class="pa-sum__note">{{ store.planMoves.length ? '직접 골랐어요' : '기본값으로 골라 뒀어요' }}</span></span>
+              <button type="button" class="btn btn--secondary btn--sm" :aria-expanded="openSum === 'move'" @click="openSum = openSum === 'move' ? '' : 'move'">{{ openSum === 'move' ? '닫기' : '바꾸기' }}</button>
+            </div>
+            <div v-if="openSum === 'move'" class="choice-grid" aria-label="이동 수단">
+              <ChoiceCard v-for="m in moveList" :key="m.label" :icon="m.icon" :title="m.label" :desc="m.desc" :selected="shownMoves.includes(m.label)" @click="store.planMoves = toggleCode(shownMoves, m.label)" />
+            </div>
+          </div>
         </section>
       </div>
 
       <div class="cta">
         <div class="cta__row">
           <button v-if="store.planStep > 0" type="button" class="btn btn--secondary btn--lg" @click="goPrev">이전</button>
-          <button type="button" class="btn btn--primary btn--lg" :class="{ 'is-wait': !canNext }" @click="goNext">{{ isLast ? '일정 만들기' : '다음' }}</button>
+          <button type="button" class="btn btn--primary btn--lg" :class="{ 'is-wait': !canNext }" @click="goNext">{{ nextLabel }}</button>
         </div>
       </div>
     </div>
@@ -685,4 +830,34 @@ function useRecommendedTime() {
 .scr-PlanAI .btn.is-wait{opacity:.5}
 .scr-PlanAI .pa-when-wx{display:flex;flex-direction:column;gap:8px;padding-top:4px}
 .scr-PlanAI .stays{display:flex;flex-direction:column;gap:8px;padding-top:4px}
+.scr-PlanAI .pa-sum{display:flex;flex-direction:column;gap:10px}
+.scr-PlanAI .pa-sec__head{font-size:15px;line-height:22px;font-weight:700;color:var(--ink)}
+.scr-PlanAI .pa-dayfit{display:flex;flex-direction:column;gap:6px;border:1.5px solid var(--warning)}
+.scr-PlanAI .pa-dayfit__title{display:flex;align-items:center;gap:6px;color:var(--warning);font-size:16px}
+.scr-PlanAI .pa-dayfit__key{font-size:15px;color:var(--ink)}
+.scr-PlanAI .pa-dayfit__key b{font-size:18px;color:var(--warning)}
+.scr-PlanAI .pa-stay-auto{display:flex;align-items:center;gap:6px;margin:0;color:var(--navy);font-size:14px;font-weight:600}
+.scr-PlanAI .pa-stay-picks{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px}
+.scr-PlanAI .pa-stay-pick{flex:none;width:128px;display:flex;flex-direction:column;gap:2px;padding:0;border:0;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.scr-PlanAI .pa-stay-pick img,.scr-PlanAI .pa-stay-pick__none{width:128px;height:80px;border-radius:var(--radius-md);object-fit:cover;background:var(--surface-sunken)}
+.scr-PlanAI .pa-stay-pick__none{display:flex;align-items:center;justify-content:center;color:var(--ink-muted)}
+.scr-PlanAI .pa-stay-pick b{font-size:14px;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.scr-PlanAI .pa-auto-area{display:flex;align-items:center;gap:6px;margin:8px 0 0;padding:8px 12px;border-radius:var(--radius-md);background:var(--navy-soft);color:var(--navy);font-size:14px}
+.scr-PlanAI .pa-auto-area .textlink{margin-left:auto}
+/* 11/20 주형 "글씨가 작고 눈에 안 띈다": 이 화면 안에서만 크기·진하기를 올려요 (전역 CSS·공용 컴포넌트 파일은 그대로) */
+.scr-PlanAI .pa-title{font-size:24px;line-height:32px;font-weight:700} /* 폰트(IBM Plex Sans KR)는 700까지만 있어서 800은 가짜 굵게로 깨져 보였어요 */
+.scr-PlanAI .pa-step .t-cap{font-size:14px;line-height:20px;color:var(--ink-muted)}
+.scr-PlanAI .pa-step .t-strong{font-size:16px}
+.scr-PlanAI .choice__title{font-size:16px;line-height:22px}
+.scr-PlanAI .choice__desc{font-size:13px;line-height:18px;color:var(--ink-muted)}
+.scr-PlanAI .time-pick .chip{min-height:44px;font-size:15px}
+.scr-PlanAI .pa-sum .btn--sm{min-height:44px;padding:0 14px;font-size:14px;font-weight:700}
+.scr-PlanAI .pa-sum__head{font-size:16px;line-height:22px;font-weight:700;color:var(--ink)}
+.scr-PlanAI .pa-sum__row{display:flex;align-items:center;gap:12px;padding-top:10px;border-top:1px solid var(--line)}
+.scr-PlanAI .pa-sum__ic{flex:none;width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:var(--navy-soft);color:var(--navy)}
+.scr-PlanAI .pa-sum__body{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.scr-PlanAI .pa-sum__label{font-size:13px;line-height:18px;color:var(--ink-muted)}
+.scr-PlanAI .pa-sum__val{font-size:17px;line-height:24px;font-weight:700;color:var(--ink)}
+.scr-PlanAI .pa-sum__note{font-size:13px;line-height:18px;font-weight:500;color:var(--navy)}
+.scr-PlanAI .pa-sum .btn--sm{flex:none}
 </style>

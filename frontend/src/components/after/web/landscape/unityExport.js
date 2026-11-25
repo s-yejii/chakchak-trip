@@ -109,7 +109,8 @@ export async function buildMapData({ center, halfM, tileUrl, dateText, forest, g
   }
   const toMeters = (position) => [Math.round((position[0] - center[0]) * lngScale * 100) / 100, Math.round((position[1] - center[1]) * METERS_PER_DEGREE_LAT * 100) / 100]
   const route = makeRoute(track, isInBox, toMeters, (x, z) => isWaterAt(water, halfM, gridStepM, x, z))
-  markTransitRuns(route, await loadTransitStops(tileUrl, box, toMeters)) // 탈것 구간을 지하철·버스·택시로 나눔
+  const transit = await loadTransitStops(tileUrl, box, toMeters) // 지하철역·버스 정류장 자리 (지도 poi)
+  markTransitRuns(route, transit) // 탈것 구간을 지하철·버스·택시로 나눔
   const allRoads = await loadRoads(tileUrl, box, isInBox, toMeters) // 지도 안의 길 전부 (아래에서 경로 둘레만 남김)
   snapRidesToRoads(route, allRoads) // 버스·택시 구간을 찻길 따라가게 (GPS가 20초 간격이라 직선으로 이으면 건물·숲을 뚫고 감)
   markBridgeStyles(allRoads, toMeters) // 한강 다리마다 모양 번호를 붙임
@@ -162,9 +163,14 @@ export async function buildMapData({ center, halfM, tileUrl, dateText, forest, g
     const at = toMeters([landmark.lng, landmark.lat])
     landmarks.push({ x: at[0], z: at[1], kind: landmark.kind })
   }
+  // 버스 정류장 (11/19): 걸은 길 둘레 것만 유니티에 넘김 → 유니티가 가까운 찻길에 노란 정차 구역·승차대를 그림
+  const busStops = []
+  for (const at of transit.bus) {
+    if (!keep || keep.isNear(at[0], at[1])) busStops.push({ x: at[0], z: at[1] })
+  }
   const sun = makeSunTable(center, dateText, startClock, dayCount)
   delete route.hints // 유니티에는 modes만 보냄
-  return { sizeM: halfM * 2, gridCount: gridCount, heights: smooth, buildings: buildings, roads: roads, areas: areas, trees: trees, route: route, stops: pins, landmarks: landmarks, water: water, sun: sun, startClock: startClock, centerLng : center[0], centerLat : center[1] }
+  return { sizeM: halfM * 2, gridCount: gridCount, heights: smooth, buildings: buildings, roads: roads, areas: areas, trees: trees, route: route, stops: pins, landmarks: landmarks, busStops: busStops, water: water, sun: sun, startClock: startClock, centerLng : center[0], centerLat : center[1] }
 }
 
 // 여행 시각마다 해 위치 (유니티가 하늘 색·햇빛 방향·밤 불빛을 정함). 날짜·시각·위경도로 천문 공식 계산(utils/sun.js)

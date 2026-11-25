@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice">
+  <!-- 사진 없는 문화시설·공연 칸 기본 그림 (11/19 ①): 액자 -->
+  <rect width="400" height="300" fill="#E8EEF7"/>
+  <g fill="none" stroke="#1F3A68" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="125" y="85" width="150" height="125" rx="10"/>
+    <path d="M145 185l35-40 25 25 20-20 30 35"/>
+    <circle cx="235" cy="120" r="10"/>
+  </g>
+</svg>

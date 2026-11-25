@@ -26,7 +26,7 @@ import com.tripbiseo.trip.dto.Stop;
 @Component
 public class DemoScenario {
 
-    private static final String TITLE = "아카데미 동기 서울 1박 2일";
+    private static final String TITLE = "새 여행"; // 지역을 모를 때만 (지역이 있으면 PlanServiceImpl.setShortTitle이 "중구 1박 2일"처럼 바꿈, 11/19)
     private static final int DEFAULT_PEOPLE = 5;
     private static final int NIGHTS = 1;
 
@@ -37,7 +37,7 @@ public class DemoScenario {
     private static final double ORIGIN_LNG = 126.9921;
     // 조금씩 어기기 (11/08 주형): 발표자가 [다음 장소로]만 눌러도 이 곳들에서는 계획보다 조금 더 머물다 떠남 → 뒤 일정 밀림·자동 조정 안내
     private static final Object[][] EXTRA_STAYS = {}; // 11/12 새 시나리오는 돌발이 늦잠(2일차 숙소)이라 조금씩 어기기는 안 씀
-    private static final String DEMO_DATE = "2026-11-16"; // 시연 계정의 "오늘" = 촬영 1일차(월). 로그인·[시연 준비]하면 시계를 이 날 START_TIME으로 (11/13 주형: 앱 날짜 = 촬영일 11/16~17)
+    // 11/19 주형: 시연 날짜 고정(11/16)은 없앰. 시연 계정도 진짜 오늘이 기본이고, 어느 날짜로 만들든 [여행 시작]하면 시계를 그 여행 1일차로 옮김
     private static final String DINNER_NAME = "산청숯불가든 을지로";
     private static final String DINNER_TIME = "19:00"; // 1일차 회식 예약
     private static final String LUNCH_NAME = "스시도";
@@ -64,6 +64,11 @@ public class DemoScenario {
     private static final String WALK_UP_TO = "남산 팔각정";
     private static final double BUS_DOWN_LAT = 37.5605217984; // 버스에서 내리는 곳: 남산 아래 퇴계로(예전 예장공원 자리)
     private static final double BUS_DOWN_LNG = 126.9888869118;
+    // 11/19 주형: 어디서 타서 어디서 내리는지 화면에 보이게. 11/20: 서울시 안내 이름으로 (남산순환버스 01A·01B는 남산서울타워를 지나고 남산예장버스환승주차장이 기점·종점)
+    private static final String BUS_DOWN_BOARD = "남산서울타워 정류장";
+    private static final double BUS_BOARD_LAT = 37.5510545366; // 타는 곳: DB 남산서울타워(tour-126535) 좌표 (정류장이 타워 앞이라 그대로, 11/20 지도 핀)
+    private static final double BUS_BOARD_LNG = 126.9878820833;
+    private static final String BUS_DOWN_ALIGHT = "남산예장버스환승주차장"; // 내리는 좌표(BUS_DOWN_LAT·LNG) = DB 남산예장공원 자리 (환승주차장이 공원 아래)
     private static final int BUS_DOWN_MIN = 13;         // 순환버스로 내려오는 분
     private static final int OVERSTAY_LATE_MIN = 35;    // 11/16 대본: 늦잠 → 12:00 출발 → 스시도 13:05 도착 = 35분 늦음 (돌발은 이것 하나뿐)
     private static final String START_TIME = "11:30"; // 시연 계정은 1일차 이 시각부터 (종로3가역 모임, 11/12)
@@ -134,6 +139,11 @@ public class DemoScenario {
     }
 
     /** AI 일정 화면에 미리 채워 둘 출발지·예약(회식·스시도)·숙소 */
+    /** 시나리오 숙소의 장소 번호 (숙소 추가 화면 추천 맨 위, 11/20) */
+    public String getStayPlaceId() {
+        return STAY_PLACE_ID;
+    }
+
     public ScenarioSetup getSetup() {
         ScenarioSetup setup = new ScenarioSetup();
         setup.setOriginName(ORIGIN_NAME);
@@ -162,7 +172,7 @@ public class DemoScenario {
         setup.setStayCheckInTime(STAY_CHECK_IN);
         setup.setStayCheckOutTime(STAY_CHECK_OUT);
         setup.setStartTime(START_TIME);
-        setup.setDemoDate(DEMO_DATE);
+        setup.setDemoDate(null); // 날짜 고정 없음 (화면은 null이면 진짜 오늘)
         for (Object[] row : EXTRA_STAYS) {
             Stop extra = new Stop();
             extra.setDay((Integer) row[0]);
@@ -177,7 +187,11 @@ public class DemoScenario {
         setup.setBusDownFrom(BUS_DOWN_FROM);
         setup.setBusDownLat(BUS_DOWN_LAT);
         setup.setBusDownLng(BUS_DOWN_LNG);
+        setup.setBusBoardLat(BUS_BOARD_LAT);
+        setup.setBusBoardLng(BUS_BOARD_LNG);
         setup.setBusDownMin(BUS_DOWN_MIN);
+        setup.setBusDownBoard(BUS_DOWN_BOARD);
+        setup.setBusDownAlight(BUS_DOWN_ALIGHT);
         setup.setRainDay(IS_RAIN_NOTICE_ON ? RAIN_DAY : null);
         setup.setRainFrom(RAIN_FROM);
         for (Object[] row : RAIN_DAY_STOPS) {
@@ -188,10 +202,11 @@ public class DemoScenario {
 
     /**
      * 시연 계정 날씨 카드: 진짜 오늘 = 1일차 맑음, 내일 = 2일차 13:00부터 비 (기온은 진짜 예보 그대로).
-     * 예보가 없는 날(3일 뒤보다 먼 날)은 그대로 둠
+     * 11/20: 3일보다 먼 날도 Open-Meteo·작년 관측으로 숫자가 와서 같은 규칙을 그대로 써요 (날씨를 못 받은 날만 그대로)
      */
     public void applyWeather(List<DayWeather> list) {
-        LocalDate today = Geo.now().toLocalDate();
+        // 11/19: 시연 시계 날짜가 아니라 여행 1일차 기준 (어느 날짜로 만든 여행이든 1일차 맑음 · 2일차 비 안내)
+        LocalDate today = list.isEmpty() ? Geo.now().toLocalDate() : LocalDate.parse(list.get(0).getDate());
         for (DayWeather day : list) {
             if (!day.isAvailable()) {
                 continue;
@@ -201,6 +216,7 @@ public class DemoScenario {
                 day.setSky(CLEAR_SKY);
                 day.setMaxPop(CLEAR_POP);
                 day.setRainFrom(null);
+                day.setOutfitNote(withoutUmbrella(day.getOutfitNote())); // 맑음인데 "우산 챙기기"가 남지 않게
             } else if (IS_RAIN_NOTICE_ON && date.equals(today.plusDays(RAIN_DAY - 1))) {
                 day.setSky(RAIN_SKY);
                 day.setMaxPop(RAIN_POP);
@@ -208,6 +224,14 @@ public class DemoScenario {
                 day.setOutfitNote(UMBRELLA_NOTE);
             }
         }
+    }
+
+    private String withoutUmbrella(String note) {
+        if (note == null) {
+            return null;
+        }
+        String rest = note.replace(" · 우산 챙기기", "").replace("우산 챙기기", "");
+        return rest.isBlank() ? null : rest;
     }
 
     private Stop toStop(Object[] row) {

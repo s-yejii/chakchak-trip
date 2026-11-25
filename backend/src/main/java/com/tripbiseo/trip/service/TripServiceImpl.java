@@ -241,9 +241,9 @@ public class TripServiceImpl implements TripService {
 
     /**
      * 일정 칸 전부를 한 번에 저장 (11/04, 편집 화면 "완료")
-     * 1) 보낸 칸이 모두 이 여행 칸인지 확인 2) 목록에 없는 칸은 지움 (skipped 칸은 여행 중 기록이라 남김)
-     * 3) 보낸 칸마다 updateStop으로 고침 (날짜·시각 검사도 같이 됨)
-     * 쓰기를 여러 번 하니까 @Transactional: 중간에 하나라도 실패하면 지운 것까지 전부 되돌려요
+     * 1) id 있는 칸이 모두 이 여행 칸인지 확인 2) 목록에 없는 칸은 지움 (skipped 칸은 여행 중 기록이라 남김)
+     * 3) id 있는 칸은 updateStop으로 고치고, id 없는 칸은 새로 넣어요 (createStop과 같은 검사, 11/19 편집 화면 [장소 추가])
+     * 쓰기를 여러 번 하니까 @Transactional: 중간에 하나라도 실패하면 지운 것·넣은 것까지 전부 되돌려요
      */
     @Override
     @Transactional
@@ -254,8 +254,15 @@ public class TripServiceImpl implements TripService {
         }
         List<Long> keepIds = collectStopIds(trip, stops);
         deleteMissingStops(trip, keepIds);
+        int days = countDays(trip);
         for (Stop stop : stops) {
-            updateStop(memberId, tripId, stop.getId(), stop);
+            if (stop.getId() == null) {
+                checkStop(stop, days);
+                stop.setTripId(tripId);
+                tripMapper.insertStop(stop);
+            } else {
+                updateStop(memberId, tripId, stop.getId(), stop);
+            }
         }
         return getTrip(memberId, tripId);
     }
@@ -401,7 +408,7 @@ public class TripServiceImpl implements TripService {
         }
     }
 
-    /** 보낸 칸 번호 목록 (번호가 없거나 이 여행 칸이 아니면 400) */
+    /** 보낸 칸 번호 목록 (번호가 없는 칸은 새 칸이라 건너뜀, 번호가 이 여행 칸이 아니면 400) */
     private List<Long> collectStopIds(Trip trip, List<Stop> stops) {
         List<Long> tripStopIds = new ArrayList<>();
         for (Stop stop : trip.getStops()) {
@@ -409,7 +416,10 @@ public class TripServiceImpl implements TripService {
         }
         List<Long> keepIds = new ArrayList<>();
         for (Stop stop : stops) {
-            if (stop.getId() == null || !tripStopIds.contains(stop.getId())) {
+            if (stop.getId() == null) {
+                continue;
+            }
+            if (!tripStopIds.contains(stop.getId())) {
                 throw fail(400, "이 여행의 일정만 보낼 수 있어요.");
             }
             keepIds.add(stop.getId());

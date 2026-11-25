@@ -2,7 +2,7 @@
 // S04-a 홈 (②): 내 여행 중 하나(여행 중 → 오늘 → 가장 가까운 다가오는 여행)를 크게 보여 주고, 요즘 인기 장소
 //   여행 중      : 지금 내 위치(GPS) 1.5km 안 인기 장소 (위치를 못 받으면 다음 일정 장소 기준)
 //   여행 전(등록) : 그 여행 일정 장소들의 가운데 2km 안 인기 장소 ("이번 여행지 근처에서 많이 가요")
-//   여행 없음    : 서울 시범 지역 전체 인기 장소 (신규 회원 포함)
+//   여행 없음    : 서울 시범 지역 전체 인기 장소 (신규 회원·끝난 여행만 있는 회원 포함, 11/19)
 //   어느 경우든 내 일정에 이미 있는 곳은 빼요. 홈을 열 때마다 새로 계산해요.
 // 서버: GET /api/trips, GET /api/trips/{id}, GET /api/places/popular
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
@@ -25,7 +25,9 @@ import { showTrashToast } from '@/utils/trash'
 import StopThumb from '@/components/trip/StopThumb.vue'
 import { MOVE_CODES } from '@/utils/styleCodes'
 import { showToast } from '@/utils/toast'
-import { appNow } from '@/utils/devMode'
+import { appNow, devMode } from '@/utils/devMode'
+import { useStartTrip } from '@/utils/useStartTrip'
+import { planStepIndex } from '@/utils/planSteps'
 import { daysLeft, isTodayTrip, pickHomeTrip, toShortDate, toTransportText, tripBadge, tripDetailLink } from '@/utils/tripView'
 import { withoutPractice } from '@/utils/practice'
 
@@ -33,21 +35,19 @@ const LIVE_RADIUS_M = 1500 // 여행 중: 지금 위치에서 걸어서·한두 
 const TRIP_AREA_RADIUS_M = 2000 // 여행 전: 여행지(일정 장소 가운데) 둘레
 const TRIP_POPULAR_COUNT = 4 // 여행 카드가 있을 때는 조금만
 const POPULAR_COUNT = 6
-const AFTER_DAYS = 30 // 여행 후: 끝난 지 30일 안의 여행이면 그 지역 인기 장소 (다음에 다시 갈 때)
 const SLIDE_GAP_PX = 0 // 넘겨 보는 칸 사이 (한 칸이 카드 폭 전체)
 const DAY_MIN = 24 * 60
 const HALF_DAY_MIN = 12 * 60
 const FIXED_NAME_MAX = 6 // 태그에 넣을 고정 일정 이름 길이
 const MAX_STOP_THUMBS = 6 // 카드에 보여 줄 일정 사진 수 (한 줄)
-const WHERE_STEP = 1 // 여행 정보 단계 번호: 어디로
-const WHEN_STEP = 3 // 여행 정보 단계 번호: 언제
+const WHERE_STEP = planStepIndex('where') // 여행 정보 단계 번호: 어디로 (11/20 ③: 단계가 줄어 번호 대신 이름으로)
+const WHEN_STEP = planStepIndex('when') // 여행 정보 단계 번호: 언제
 const MODE_ICON = { walk: 'i-walk', transit: 'i-subway', car: 'i-car' } // 서버 이동 수단 → 아이콘
 
 const isLoading = ref(true)
 const error = ref('')
 const trip = ref(null) // 홈에 보여 줄 여행 (일정 칸 포함). 없으면 null
-const popular = ref(null) // { title, caption, places } 없으면 null
-let lastDoneTrip = null // 여행 후: 홈에 보여 줄 여행이 없을 때 가장 최근에 끝난 여행 (목록 칸)
+const popular = ref(null) // { title, places } 없으면 null
 const liveStatus = ref(null) // 여행 중 지금 상황 (POST /live/status). 못 받으면 null
 const router = useRouter()
 const store = useTripStore()
@@ -65,7 +65,6 @@ async function load() {
     const trips = withoutPractice(await getTripList()) // 시연 연습 복사본은 숨김 (진행 중이면 보임)
     const picked = pickHomeTrip(trips)
     trip.value = picked ? await getTrip(picked.id) : null
-    lastDoneTrip = picked ? null : pickLastDoneTrip(trips)
   } catch (e) {
     if (e.status === 401) return router.replace('/onboarding') // 로그인 전이면 온보딩(S01)부터 (11/09)
     error.value = e.message
@@ -75,7 +74,7 @@ async function load() {
   getArchivedTrips().then((list) => { archivedCount.value = list.length }).catch(() => {}) // 못 읽어도 홈은 그대로
   if (trip.value && trip.value.status === 'ongoing') loadLivePopular()
   else if (trip.value) loadTripPopular()
-  else loadAfterPopular()
+  else loadSeoulPopular() // 11/19 ①: 다가오는·진행 중인 여행이 없으면 끝난 여행이 있어도 서울 전체
 }
 
 // 오늘(여행 중이면 오늘 날짜의 날) 일정 칸. 여행 전이면 첫째 날
@@ -272,22 +271,26 @@ async function loadLiveNext(position) {
   }
 }
 
+// 시연 계정 홈 [여행 시작]: 진행 중인 다른 여행이 있으면(드묾) 여행 상세로 보내 거기서 정리하게 (11/20)
+const { conflict: startConflict, start: startNow } = useStartTrip()
+watch(startConflict, (other) => {
+  if (other && trip.value) router.push('/trips/today?id=' + trip.value.id)
+})
+
 // 다시 짜기: 지금 여행 내용(지역·날짜·인원·이동 수단·꼭 갈 곳·고정 일정)을 채워 여행 정보로.
 //   지금 여행은 그대로 두고, 새 일정을 저장한 뒤에 바꿀지 물어봐요 (일정 점검 화면)
 function replan() {
   isMenuOpen.value = false
   const old = trip.value
   store.resetPlan()
-  store.replanFrom = { id: old.id, title: old.title }
-  store.planStartDate = old.startDate
-  store.planEndDate = old.endDate !== old.startDate ? old.endDate : null
+  // 11/19 피드백: 취향(지역·인원·이동 수단·꼭 갈 곳)만 가져오고 날짜·예약은 안 가져옴 (지난 날짜·예약이 그대로 들어갔어요). 지난 예약은 "예약한 곳" 단계에서 불러오기로
+  store.replanFrom = { id: old.id, title: old.title, fixed: old.stops.filter((stop) => stop.fixed && stop.state !== 'skipped').map((stop) => ({ name: stop.name, time: stop.time, day: stop.day })) }
   store.planPeople = old.people || store.planPeople
   store.planMoves = Object.keys(MOVE_CODES).filter((label) => (old.transports || []).includes(MOVE_CODES[label]))
   store.planArea = areaFromPlaces(old.stops)
   const kept = old.stops.filter((stop) => stop.state !== 'skipped' && stop.state !== 'done')
   store.planConditions = {
     mustVisit: kept.filter((stop) => stop.importance === 'must' && !stop.fixed).map((stop) => stop.name),
-    fixed: kept.filter((stop) => stop.fixed).map((stop) => ({ name: stop.name, time: stop.time, day: stop.day })),
   }
   store.planStep = store.planArea ? WHEN_STEP : WHERE_STEP
   router.push('/plan/info')
@@ -316,14 +319,13 @@ async function removeTrip() {
 }
 
 // 기준점 근처 인기 장소 → 내 일정에 있는 곳은 빼고 count개 (결과가 없으면 서울 전체로)
-//   stops: 뺄 일정 칸 / caption: 제목 아래 작은 글 (없으면 '')
-async function showPopular(base, radius, count, title, stops = trip.value.stops, caption = '') {
+async function showPopular(base, radius, count, title) {
   try {
-    const inTrip = new Set(stops.map((stop) => stop.placeId))
+    const inTrip = new Set(trip.value.stops.map((stop) => stop.placeId))
     const res = await getPopularPlaces(base.lat, base.lng, count + inTrip.size, radius)
     const places = res.places.filter((item) => !inTrip.has(item.place.id)).slice(0, count)
     if (!places.length) return loadSeoulPopular()
-    popular.value = { title, caption, places }
+    popular.value = { title, places }
   } catch {
     popular.value = null // 추천은 없어도 홈은 보여 줌
   }
@@ -348,29 +350,6 @@ async function loadTripPopular() {
   return showPopular(center, TRIP_AREA_RADIUS_M, TRIP_POPULAR_COUNT, areaNameOf(trip.value) + ' 주변 인기 장소')
 }
 
-// 여행 후: 최근에 끝난 여행 지역 기준. 다음에 다시 갈 때 가볼 만한 곳 (없으면 서울 전체)
-async function loadAfterPopular() {
-  if (!lastDoneTrip) return loadSeoulPopular()
-  try {
-    const done = await getTrip(lastDoneTrip.id)
-    const center = centerOf(done.stops)
-    if (!center) return loadSeoulPopular()
-    return showPopular(center, TRIP_AREA_RADIUS_M, TRIP_POPULAR_COUNT, areaNameOf(done) + ' 주변 인기 장소', done.stops, '다음에 다시 가면 들러 볼 만한 곳')
-  } catch {
-    return loadSeoulPopular()
-  }
-}
-
-// 끝난 지 AFTER_DAYS일 안의 여행 중 가장 최근에 끝난 것 (없으면 null)
-function pickLastDoneTrip(trips) {
-  let last = null
-  for (const item of trips) {
-    if (item.status !== 'done' || daysLeft(item.endDate) < -AFTER_DAYS) continue
-    if (!last || item.endDate > last.endDate) last = item
-  }
-  return last
-}
-
 // 일정 장소들의 가운데 (좌표 있는 칸이 없으면 null)
 function centerOf(stops) {
   const placed = stops.filter((stop) => stop.lat != null && stop.state !== 'skipped')
@@ -384,19 +363,19 @@ function centerOf(stops) {
   return { lat: lat / placed.length, lng: lng / placed.length }
 }
 
-// 지역 이름: 여행 제목 첫 낱말이 동네 이름이면 그것 ("익선동 하루" → 익선동), 아니면 일정 장소들의 구 이름
+// 지역 이름: 여행 제목 첫 낱말이 동네 이름이면 그것 ("익선동 하루" → 익선동), 아니면 일정 장소들의 구 이름, 둘 다 없으면 '이번 여행'
 function areaNameOf(target) {
   const first = (target.title || '').trim().split(/\s+/)[0]
   if (/(동|로|길|가|역|산|촌|마을|구)$/.test(first)) return first
   const area = areaFromPlaces(target.stops)
-  return area ? area.name : '여행지'
+  return area ? area.name : '이번 여행' // 11/19: 지역을 못 찾으면 "이번 여행 주변 인기 장소"
 }
 
 // 여행 없음(신규 회원 포함): 서울 시범 지역 전체 (근처에 기록이 없을 때도 여기로)
 async function loadSeoulPopular() {
   try {
     const res = await getPopularPlaces(null, null, POPULAR_COUNT)
-    popular.value = res.places.length ? { title: '서울 인기', caption: '', places: res.places } : null
+    popular.value = res.places.length ? { title: '서울 인기 장소', places: res.places } : null
   } catch {
     popular.value = null
   }
@@ -458,6 +437,11 @@ async function loadSeoulPopular() {
           </div>
           <div class="home-actions">
             <RouterLink v-if="isOngoing" :to="mainAction.to" class="btn btn--primary btn--lg" style="flex: 1">{{ mainAction.text }}</RouterLink>
+            <!-- 11/20 주형: 시연 계정은 내일이든 1년 뒤든 홈에서 바로 [여행 시작] (시계를 그 여행 1일차로 옮김, useStartTrip) -->
+            <template v-else-if="devMode.isOn && trip.status === 'planned'">
+              <RouterLink :to="tripDetailLink(trip)" class="btn btn--secondary btn--lg" style="padding: 0 16px">일정 보기</RouterLink>
+              <button type="button" class="btn btn--primary btn--lg" style="flex: 1" @click="startNow(trip.id)">여행 시작</button>
+            </template>
             <RouterLink v-else :to="tripDetailLink(trip)" class="btn btn--primary btn--lg btn--block">일정 보기</RouterLink>
             <RouterLink v-if="isOngoing && nextStop" to="/live/route" class="btn btn--secondary btn--lg" style="padding: 0 16px"><i class="ic ic--s i-route" aria-hidden="true"></i>길 안내</RouterLink>
           </div>
@@ -467,7 +451,7 @@ async function loadSeoulPopular() {
         <ThemeCircles v-if="!isLoading && !error" />
 
         <!-- 요즘 인기 장소 (다른 사람들의 최근 한 달 여행 기록) -->
-        <PopularPlaces v-if="popular" :title="popular.title" :caption="popular.caption" :places="popular.places" />
+        <PopularPlaces v-if="popular" :title="popular.title" :places="popular.places" />
 
         <RouterLink v-if="archivedCount" to="/trips/archive" class="textlink tn" style="align-self: center">보관함 {{ archivedCount }}</RouterLink>
       </div>

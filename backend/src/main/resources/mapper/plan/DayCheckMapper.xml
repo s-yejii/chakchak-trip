@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- ③ 하루 판단 (11/20): ST_ClusterDBSCAN으로 담은 장소를 eps(미터) 안으로 이어진 곳끼리 한 묶음.
+     geom은 위경도(geography)라 미터로 재려고 한국 표준 좌표계 EPSG:5179(UTM-K, 단위 m)로 바꿔서 묶어요. minpoints 1 = 혼자 떨어진 곳도 한 묶음 -->
+<mapper namespace="com.tripbiseo.plan.mapper.DayCheckMapper">
+
+  <select id="selectPlaceClusterList" resultType="com.tripbiseo.plan.dto.DayCheckPlace">
+    SELECT id AS place_id, name, COALESCE(biz_type, category) AS category, latitude AS lat, longitude AS lng,
+           ST_ClusterDBSCAN(ST_Transform(geom::geometry, 5179), eps := #{eps}, minpoints := 1) OVER () AS cluster_no
+    FROM retrip_place
+    WHERE id IN
+    <foreach collection="placeIds" item="placeId" open="(" separator="," close=")">#{placeId}</foreach>
+  </select>
+</mapper>

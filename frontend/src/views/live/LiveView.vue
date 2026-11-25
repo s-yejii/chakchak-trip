@@ -44,7 +44,7 @@ import LiveTour from '@/components/live/LiveTour.vue'
 import { isTourDone, markTourDone } from '@/utils/liveTour'
 import LinkAddSheet from '@/components/live/LinkAddSheet.vue'
 import { useReplanStore } from '@/stores/replan'
-import { demoRide, demoRoute, restAsk } from '@/utils/demoRoute'
+import { demoRide, demoRoute, demoStops, restAsk } from '@/utils/demoRoute'
 
 const MUTE_AGAIN_MIN = 10 // "그냥 갈게요" 뒤 이만큼 더 늦어지면 다시 알림
 const LEG_MODE = { walk: 'walk', transit: 'subway', car: 'taxi' } // 서버 이동 수단 → 카드 칩 아이콘
@@ -237,7 +237,8 @@ function openSimilar() {
   closeLost()
   asking.value = false
   info.value = null
-  similarStop.value = { id: stop.id, placeId: stop.placeId, name: stop.name, lat: stop.lat, lng: stop.lng }
+  // 11/20: fixed도 넘김 (시연 계정만 예약 자리면 비슷한 가게를 담을 때 예약 시각부터 묻는 데 씀, SimilarSearch)
+  similarStop.value = { id: stop.id, placeId: stop.placeId, name: stop.name, lat: stop.lat, lng: stop.lng, fixed: !!stop.fixed }
   similarNext.value = findNextFixed(stop)
   adding.value = true
 }
@@ -324,7 +325,9 @@ function openAlert(alert) {
 watch(() => (!isReady.value ? undefined : currentStop.value ? currentStop.value.id : null), (currentId) => {
   if (currentId === undefined) return // 아직 상황을 못 받았으면 그대로
   removeLiveNotices((notice) => {
-    const match = (notice.key || '').match(/^leave-(\d+)-/)
+    // 11/19: 서버 "나갈 시간"(overdue-칸id)도 같이 (팔각정을 나와 산청 가는 길에 남아 있었어요). 11/20 주형: 이건 시연 계정만, 일반 계정은 예전 그대로 leave-만
+    const pattern = devMode.isOn ? /^(?:leave|overdue)-(\d+)/ : /^leave-(\d+)-/
+    const match = (notice.key || '').match(pattern)
     return !!match && Number(match[1]) !== currentId
   })
 })
@@ -380,6 +383,10 @@ const mapPins = computed(() => {
     const isRoute = stop.reach !== 'done' && stop.reach !== 'here'
     const no = shownNo(stop) // 넣을 순서를 고르는 중이면 넣은 뒤 번호
     pins.push({ key: stop.id, id: stop.id, tag: previewId.value === stop.id ? stop.name : '', lat: stop.lat, lng: stop.lng, text: no, icon: pinIcon(stop), cls: pinClass(stop), label: no + ' ' + stop.name, fit: isFit, route: isRoute })
+  }
+  // ③ 11/20 시연 순환버스 정류장 (DemoDrive가 넣음, 일반 계정은 늘 빈 목록)
+  for (const busStop of demoStops.value) {
+    pins.push({ key: busStop.key, lat: busStop.lat, lng: busStop.lng, icon: 'i-busstop', tag: busStop.name, cls: ' pin--done', label: busStop.name, route: false })
   }
   if (slotPlace.value) {
     // 넣을 장소: 일정 핀처럼 번호로 (코랄). 순서를 옮기면 번호도 같이 바뀜
@@ -532,7 +539,8 @@ const head = computed(() => {
     }
     const next = nextStop.value
     if (!next || !next.fixed) { // 다음이 예약이 아니면 더 있어도 경고하지 않음 (뒤 일정이 밀릴 뿐, 11/08 주형)
-      return { cap: current.name + '에서', big: '+' + toDuration(-left), small: '계획보다 더 머무는 중', cls: '' }
+      // 11/19 주형: "+1시간 / 17분 계획보다 더"가 무슨 말인지 몰랐어요 → 한 덩어리로 "1시간 17분 더 머무는 중"
+      return { cap: current.name + '에서 계획보다', big: toDuration(-left), strong: '더 머무는 중', cls: '' }
     }
     const toNext = toMinutes(next.time) - now
     if (fixed.value && fixed.value.slackMin >= 0 && toNext > 0) { // 11/17 주형: 출발 시각은 지났어도 예약에 늦지 않으면 '지남' 대신 다음 예약까지 남은 시간
@@ -762,11 +770,15 @@ async function onLinkAdded(message) {
 }
 
 // 장면 2 카드 (11/17 주형, 시연 계정만): 버스에서 내린 뒤 예약까지 시간이 남으면 "이대로 갈까요?" → [가는 길 카페 찾기]는 AI에게 묻기를 질문 채워서 열어요
-const REST_QUESTION = '고기집 가는 길에 카페'
+// 11/19 주형: [어디 갈까?]가 지금 자리 근처 펍을 추천해서 → 예약 가게 근처 카페로 물어요 (AI에게 묻기의 "다른 곳 기준 찾기")
 const askDraft = ref('')
+const askCafeNear = ref(null) // 열면 바로 이 예약 가게 근처 카페를 찾음 (AskPanel cafeNear)
 function findRestCafe() {
+  const name = restAsk.value ? restAsk.value.name : ''
+  const stop = (live.trip.value.stops || []).find((item) => item.name === name && item.lat != null)
   restAsk.value = null
-  askDraft.value = REST_QUESTION
+  askCafeNear.value = stop ? { name: stop.name, lat: stop.lat, lng: stop.lng } : null
+  askDraft.value = stop ? '' : name + ' 근처 카페'
   openAsk()
 }
 function keepGoing() {
@@ -819,6 +831,7 @@ async function onAdded(message) {
 const slotPlace = ref(null) // 넣을 장소 (시트가 열려 있으면)
 const slotPath = ref([]) // 고른 자리로 계산한 전체 경로선
 const slotIndex = ref(0) // 새 장소 자리 (0이면 남은 첫 칸 앞)
+const NO_PATHS = [] // 순서를 고르는 동안은 길을 안 그림. 매번 새 []를 넘기면 지도가 끝없이 다시 그려져서 한 번만 만들어 둠
 const slotFirstNo = computed(() => (remainingStops.value.length ? remainingStops.value[0].no : stops.value.length + 1)) // 남은 첫 칸 번호
 // 지도 핀 번호: 넣을 순서를 고르는 중이면 새 장소 자리부터 뒤 칸은 하나씩 밀림
 function shownNo(stop) {
@@ -828,6 +841,7 @@ function shownNo(stop) {
 }
 const SLOT_MAP_PADDING = { top: 110, right: 56, bottom: 440, left: 56 } // 아래 자리 고르기 시트만큼 비움
 function openSlotSheet(place) {
+  askCafeNear.value = null // 11/19: 자리 고르기에서 뒤로 오면 찾았던 카페 목록 그대로 (카페를 다시 찾느라 화면이 바뀌던 문제)
   slotPlace.value = place
   slotPath.value = []
   slotIndex.value = 0
@@ -989,7 +1003,7 @@ function finishTour() {
           :follow="isFollowing"
           :smooth="devMode.isOn"
           :heading="devMode.isOn && isMoving ? heading : null"
-          :paths="slotPlace ? [] : nextPath"
+           :paths="slotPlace ? NO_PATHS : nextPath"
           :show-route="false"
           :ring="nearRing"
           :band="askBand"
@@ -1022,9 +1036,9 @@ function finishTour() {
         <!-- 장면 2: 버스에서 내린 뒤 시간이 남으면 가운데 카드 (시연 계정만, 고르기 전엔 시계·[다음 장소로] 멈춤) -->
         <div v-if="restAsk && !isLostOpen" class="rest-pop" role="alertdialog" aria-modal="true" aria-label="시간이 남아요">
           <section class="rest-pop__card">
-            <b class="rest-pop__title">시간이 {{ toDuration(restAsk.slackMin) }} 남아요</b>
-            <span class="rest-pop__text">{{ restAsk.name }} 예약까지 여유가 있어요. 이대로 갈까요?</span>
-            <button type="button" class="btn btn--primary btn--lg btn--block" @click="findRestCafe">☕ 가는 길 카페 찾기</button>
+            <b class="rest-pop__title">{{ restAsk.name }}까지 <span class="rest-pop__good">{{ toDuration(restAsk.slackMin) }}</span> 남아요</b>
+            <span class="rest-pop__text">예약 시각까지 시간이 남아요. 근처 카페에서 쉬었다 갈까요?</span>
+            <button type="button" class="btn btn--primary btn--lg btn--block" @click="findRestCafe">근처 카페 보기</button><!-- 11/19 주형: 예약 가게 근처 카페를 골라 넣기 -->
             <button type="button" class="btn btn--secondary btn--lg btn--block" @click="keepGoing">이대로 갈게요</button>
           </section>
         </div>
@@ -1106,7 +1120,7 @@ function finishTour() {
           <!-- AI 채팅(④) -->
           <!-- 자리 고르기 중에는 숨기기만 (AskPanel은 뿌리 요소가 둘이라 v-show를 감싸는 div에) -->
           <div v-if="asking" v-show="!slotPlace">
-            <AskPanel :initial-draft="askDraft" :me="mePoint || { x: 195, y: 300 }" :late="isLate" :trip-id="live.tripId.value" :position="live.position.value" @close="asking = false" @add="onAskAdd" :selected="askPickedId" :chat-key="chatKey(live.trip.value)" :planned="plannedPlaceIds" @choose="openSlotSheet" @found="onAskFound" @pick="askPickedId = $event" />
+            <AskPanel :initial-draft="askDraft" :cafe-near="askCafeNear" :me="mePoint || { x: 195, y: 300 }" :late="isLate" :trip-id="live.tripId.value" :position="live.position.value" @close="asking = false; askCafeNear = null" @add="onAskAdd" :selected="askPickedId" :chat-key="chatKey(live.trip.value)" :planned="plannedPlaceIds" @choose="openSlotSheet" @found="onAskFound" @pick="askPickedId = $event" />
           </div>
           <div v-else class="quick live-quick" data-sheet-follow role="group" aria-label="트리피에게 묻기와 결제 메모">
             <button type="button" class="chip chip--sm chip--add live-chip" data-tour="ask" aria-label="어디 갈까? 트리피에게 갈 곳 물어보기" @click="openAsk"><span class="live-chip__ic live-chip__ic--ai" aria-hidden="true"><img src="/img/trippie-favicon.png" alt="" class="live-chip__img" draggable="false" /></span>어디 갈까?</button>
@@ -1212,6 +1226,10 @@ function finishTour() {
 .rest-pop { position: absolute; inset: 0; z-index: 58; display: grid; place-items: center; padding: 24px; background: rgba(15, 20, 35, 0.45); }
 .rest-pop__card { width: 100%; max-width: 320px; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 22px 18px 18px; border-radius: 20px; background: var(--surface-raised); box-shadow: 0 16px 40px -8px rgba(24, 33, 58, 0.45); text-align: center; }
 .rest-pop__title { font-size: 18px; line-height: 26px; color: var(--ink); }
+/* 11/20 주형(예지 OK): 카드 핵심을 색으로 — 남는 시간은 초록, 경고 알림은 주황 제목 + 왼쪽 띠 (문구·규칙은 그대로) */
+.rest-pop__good { color: var(--success); }
+.scr-Live .noti--warn { box-shadow: inset 4px 0 0 var(--warning), 0 8px 24px rgba(24, 33, 58, 0.18); }
+.scr-Live .noti--warn .noti__t { color: var(--warning); }
 .rest-pop__text { font-size: 14px; line-height: 20px; color: var(--ink-muted); margin-bottom: 6px; }
 .scr-Live .live-head .t-cap { font-size: 13px; line-height: 18px; color: var(--ink-muted); }
 .scr-Live .live-head .t-big { font-size: 28px; line-height: 36px; letter-spacing: -.03em; }
