@@ -1,7 +1,9 @@
 <script setup>
 import { toDuration } from '@/utils/time'
-// 대안 고르기 화면 위 카드 (③, 11/06): 서버가 만든 "갈아타기"(택시로 바로·지하철 → 택시)나 "비 피하기"(야외 먼저)가 있으면 보여 줘요.
-// 아래 세 탭(시간 줄이기·한 곳 빼기·장소 바꾸기)은 사용자가 직접 고르는 것, 이 카드는 서버가 계산을 끝낸 대안을 한 번에 적용하는 것
+// 대안 고르기 화면 위쪽의 "더 빨리 가는 방법" 카드
+//   서버가 계산을 끝낸 대안을 버튼 하나로 적용해요
+//   예: "갈아타기"(택시로 바로, 지하철 → 택시), "비 피하기"(야외 먼저)
+//   아래 세 탭(시간 줄이기·한 곳 빼기·장소 바꾸기)은 사용자가 직접 고르는 대안이에요
 import { computed, onMounted, ref, watch } from 'vue'
 import { getPlaceDetail } from '@/api/trips'
 import { devMode } from '@/utils/devMode'
@@ -9,13 +11,13 @@ import { useRouter } from 'vue-router'
 import { useReplanStore } from '@/stores/replan'
 import { showToast } from '@/utils/toast'
 
-const QUICK_SHORTS = ['지하철', '택시', '갈아타기', '비 피하기'] // 지하철·택시: 남은 곳이 예약(KTX)뿐일 때 바로 가는 방법 (11/08)
+const QUICK_SHORTS = ['지하철', '택시', '갈아타기', '비 피하기'] // 지하철·택시: 남은 곳이 예약(KTX)뿐일 때 바로 가는 방법
 const router = useRouter()
 const replan = useReplanStore()
 const isApplying = ref(false)
 const emit = defineEmits(['empty'])
 
-// 보여 줄 카드들: 빠른 도착 순 (맨 앞 = 추천)
+// 보여 줄 카드: 여유가 큰 순 = 빨리 도착하는 순 (맨 앞이 추천)
 const quickList = computed(() => {
   const list = []
   for (const short of QUICK_SHORTS) {
@@ -24,7 +26,8 @@ const quickList = computed(() => {
   }
   return list.sort((a, b) => b.slackMin - a.slackMin)
 })
-// 11/12 ④: 빨리 가는 방법이 하나도 없으면(예약 앞에 다른 일정이 있고 택시도 안 빠를 때) 빈 화면이 돼서 알려 줌 → 화면이 원래 대안 화면으로 넘김
+// 보여 줄 방법이 하나도 없으면 부모에게 'empty'를 알려요 → 부모가 원래 대안 화면으로 넘겨요
+//   (예: 예약 앞에 다른 일정이 있고 택시도 더 빠르지 않을 때)
 watch(() => quickList.value.length, (count) => {
   if (count === 0) emit('empty')
 }, { immediate: true })
@@ -33,9 +36,10 @@ function changeTextOf(option) {
   return changed ? changed.name + ' · ' + changed.change : ''
 }
 
-// 다 늦을 때: 빈 화면 대신 가장 빨리 가는 방법을 알려 줌 (11/08 주형)
+// 모든 방법이 늦을 때: 맨 위에 "가장 빨리 가는 방법" 한 줄을 보여 줘요
 const isAllLate = computed(() => quickList.value.length > 0 && quickList.value.every((option) => option.slackMin < 0))
-// 예약 장소: 식당이면 "가게에 늦는다고 알리기"(전화), 기차역이면 다음 열차 안내 한 줄
+// 기준 예약 칸 (고정 칸 = 시각이 정해진 예약)
+//   식당이면 [가게에 전화하기] 카드, 기차역이면 다음 열차 안내 한 줄
 const fixedStop = computed(() => (replan.basisStop && replan.basisStop.fixed ? replan.basisStop : null))
 const isStation = computed(() => !!fixedStop.value && /역|KTX|기차/.test((fixedStop.value.category || '') + ' ' + fixedStop.value.name))
 const tel = ref('')
@@ -45,7 +49,7 @@ onMounted(async () => {
   const place = await getPlaceDetail(stop.placeId).catch(() => null)
   tel.value = place && place.tel ? place.tel : ''
 })
-// 시연 계정은 실제로 걸지 않고 번호만 보여 줌 (발표장에서 진짜 가게에 전화가 가지 않게)
+// 시연 계정(개발자 모드)은 실제로 걸지 않고 번호만 토스트로 보여 줘요 (발표장에서 진짜 가게에 전화가 가지 않게)
 function callDemo() {
   showToast(fixedStop.value.name + ' · ' + tel.value + ' 전화 연결')
 }
@@ -88,6 +92,6 @@ async function applyQuick(option) {
 .qalt-note { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 13px; line-height: 18px; color: var(--warning); }
 .qalt { display: flex; flex-direction: column; gap: 6px; }
 .qalt__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-/* 11/20 주형(예지 OK): 도착·늦음/여유가 이 카드의 핵심이라 크게·굵게 + 아이콘 (색만으로 구분하지 않게) */
+/* 도착·늦음/여유가 이 카드의 핵심이라 크게·굵게 + 아이콘 (색만으로 구분하지 않게) */
 .qalt__result { display: inline-flex; align-items: center; gap: 4px; font-size: 15px; line-height: 20px; font-weight: 700; }
 </style>

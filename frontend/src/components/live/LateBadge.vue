@@ -1,6 +1,6 @@
 <script setup>
 import { toDuration } from '@/utils/time'
-// 대안 화면 위쪽 오른쪽 배지: 그대로 가면 몇 분 늦는지 (안 늦으면 여유)
+// 대안 화면 오른쪽 위 배지: 지금 일정대로 가면 몇 분 늦는지 (안 늦으면 남는 여유)
 import { useReplanStore } from '@/stores/replan'
 
 const replan = useReplanStore()

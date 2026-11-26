@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<!-- ④ AI에게 묻기 (Text-to-SQL). 표는 db/18_ask_place.sql의 뷰 ask_place·ask_review, 계정은 ask_reader -->
+<!-- ④ AI에게 묻기 (Text-to-SQL: Gemini가 사용자 말을 SQL로 바꿔 줌).
+     읽는 표는 db/18_ask_place.sql의 뷰 ask_place·ask_review, 실행 계정은 ask_reader(이 뷰만 읽기) -->
 <mapper namespace="com.tripbiseo.live.mapper.PlaceAskMapper">
 
   <!-- 이 트랜잭션이 끝날 때까지만 묻기 전용 계정 (LOCAL: 끝나면 원래 계정으로) -->

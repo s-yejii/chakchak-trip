@@ -25,9 +25,10 @@ import com.tripbiseo.trip.service.PlaceService;
 import lombok.RequiredArgsConstructor;
 
 /**
- * 여행 중 링크 추가: 고른 장소를 하나씩, 칸 사이마다 넣어 보고 방해가 가장 적은 자리에 넣음.
+ * 여행 중 링크 추가: 고른 장소를 하나씩, 칸 사이 자리마다 넣어 보고 방해가 가장 적은 자리에 넣어요.
  * 시간·영업 계산은 전부 서버(AlternativeCalculator)가 하고 Gemini는 쓰지 않아요. 저장은 기존 /live/apply가 해요.
- * 늦어지거나 식당·카페가 겹치면: 바꾸기 / 둘 다 가고 시간 줄이기 / 한 곳 빼기를 만들어 사용자가 고르게 함.
+ * 늦어지거나 식당·카페가 겹치면 고를 방법을 만들어요: 바꾸기 / 둘 다 가고 시간 줄이기 / 한 곳 빼기.
+ * 용어: 고정 일정 = 시각을 꼭 지켜야 하는 예약 칸. 여유(분) = 고정 일정 계획 시각 − 예상 도착 (음수면 지각).
  */
 @Service
 @RequiredArgsConstructor
@@ -41,17 +42,17 @@ public class LiveLinkServiceImpl implements LiveLinkService {
             + "|버거|치킨|족발|보쌈|곱창|초밥|스시|돈가스|찌개|탕|뷔페|오리|주꾸미|쭈꾸미|백숙|요리|이자카야|퓨전|멕시칸|양꼬치).*";
 
     private static final int MAX_PLACES = 5;            // 한 번에 넣을 수 있는 곳
-    private static final int CAFE_STAY_MIN = CafeStay.BASE_MIN; // 새 칸 머묾 30분 (11/17 주형: AI 카드·일정에 넣기와 같은 기본값. 링크는 여러 곳을 한 번에 맞춰 넣어서 늘리지는 않음)
+    private static final int CAFE_STAY_MIN = CafeStay.BASE_MIN; // 새 카페 칸 머묾 30분 (AI 카드·일정에 넣기와 같은 기본값). 링크는 여러 곳을 한 번에 맞춰 넣어서 더 늘리지 않음
     private static final int DEFAULT_STAY_MIN = 60;
-    private static final int MEAL_MIN_STAY = 40;        // 시간을 줄여도 식사는 이만큼
+    private static final int MEAL_MIN_STAY = 40;        // 시간을 줄여도 식당은 40분은 머묾
     private static final int CAFE_MIN_STAY = 20;
     private static final int OTHER_MIN_STAY = 30;
     private static final int BOTH_MEAL_STAY = 40;       // 식당 둘 다 갈 때 한 곳에 머물 시간
     private static final int BOTH_CAFE_STAY = 25;
-    private static final int TRIM_BUFFER_MIN = 5;       // 늦는 시간보다 이만큼 더 줄임
-    private static final int PUSH_LIMIT_MIN = 30;       // 고정 일정이 없을 때 이만큼 넘게 밀리면 "늦어진다"로 봄
-    private static final int ANY_TIME_GAP = 48 * 60;    // 늦어질 때는 시간이 멀어도 같은 종류면 바꾸기를 제안
-    private static final int LAST_ARRIVE_MIN = 22 * 60; // 이보다 늦게 도착하는 자리는 피함
+    private static final int TRIM_BUFFER_MIN = 5;       // 늦는 시간보다 5분 더 줄임 (12분 늦음 → 17분 줄임)
+    private static final int PUSH_LIMIT_MIN = 30;       // 고정 일정이 없을 때 원래 칸이 30분 넘게 밀리면 "늦어진다"로 봄
+    private static final int ANY_TIME_GAP = 48 * 60;    // 바꿀 칸을 찾는 시간 차 한도(48시간). 늦어질 때는 시간이 멀어도 같은 종류면 바꾸기를 제안
+    private static final int LAST_ARRIVE_MIN = 22 * 60; // 22:00보다 늦게 도착하는 자리는 피함
     private static final int MINUTES_OF_DAY = 24 * 60;
     // 자리 점수에 더하는 값 (작을수록 좋은 자리)
     private static final int LATE_PENALTY = 10;         // 고정 일정에 1분 늦을 때마다
@@ -61,8 +62,8 @@ public class LiveLinkServiceImpl implements LiveLinkService {
     private static final String IMPORTANCE_MUST = "must";
     private static final String IMPORTANCE_OPTIONAL = "drop";
     private static final String[] KEYS = {"A", "B", "C", "D", "E", "F", "G"};
-    private static final int MAX_SWAP_CHOICES = KEYS.length - 3; // [바꾸기] 선택지 수. 줄이기·빼기·그대로 넣기와 합쳐도 KEYS 안에 들게 (11/18)
-    private static final int NO_PRECISE = 0;            // 길찾기 API 없이 거리로만 추정 (전과 같음)
+    private static final int MAX_SWAP_CHOICES = KEYS.length - 3; // [바꾸기] 선택지 수. 줄이기·빼기·그대로 넣기와 합쳐도 KEYS 안에 들게
+    private static final int NO_PRECISE = 0;            // preciseCount = 0: 길찾기 API 없이 거리로만 어림
 
     private final LiveTripReader liveTripReader;
     private final LiveStopFinder liveStopFinder;
@@ -83,7 +84,7 @@ public class LiveLinkServiceImpl implements LiveLinkService {
         List<Stop> newStops = toNewStops(request, remaining, trip);
 
         Stop fixedStop = liveStopFinder.findFixedStop(remaining, null);
-        Alternative base = remaining.isEmpty() ? null : alternativeCalculator.calculate(trip, current, remaining, request.getLat(), request.getLng(), NO_PRECISE, true); // 비교 기준도 같은 방식(계획 시각까지 기다리기)으로
+        Alternative base = remaining.isEmpty() ? null : alternativeCalculator.calculate(trip, current, remaining, request.getLat(), request.getLng(), NO_PRECISE, true); // 비교 기준(원래 일정)도 같은 방식(계획 시각까지 기다리기)으로
         int baseClosed = base == null ? 0 : fillOpenInfo(base);
         Context context = new Context(trip, current, remaining, newStops, fixedStop != null, base, baseClosed, request.getLat(), request.getLng());
 
@@ -135,7 +136,10 @@ public class LiveLinkServiceImpl implements LiveLinkService {
         return bestStops;
     }
 
-    /** 방해 점수: 원래 칸이 밀린 분 + 새 장소까지 이동 + 늦음·문 닫음·겹침·너무 늦은 도착 벌점 */
+    /**
+     * 방해 점수 (작을수록 좋은 자리) = 원래 칸이 밀린 분 + 새 장소까지 이동 분 + 벌점.
+     * 벌점: 고정 일정 지각, 문 닫은 곳이 늘어남, 식당·카페 연달아, 22시 넘어 도착
+     */
     private int scorePlan(Context context, Alternative plan, List<Stop> stops) {
         int score = 0;
         for (int pushed : getPushedList(context, plan)) {
@@ -158,8 +162,9 @@ public class LiveLinkServiceImpl implements LiveLinkService {
     }
 
     /**
-     * 장소 이름 → 도착 시각(분). 도착 글자("00:40")는 자정을 넘으면 작아져서, 앞 칸보다 작아지면 하루를 더함.
-     * 새 칸은 id가 없어서 이름으로 찾음 (일정 안에 같은 이름은 들어가지 않게 막아 둠). 고정 일정은 계획 시각 그대로
+     * 장소 이름 → 도착 시각(분).
+     * 도착 글자("00:40")는 자정을 넘으면 작아져서, 앞 칸보다 작아지면 하루(1440분)를 더해요.
+     * 새 칸은 id가 없어서 이름으로 찾아요 (일정 안에 같은 이름은 안 들어가게 막아 둠). 고정 일정은 계획 시각 그대로.
      */
     private Map<String, Integer> getArriveMap(Alternative plan) {
         Map<String, Integer> arriveMap = new HashMap<>();
@@ -221,7 +226,12 @@ public class LiveLinkServiceImpl implements LiveLinkService {
         return count;
     }
 
-    /** 다른 칸을 안 바꾸고 넣어도 되나: 문 닫은 곳이 안 늘고, 밤 10시 안에 끝나고, 고정 일정에 안 늦고, 고정 일정이 없으면 30분 넘게 안 밀림 */
+    /**
+     * 다른 칸을 안 바꾸고 그냥 넣어도 되나. 모두 맞아야 true:
+     *   1. 문 닫은 곳이 안 늘어남
+     *   2. 밤 10시 안에 끝남
+     *   3. 고정 일정이 있으면 안 늦음, 없으면 원래 칸이 30분 넘게 안 밀림
+     */
     private boolean isFit(Context context, Alternative best) {
         if (best.getClosedCount() > context.baseClosed() || getLastArrive(best) > LAST_ARRIVE_MIN) {
             return false;
@@ -238,9 +248,11 @@ public class LiveLinkServiceImpl implements LiveLinkService {
     }
 
     /**
-     * [바꾸기] 선택지마다 새 칸 → 바꿀 칸 (11/18). 남은 칸 시간 순, 맨 앞 것으로 줄이기·빼기를 계산.
-     * 새 장소가 식당 한 곳이면 바꿀 수 있는 식당마다 하나씩(점심·저녁 중 고르게), 카페 한 곳이면 첫 번째 카페 하나 (늦어져도 같음).
-     * 새 장소가 여러 곳이거나 식당·카페가 아니면 findOverlaps 그대로 (선택지 0~1개)
+     * [바꾸기] 선택지 목록. 선택지 하나 = "새 칸 → 바꿀 칸" Map.
+     * 남은 칸 시간 순이고, 줄이기·빼기는 맨 앞 선택지로 계산해요.
+     *  - 새 장소가 식당 한 곳: 바꿀 수 있는 식당마다 하나씩 (점심·저녁 중 고르게, 최대 MAX_SWAP_CHOICES개)
+     *  - 새 장소가 카페 한 곳: 첫 번째 카페 하나 (늦어져도 같음)
+     *  - 여러 곳이거나 식당·카페가 아님: findOverlaps 결과 그대로 (선택지 0~1개)
      */
     List<Map<Stop, Stop>> findSwapChoices(List<Stop> newStops, List<Stop> remaining, Alternative best, boolean fits) {
         List<Map<Stop, Stop>> choices = new ArrayList<>();
@@ -266,10 +278,12 @@ public class LiveLinkServiceImpl implements LiveLinkService {
     }
 
     /**
-     * 새 장소마다 바꿀 같은 종류 칸(식당·카페, 바꿀 수 있는 칸, 한 칸은 한 번만)을 찾음. 새 칸 → 바꿀 칸.
-     * 새 장소가 여러 곳일 때 씀 (한 곳이면 findSwapChoices가 따로 찾음).
-     * 그냥 넣어도 되면(fits) 남은 칸 중 시간 순 첫 번째 같은 종류 칸 (11/18: 여유가 많으면 새 장소가 하루 끝에 들어가서
-     * 도착 시각으로 재면 안 겹쳐 [바꾸기]가 안 떴음). 늦어지면 도착 시각이 가장 가까운 칸 (전과 같음)
+     * 새 장소마다 바꿀 같은 종류 칸을 찾아요. 결과: 새 칸 → 바꿀 칸.
+     * 바꿀 칸 조건: 식당·카페, 바꿀 수 있는 칸, 한 칸은 한 번만.
+     * 새 장소가 여러 곳일 때 써요 (한 곳이면 findSwapChoices가 따로 찾음).
+     *  - 그냥 넣어도 되면(fits): 남은 칸 중 시간 순 첫 번째 같은 종류 칸.
+     *    여유가 많으면 새 장소가 하루 끝에 들어가서, 도착 시각으로 재면 안 겹쳐 [바꾸기]가 안 뜨기 때문이에요.
+     *  - 늦어지면: 도착 시각이 가장 가까운 칸
      */
     Map<Stop, Stop> findOverlaps(List<Stop> newStops, List<Stop> remaining, Alternative best, boolean fits) {
         Map<Stop, Stop> swaps = new LinkedHashMap<>(); // 넣은 순서를 지키는 Map
@@ -302,7 +316,10 @@ public class LiveLinkServiceImpl implements LiveLinkService {
 
     // ---------------------------------------------------------------- 고를 방법
 
-    /** 겹치면 바꾸기(선택지마다 하나)·둘 다 가기, 늦으면 줄이기·빼기. 맨 앞이 추천, 그대로 넣기는 맨 뒤에 */
+    /**
+     * 고를 방법 목록: 겹치면 바꾸기(선택지마다 하나)·둘 다 가기, 늦으면 줄이기·빼기, 그리고 그대로 넣기.
+     * 추천을 맨 앞에 두고, 그대로 넣기는 맨 뒤에 둬요.
+     */
     private List<Alternative> makeOptions(Context context, Alternative best, List<Map<Stop, Stop>> swapChoices) {
         List<Alternative> options = new ArrayList<>();
         for (Map<Stop, Stop> choice : swapChoices) {
@@ -388,7 +405,7 @@ public class LiveLinkServiceImpl implements LiveLinkService {
         return Math.max(0, getLastArrive(plan) - LAST_ARRIVE_MIN);
     }
 
-    /** 고정 일정 앞 칸부터 최소 머묾까지 줄여서 need분을 채움 (꼭 갈 곳은 그대로). 고정 일정이 없으면 끝까지 */
+    /** 고정 일정 앞 칸부터 최소 머묾(식당 40·카페 20·그 밖 30분)까지 줄여 need분을 채워요. 꼭 갈 곳은 그대로, 고정 일정이 없으면 끝 칸까지 */
     private void trimStays(List<Stop> stops, int need) {
         int left = need;
         for (Stop stop : stops) {
@@ -419,7 +436,7 @@ public class LiveLinkServiceImpl implements LiveLinkService {
         return changes;
     }
 
-    /** 한 곳 빼기: 빼도 되는 곳 → 오래 머무는 곳 순. 겹치는 칸은 "바꾸기"가 있어서 고르지 않음 */
+    /** 한 곳 빼기: 빼도 되는 곳을 먼저, 그다음 오래 머무는 곳을 골라요. 겹치는 칸은 "바꾸기"가 있어서 안 골라요 */
     private Alternative makeDropOption(Context context, Map<Stop, Stop> swaps) {
         Stop dropStop = null;
         for (Stop stop : context.remaining()) {
@@ -449,7 +466,7 @@ public class LiveLinkServiceImpl implements LiveLinkService {
         return liveStopFinder.getStay(stop) > liveStopFinder.getStay(dropStop);
     }
 
-    /** 괜찮은 방법 중 맨 앞(바꾸기 → 줄이기 → 빼기 → 그대로)을 추천. 없으면 가장 덜 늦는 것 */
+    /** 괜찮은 방법(안 늦고 문 닫은 곳이 안 늘어남) 중 맨 앞(바꾸기 → 줄이기 → 빼기 → 그대로)을 추천. 없으면 가장 덜 늦는 것 */
     private List<Alternative> orderOptions(Context context, List<Alternative> options) {
         Alternative recommended = null;
         for (Alternative option : options) {
@@ -549,10 +566,12 @@ public class LiveLinkServiceImpl implements LiveLinkService {
     }
 
     /**
-     * 계산 + 영업 정보 + 새 칸 표시. 새 칸은 계획 시각이 없어서 먼저 지금 시각으로 계산한 뒤
-     * 나온 도착 시각을 계획 시각으로 두고 한 번 더 계산 (마지막 칸이면 여유 계산에 계획 시각을 씀).
-     * 새 칸은 목록끼리 같이 써서, 복사본에 시각을 적어 원본이 안 바뀌게 함
-     * 원래 칸은 일찍 도착하면 계획 시각까지 기다렸다 시작 (11/18: 넣은 뒤 원래 칸 사이 빈 시간이 사라져 시각이 다 당겨지던 문제)
+     * 계산 + 영업 정보 + 새 칸에 "새로 추가" 표시.
+     * 새 칸은 계획 시각이 없어서 두 번 계산해요:
+     *   1. 지금 시각을 계획 시각으로 두고 계산
+     *   2. 나온 도착 시각을 계획 시각으로 두고 다시 계산 (마지막 칸이면 여유 계산에 계획 시각을 쓰기 때문)
+     * 새 칸은 여러 목록이 같이 쓰니, 복사본에 시각을 적어 원본이 안 바뀌게 해요.
+     * 원래 칸은 일찍 도착하면 계획 시각까지 기다렸다 시작해요 (넣은 뒤에도 원래 칸 사이 빈 시간이 남고 시각이 당겨지지 않게).
      */
     private Alternative calculatePlan(Context context, List<Stop> stops) {
         List<Stop> timed = new ArrayList<>();
@@ -604,7 +623,7 @@ public class LiveLinkServiceImpl implements LiveLinkService {
         return closedCount;
     }
 
-    /** DB에 없는 장소·지워진 장소는 영업시간을 몰라서 null */
+    /** 칸의 영업 정보. DB에 없는 장소·지워진 장소는 영업시간을 몰라서 null */
     private OpenInfo findOpenInfo(AltStop stop) {
         if (stop.getPlaceId() == null) {
             return null;

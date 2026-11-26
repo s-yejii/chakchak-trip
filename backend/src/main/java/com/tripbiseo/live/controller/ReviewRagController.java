@@ -19,8 +19,9 @@ import com.tripbiseo.live.service.ReviewRagService;
 import lombok.RequiredArgsConstructor;
 
 /**
- * ④ 리뷰 RAG (11/15). 여행 하나에 딸린 기능이 아니라서 LiveController(/api/trips/{id}/live)와 따로.
- * 셋 다 Gemini 한도를 쓰는 개발·평가용이라 관리 계정(ragadmin)만 (11/16)
+ * ④ 리뷰 RAG 관리용 API (리뷰 RAG: 뜻이 가까운 리뷰를 찾아 Gemini가 근거로 판단하는 방식).
+ * 여행 하나에 딸린 기능이 아니라서 LiveController(/api/trips/{id}/live)와 따로 뒀어요.
+ * 셋 다 Gemini 한도를 쓰는 개발·평가용이라 관리 계정(ragadmin)만 부를 수 있어요
  */
 @RestController
 @RequestMapping("/api/live/rag")

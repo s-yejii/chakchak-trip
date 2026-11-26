@@ -14,9 +14,11 @@ import com.tripbiseo.live.mapper.PlaceAskMapper;
 import lombok.RequiredArgsConstructor;
 
 /**
- * ④ AI에게 묻기: 검사 통과한 AI SQL을 묻기 전용 계정(ask_reader) + 3초 제한으로 실행.
- * PlaceAskServiceImpl 안에 두지 않은 이유: 같은 클래스 안에서 부르면 @Transactional이 안 먹고,
- * Gemini를 기다리는 몇 초 동안 DB 연결을 잡고 있지 않으려고 DB 일만 따로 뺌
+ * ④ AI에게 묻기: 검사를 통과한 AI SQL을 실행해요.
+ * 묻기 전용 계정(ask_reader: 묻기용 뷰만 읽을 수 있음)으로 바꾸고, 쿼리 하나에 3초 제한을 걸어요.
+ * PlaceAskServiceImpl 안에 두지 않은 이유:
+ *   1. 같은 클래스 안에서 부르면 @Transactional이 동작하지 않아요
+ *   2. Gemini를 기다리는 몇 초 동안 DB 연결을 잡고 있지 않으려고 DB 일만 따로 뺐어요
  */
 @Component
 @RequiredArgsConstructor

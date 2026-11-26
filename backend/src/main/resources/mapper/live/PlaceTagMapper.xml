@@ -2,7 +2,8 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <!--
   ④ 추천 이유 칩용 리뷰 태그 세기 (retrip_review 읽기만).
-  낱말 대신 구절로 셈: "아이"는 "아이스"에, "줄"은 "줄였어요"에 걸려서. 부정("분위기 별로")을 피하려고 긍정 구절만.
+  낱말 대신 구절로 세요. 짧은 낱말은 다른 말에 섞여 걸려서예요 (예: "아이"는 "아이스", "줄"은 "줄였어요").
+  "분위기 별로" 같은 부정을 피하려고 긍정 구절만 세요.
   FILTER (WHERE …): 조건에 맞는 줄만 세는 PostgreSQL 문법
 -->
 <mapper namespace="com.tripbiseo.live.mapper.PlaceTagMapper">

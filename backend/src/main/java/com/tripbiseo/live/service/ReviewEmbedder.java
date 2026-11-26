@@ -18,8 +18,9 @@ import com.tripbiseo.common.exception.ApiException;
 import tools.jackson.databind.JsonNode;
 
 /**
- * ④ 리뷰 RAG: 글 → 임베딩(숫자 768개). Gemini batchEmbedContents API를 RestClient로 직접 불러요.
- * 뜻이 비슷한 글은 숫자 배열도 비슷하게 나와서, 거리(<=>)로 비슷한 리뷰를 찾을 수 있어요.
+ * ④ 리뷰 RAG: 글을 임베딩으로 바꿔요. 임베딩 = 글의 뜻을 숫자 768개 배열로 나타낸 것.
+ * 뜻이 비슷한 글은 숫자 배열도 비슷해서, 거리(<=>)로 비슷한 리뷰를 찾을 수 있어요.
+ * Gemini batchEmbedContents API를 RestClient로 직접 불러요.
  * 저장할 리뷰는 RETRIEVAL_DOCUMENT, 찾는 질문은 RETRIEVAL_QUERY로 알려 주면 질문과 리뷰가 더 잘 맞아요.
  */
 @Component
@@ -31,11 +32,11 @@ public class ReviewEmbedder {
     private static final int CONNECT_TIMEOUT_MS = 5000;
     private static final int READ_TIMEOUT_MS = 30000;
 
-    private static final int MAX_QUERY_CACHE = 500;  // 저장해 둘 질문 좌표 수
+    private static final int MAX_QUERY_CACHE = 500;  // 임베딩을 저장해 둘 질문 수 (넘으면 비우고 다시)
 
     // RestClient: Spring에 들어 있는 HTTP 호출 도구 (다른 서버 API 부르기)
     private final RestClient restClient;
-    // 질문 글 → 좌표. ConcurrentHashMap: 여러 요청이 동시에 읽고 써도 안전한 Map
+    // 질문 글 → 임베딩. ConcurrentHashMap: 여러 요청이 동시에 읽고 써도 안전한 Map
     private final Map<String, float[]> queryCache = new ConcurrentHashMap<>();
 
     @Value("${GEMINI_API_KEY:}")
@@ -43,6 +44,7 @@ public class ReviewEmbedder {
     @Value("${GEMINI_EMBED_MODEL:gemini-embedding-001}")
     private String model;
 
+    /** 연결 5초, 응답 30초 제한을 건 RestClient 만들기 */
     public ReviewEmbedder() {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(CONNECT_TIMEOUT_MS);
@@ -60,7 +62,7 @@ public class ReviewEmbedder {
         return callGemini(texts, "RETRIEVAL_DOCUMENT");
     }
 
-    /** 찾는 질문 하나 → 임베딩 하나. 같은 질문은 저장해 둔 값을 다시 씀 (Gemini 한도·시간 아끼기, 11/16) */
+    /** 찾는 질문 하나 → 임베딩 하나. 같은 질문은 저장해 둔 값을 다시 씀 (Gemini 한도·시간 아끼기) */
     public float[] embedQuery(String text) {
         float[] saved = queryCache.get(text);
         if (saved != null) {

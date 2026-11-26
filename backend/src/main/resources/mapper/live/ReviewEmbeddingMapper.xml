@@ -5,11 +5,14 @@
 
   <!-- 아직 임베딩이 없는 리뷰 = review_embedding에 짝이 없는 리뷰 (LEFT JOIN … IS NULL).
        그래서 중간에 멈춰도 다시 부르면 남은 것부터 이어서 해요.
-       범위 (11/15): Gemini 무료 임베딩이 하루 약 1,000개라 5개 구 3.2만 개 대신 시연 동선 장소 500m 안만 (리뷰 약 3,100개).
-       좌표는 plan/service/DemoScenario.java 시연 일정과 같은 곳 (종로3가·익선, 명동 숙소, 남산나들길, 팔각정, 예장공원, 을지로, 강남 스시도, 동서울터미널)
-       11/16 더 줄임 (리뷰 약 1,830개, 무료로 2일): minLength자 이상 리뷰 중 가게마다 긴 순 perPlace개만.
-       긴 리뷰에 분위기 이야기가 많고, 짧은 리뷰는 검색 때도 안 씀(selectMoodReviewList의 minLength와 같은 값)
-       안쪽 SELECT: 범위 안 가게 리뷰마다 가게별 긴 순 번호(ROW_NUMBER). 바깥: 번호 perPlace 이하 + 아직 임베딩 없는 것 -->
+       범위 (Gemini 무료 임베딩이 하루 약 1,000개라 줄였어요):
+         1. 시연 동선 장소 500m 안만 (5개 구 3.2만 개 → 약 3,100개)
+            좌표는 plan/service/DemoScenario.java 시연 일정과 같은 곳
+            (종로3가·익선, 명동 숙소, 남산나들길, 팔각정, 예장공원, 을지로, 강남 스시도, 동서울터미널)
+         2. minLength자 이상 리뷰 중 가게마다 긴 순 perPlace개만 (약 1,830개, 무료로 2일)
+            긴 리뷰에 분위기 이야기가 많고, 짧은 리뷰는 검색 때도 안 써요 (selectMoodReviewList의 minLength와 같은 값)
+       안쪽 SELECT: 범위 안 리뷰에 가게별로 긴 순 번호(ROW_NUMBER)를 매겨요.
+       바깥 SELECT: 번호가 perPlace 이하이고 아직 임베딩이 없는 것만 -->
   <sql id="notEmbeddedYet">
     FROM (
       SELECT r.id, r.content,
@@ -68,7 +71,7 @@
       WHERE r.place_id IN
       <foreach collection="placeIds" item="placeId" open="(" separator="," close=")">#{placeId}</foreach>
         AND length(r.content) &gt;= #{minLength}   -- "좋아요"·"친절해요"처럼 짧은 글은 어떤 질문과도 적당히 가까워서 근거에서 뺌
-        AND e.model = #{model}                     -- 다른 모델로 만든 좌표끼리는 비교하면 안 됨 (모델을 바꾸면 다시 임베딩)
+        AND e.model = #{model}                     -- 다른 모델로 만든 임베딩끼리는 비교하면 안 됨 (모델을 바꾸면 다시 임베딩)
     ) ranked
     WHERE rank_in_place &lt;= #{perPlace}
     ORDER BY place_id, distance

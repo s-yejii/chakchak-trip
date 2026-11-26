@@ -1,9 +1,14 @@
 <script setup>
-// S15 지연 감지 (④): 왜 늦는지 보여 주고, 그냥 갈지 대안을 볼지 고르게 해요
-// 지금 있는 곳의 실제 도착(GPS 기록 arrivedAt)·계획보다 더 머문 시간·고정 일정 예상 도착(서버 계산)으로 줄을 만들어요.
-// "그냥 갈게요"를 누르면 여행 중 화면의 지연 알림을 접고, 10분 더 늦어지면 다시 띄워요.
-// 11/04: 시트 어디를 잡고 끌어도(버튼 빼고), 시트 위에서 휠을 굴려도 내려가요 (data-drag).
-//   전에는 위 손잡이(작은 막대)만 잡혀서, 내용을 끌거나 스크롤하면 아무 반응이 없어 멈춘 것처럼 보였어요
+// S15 지연 감지 (④): 여행 중 화면의 늦음 알림이나 [대안 보기]를 누르면 떠요
+// 왜 늦는지 보여 주고, 그냥 갈지 대안을 볼지 고르게 해요.
+// 왜 늦는지 줄은 세 가지로 만들어요:
+//   1. 지금 있는 곳에 실제로 도착한 시각 (GPS 기록 arrivedAt)
+//   2. 계획보다 더 머문 시간
+//   3. 고정 일정 예상 도착 (서버 계산)
+// 늦을 때 [그냥 갈게요]: 이 예약의 지연 알림을 더 띄우지 않아요.
+// 빠듯할 때 [조금만 더 있을게요]: 10분 더 늦어지면 다시 띄워요.
+// 시트는 어디를 잡고 끌어도(버튼 빼고), 위에서 휠을 굴려도 내려가요 (data-drag).
+//   손잡이(작은 막대)만 잡히면 내용을 끌어도 반응이 없어 멈춘 것처럼 보이기 때문이에요.
 import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import BottomSheet from '@/components/common/BottomSheet.vue'
@@ -13,7 +18,7 @@ import EventTimeline from '@/components/live/EventTimeline.vue'
 import { useReplanStore } from '@/stores/replan'
 import { toDuration, toMinutes } from '@/utils/time'
 
-const DELAY_MAP_PADDING = { top: 60, right: 40, bottom: 470, left: 40 } // 아래 시트에 핀이 가리지 않게
+const DELAY_MAP_PADDING = { top: 60, right: 40, bottom: 470, left: 40 } // 지도 여백(px): 아래 시트에 핀이 가리지 않게
 
 const router = useRouter()
 const replan = useReplanStore()
@@ -36,7 +41,7 @@ function toClock(dateTime) {
   return dateTime ? dateTime.substring(11, 16) : null
 }
 
-// 왜 늦는지 (실제 기록과 서버 계산만으로)
+// 왜 늦는지 줄 목록 (실제 기록과 서버 계산만 써요)
 const reasons = computed(() => {
   const items = []
   const current = replan.currentStop
@@ -70,16 +75,20 @@ const reasons = computed(() => {
   return items
 })
 
-// 아직 안 늦었지만 여유가 거의 없음 (여행 중 화면의 "지금 나가지 않으면 늦어요" 알림과 같은 기준)
+// 빠듯함: 아직 안 늦었지만 여유(고정 일정에 도착하고 남는 분)가 TIGHT_SLACK_MIN(5분) 이하
+// 여행 중 화면의 "지금 나가지 않으면 늦어요" 알림과 같은 기준이에요
 const TIGHT_SLACK_MIN = 5
 const isTight = computed(() => !replan.lateMin && replan.base && replan.base.slackMin <= TIGHT_SLACK_MIN)
 
 const optionCount = computed(() => (replan.options ? replan.options.alternatives.length : 0))
-// 예약 늦음 빠른 대안(지하철·택시로 바로 가기)이 있으면 ③ 빠른 대안 화면으로, 아니면 ④ 대안 고르기 그대로 (11/09)
+// [대안 N개 보기]가 갈 곳
+//   지하철·택시로 바로 가기 대안이 있으면 ③ 빠른 대안 화면(/live/quick)
+//   없으면 ④ 대안 고르기(/live/alt)
 const altLink = computed(() => (replan.findOption('택시') || replan.findOption('지하철') ? '/live/quick' : '/live/alt'))
 
 function goAnyway() {
-  // 11/12: 늦은 걸 알고 "그냥 갈게요" → 이 예약 지연 알림은 더 안 띄움. 빠듯할 때 "조금만 더 있을게요"는 예전처럼 10분 더 늦으면 다시
+  // 늦을 때 [그냥 갈게요]: 이 예약 지연 알림은 더 안 띄워요
+  // 빠듯할 때 [조금만 더 있을게요]·안 늦을 때 [그대로 가요]: 10분 더 늦으면 다시 띄워요
   replan.muteLate(replan.lateMin, replan.lateMin > 0)
   router.replace('/live')
 }

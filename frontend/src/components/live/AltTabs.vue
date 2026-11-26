@@ -1,8 +1,10 @@
 <script setup>
 import { toDuration } from '@/utils/time'
 // 대안 3가지 탭: 시간 줄이기 / 한 곳 빼기 / 장소 바꾸기 (세 화면이 같이 써요)
-// 탭 아래 숫자는 서버 추천 대안(POST /live/alternatives)의 여유예요. 서버가 못 만든 대안은 "없음"
-// active: trim | drop | swap
+// 탭 아래 작은 글씨: 서버 추천 대안(POST /live/alternatives)으로 바꾸면 남는 여유
+//   서버가 그 대안을 못 만들었으면 "직접 고르기"
+//   뺄 수 있는 곳(고정 칸·꼭 갈 곳이 아닌 칸)이 하나도 없으면 "모두 꼭"
+// active: 지금 화면의 탭 (trim | drop | swap)
 import { useReplanStore } from '@/stores/replan'
 
 defineProps({
@@ -11,7 +13,7 @@ defineProps({
 
 const replan = useReplanStore()
 
-// short: 서버 대안의 탭 이름 (A 시간 단축 · B 한 곳 빼기 · C 장소 변경)
+// short: 서버 대안을 찾을 때 쓰는 이름 (대안 A 시간 단축, B 한 곳 빼기, C 장소 변경)
 const TABS = [
   { key: 'trim', to: '/live/alt', label: '시간 줄이기', short: '시간 단축' },
   { key: 'drop', to: '/live/alt/drop', label: '한 곳 빼기', short: '한 곳 빼기' },

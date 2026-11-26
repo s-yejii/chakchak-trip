@@ -39,7 +39,10 @@ import com.tripbiseo.live.service.TrackService;
 
 import lombok.RequiredArgsConstructor;
 
-/** ④ 여행 중 화면. 모든 요청 본문에 지금 위치(lat, lng)가 들어 있어요 */
+/**
+ * ④ 여행 중 화면 API. 요청마다 지금 위치(lat, lng)를 같이 보내요.
+ * POST는 본문에, GET swap-candidates는 쿼리로 (선택)
+ */
 @RestController
 @RequestMapping("/api/trips/{id}/live")
 @RequiredArgsConstructor
@@ -71,7 +74,7 @@ public class LiveController {
         return liveService.assist(loginUser.id(), id, request);
     }
 
-    /** 반경 안 평점 상위 3곳 추천 */
+    /** 반경 안 추천 3곳 (보정 평점 + 리뷰 태그 점수 순) */
     @PostMapping("/recommend")
     public RecommendResponse recommend(@PathVariable long id, @RequestBody RecommendRequest request) {
         return liveService.recommend(loginUser.id(), id, request);
@@ -83,7 +86,7 @@ public class LiveController {
         return liveService.addRecommendedPlace(loginUser.id(), id, request);
     }
 
-    /** 못 가게 된 일정 빼고 다음 장소로 (놓친 예약, 11/12) */
+    /** 못 가게 된 일정 빼고 다음 장소로 (놓친 예약) */
     @PostMapping("/skip")
     public InsertResponse skipStop(@PathVariable long id, @RequestBody SkipRequest request) {
         return liveService.skipStop(loginUser.id(), id, request);

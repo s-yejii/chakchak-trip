@@ -13,6 +13,6 @@ import com.tripbiseo.live.dto.PlaceTagCount;
 @Mapper
 public interface PlaceTagMapper {
 
-    /** 후보 장소들의 리뷰 태그 개수 (후보만 세서 빠름. 반경으로 100곳 이하로 줄인 뒤 부름) */
+    /** 후보 장소들의 리뷰 태그 개수 (후보만 세서 빠름. 반경 검색(가까운 200곳까지)으로 줄인 뒤 부름) */
     List<PlaceTagCount> selectPlaceTagCountList(List<String> placeIds);
 }

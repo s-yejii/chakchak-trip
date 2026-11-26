@@ -2,7 +2,7 @@ package com.tripbiseo.live.dto;
 
 import lombok.Data;
 
-/** AI에게 묻기에서 내 위치 대신 기준으로 삼은 곳 (예: "강남역 근처 카페"의 강남역, 11/18) */
+/** AI에게 묻기에서 내 위치 대신 기준으로 삼은 곳 (예: "강남역 근처 카페"의 강남역) */
 @Data
 public class AskArea {
     private String name; // 질문에 나온 이름 그대로 (예: "강남역")

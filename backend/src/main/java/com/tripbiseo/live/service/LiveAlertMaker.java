@@ -16,19 +16,24 @@ import com.tripbiseo.trip.dto.Stop;
  * ④ 지금 상황(status)의 출발 알림(leave)과 화면 맨 위 알림(alert) 만들기.
  * StatusServiceImpl 안에서만 쓰는 도우미라 인터페이스 없이 @Component로 둠 (RouteClient와 같은 방식).
  * 숫자 계산은 StatusServiceImpl이 해서 StatusContext로 넘겨 주고, 여기서는 "뭐라고 알릴지"만 정해요.
+ * 용어
+ *  - 고정 일정(예약 칸): 시각을 꼭 지켜야 하는 칸 (KTX·회식 예약 등)
+ *  - 느슨한 곳: 식당·카페·공원처럼 늦어도 뒤 일정이 밀리기만 하는 칸
+ *  - 여유(slack, 분): 고정 일정 계획 시각 − 예상 도착. 음수면 지각
+ *  - 알림 key: key가 같으면 다시 안 울려요. 끝에 숫자를 붙여 상황이 바뀔 때만 다시 울리게 해요
  */
 @Component // Spring이 객체를 하나 만들어 두고, 필요한 곳(StatusServiceImpl)에 생성자 주입으로 넣어 줌
 public class LiveAlertMaker {
 
     private static final int LEAVE_WINDOW_MIN = 10;  // 출발 시각 앞뒤 10분 안이면 출발 알림
     private static final int TIGHT_SLACK_MIN = 10;   // 고정 일정 여유가 이 이하면 "여유가 얼마 없어요"
-    private static final int LEAVE_NOW_SLACK_MIN = 5; // 나갈 시간이 지났는데 고정 일정 여유가 이 이하면 "지금 안 나가면 늦어요" (늦기 전에 먼저)
-    private static final int LEAVE_SOON_MIN = 5;      // 출발 알림은 10분 전·5분 전·지금 세 번만 (11/19 PPT 14장)
+    private static final int LEAVE_NOW_SLACK_MIN = 5; // 다음이 예약인 칸에서 여유가 이 분 이하면 "지금 안 나가면 늦어요" (늦기 전에 먼저 경고)
+    private static final int LEAVE_SOON_MIN = 5;      // 출발 알림 묶음(step) 경계(분). 묶음은 10분 전·5분 전·지금·지남 4개, 묶음마다 한 번씩 울림
     private static final int LEAVE_PASSED_STEP = -1;  // 출발 시각이 지난 뒤 묶음
-    private static final int DEMO_ROOMY_SLACK_MIN = 30; // 11/20 주형(시연 계정만): 다음 예약까지 여유가 이보다 많으면 "출발해야 해요"를 안 냄
+    private static final int DEMO_ROOMY_SLACK_MIN = 30; // 시연 계정만: 다음 예약까지 여유가 이 분보다 많으면 "출발해야 해요"를 안 냄
 
     /**
-     * 출발 알림: 출발 시각 앞뒤 10분 안일 때만 (아니면 null)
+     * 출발 알림: 다음 칸이 예약(고정)이고 출발 시각 앞뒤 10분 안일 때만 (아니면 null)
      *  - 지금 어떤 칸에 있으면: 그 칸에서 떠날 시각 (도착 + 머묾)
      *  - 이동 중이면: 다음 칸에 계획 시각대로 닿으려면 떠나야 하는 시각 (계획 시각 − 이동 시간)
      */
@@ -37,15 +42,15 @@ public class LiveAlertMaker {
         Stop nextStop = context.getNextStop();
         int now = context.getNow();
         if (nextStop == null || !isFixed(nextStop)) {
-            return null; // 11/08 주형: 시간을 꼭 지킬 곳은 예약(고정) 일정뿐. 식당·카페·공원은 늦어도 뒤 일정이 밀릴 뿐이라 출발 알림을 안 냄
+            return null; // 출발 알림은 다음이 예약일 때만. 느슨한 곳은 늦어도 뒤 일정이 밀릴 뿐이에요
         }
         if (current != null) {
             int left = context.getLeaveAt() - now;
             if (context.isDemo() && CafeStay.isCafe(current.getCategory()) && (left <= 0 || left > LEAVE_SOON_MIN)) {
-                return null; // 11/19 주형: 시연 계정만, 예약 앞 카페에선 나갈 시각 5분 전에 한 번만 (10분 전·지금·지남 알림은 안 냄)
+                return null; // 시연 계정만: 예약 앞 카페에선 "5분 전" 묶음에서만 알림 (10분 전·지금·지남은 안 냄)
             }
             if (context.isDemo() && isRoomy(context, nextStop)) {
-                return null; // 11/20 주형: 시연 계정만, 예약이 2시간 남았는데 "지금 출발해야 해요"가 떴어요 (머무는 시간 끝을 출발 시각으로 봐서)
+                return null; // 시연 계정만: 다음 예약까지 여유가 30분보다 많으면 안 냄. 머묾이 끝났다고 예약 2시간 전에 "지금 출발해야 해요"가 뜨지 않게
             }
             return toLeave(current, context.getLeaveAt(), left, nextStop.getName(), true);
         }
@@ -53,7 +58,7 @@ public class LiveAlertMaker {
             return null;
         }
         if (hasLeftAStop(context.getTodayStops())) {
-            return null; // 11/17: 이미 앞 칸을 떠나 다음 칸으로 가는 중이면 "N분 뒤 출발해야 해요"는 안 냄 (가는 중인데 출발하라고 뜨던 문제)
+            return null; // 이미 앞 칸을 떠나 이동 중이면 "N분 뒤 출발해야 해요"는 안 냄 (가는 중인데 출발하라면 이상해서)
         }
         // 이동 중이면 eta = 지금 + 이동 시간이라, 이동 시간 = eta − 지금
         int moveMinutes = context.getEtaMap().get(nextStop.getId()) - now;
@@ -62,36 +67,45 @@ public class LiveAlertMaker {
     }
 
     /**
-     * 화면 맨 위 알림 하나. 여러 개면 위에서부터 먼저 맞는 것 하나만:
-     * 못 닿음(놓침 카드) > 고정 일정 지각(배너) > 지금 안 나가면 늦음(배너) > 더 머묾 > 영업 끝·휴무·머묾 부족 > 출발 > 지난 일정 > 고정 여유 10분 이하 > 비
-     * 11/12 ④: 지연 알림은 고정 일정 기준만. 앞 일정이 밀려서 고정 일정에 늦는 것도 고정 일정 예상 도착에 이미 들어 있어서,
-     *   느슨한 다음 장소 지각(next-)은 알림으로 안 띄움 (같은 지연을 두 번 알리던 문제)
+     * 화면 맨 위 알림 하나. 여러 개가 맞으면 우선순위가 가장 높은 것 하나만 보여 줘요.
+     *   1. 못 닿음 (놓침 카드)
+     *   2. 고정 일정 지각 (배너)
+     *   3. 지금 안 나가면 늦음 (배너)
+     *   4. 더 머묾
+     *   5. 영업 끝·휴무·머묾 부족
+     *   6. 출발
+     *   7. 지난 일정
+     *   8. 고정 일정 여유 10분 이하
+     *   9. 비
+     * 지연 알림은 고정 일정 기준으로만 내요. 앞 일정이 밀린 만큼은 고정 일정 예상 도착에 이미 들어 있어서,
+     * 느슨한 다음 장소 지각(next-)까지 띄우면 같은 지연을 두 번 알리게 돼요.
      */
     public LiveAlert makeAlert(StatusContext context, LeaveInfo leave) {
         Stop current = context.getCurrent();
         Stop fixedStop = context.getFixedStop();
         Integer slack = context.getSlack();
-        // 11/12 ④: 고정 일정에 가장 빠른 방법으로도 못 닿으면 "늦음" 대신 "놓침" (가운데 놓침 카드). 유예 0분
+        // 가장 빠른 방법으로도 고정 일정에 못 닿으면 "늦음" 대신 "놓침" (유예 0분)
         if (isLost(context)) {
-            // 어떤 방법으로도 못 맞춤 → 가운데 놓침 카드 (그대로 가기 / 빼고 다음으로 / 식당·카페면 비슷한 가게). 식당인지는 화면이 stops[].meal로 봄
+            // 가운데 놓침 카드: 그대로 가기 / 빼고 다음으로 / 식당·카페면 비슷한 가게. 식당인지는 화면이 stops[].meal로 봐요
             return newAlert("lost-" + fixedStop.getId(), "danger", fixedStop.getName(), makeLostText(context, fixedStop));
         }
-        // 11/08: 고정 일정(KTX·예약)에 늦는 게 가장 중요해서 맨 먼저. 도착 "목표" 시각을 같이 보여 줘서 기차를 놓친다고 오해하지 않게
+        // 고정 일정(KTX·예약) 지각은 가장 중요해서 앞쪽에 둬요. 도착 "목표" 시각을 같이 보여 줘서 기차를 놓친다고 오해하지 않게
         if (isLate(slack)) {
-            // key 끝의 숫자는 10분 더 늦어질 때마다 바뀜 → 그때마다 다시 알려 줌
+            // key 끝 숫자 = 늦은 분 ÷ 10. 10분 더 늦어질 때마다 바뀌어서 다시 알려 줘요 (12분 늦음 → 1, 25분 → 2)
             return newAlert("late-" + fixedStop.getId() + "-" + (-slack) / 10, "danger",
                     "지금대로면 " + fixedStop.getName() + " 도착 목표(" + fixedStop.getTime() + ")보다 " + Geo.toDuration(-slack) + " 늦어요",
                     "누르면 늦지 않는 대안을 볼 수 있어요");
         }
         if (isAtStopBeforeFixed(context) && slack != null && isMustLeaveNow(context)) {
-            // 11/09: 나갈 시각 전이라도 여유가 5분 이하면 출발 알림 대신 이 알림 (시연 [다음 장소로]의 출발 전 검사와 같은 기준)
-            // 11/08 주형: 이미 늦은 뒤에 알리면 늦어서, 여유가 조금 남았을 때 먼저 경고 (key가 late-로 시작 → 위에 크게 다시 뜸)
+            // 나갈 시각 전이라도 여유가 5분 이하면 출발 알림 대신 이 알림 (시연 [다음 장소로]의 출발 전 검사와 같은 기준)
+            // 늦은 뒤에 알리면 이미 늦으니, 여유가 조금 남았을 때 먼저 경고해요
+            // key가 late-로 시작해서 위쪽에 크게 다시 떠요
             return newAlert("late-soon-" + fixedStop.getId(), "danger",
                     "지금 나가지 않으면 " + fixedStop.getName() + " 도착 목표(" + fixedStop.getTime() + ")에 늦어요 · 여유 " + Geo.toDuration(slack),
                     "누르면 더 빨리 가는 대안을 볼 수 있어요");
         }
         if (isOverdue(context)) {
-            // 11/08: 머무는 시간이 지나면 한 번만 가볍게 (5분마다 반복하지 않음). 고정 일정에 늦게 되면 위 알림이 대신 뜸
+            // 머무는 시간이 지나면 한 번만 가볍게 알려요 (5분마다 반복하지 않음). 고정 일정에 늦게 되면 위 알림이 대신 떠요
             Stop nextStop = context.getNextStop();
             return newAlert("overdue-" + current.getId(), "warn",
                     current.getName() + "에서 나갈 시간이에요", nextStop == null ? "계획한 출발 시각이 지났어요" : "다음은 " + nextStop.getName() + "이에요");
@@ -108,12 +122,12 @@ public class LiveAlertMaker {
             return newAlert("missed-" + missed.getId(), "warn",
                     missed.getName() + " 계획 시간이 지났어요", "아직 안 갔다면 '대안 보기'에서 빼거나 바꿀 수 있어요");
         }
-        // 11/17: 예약 바로 앞 칸이 예약에 맞춰 넣은 카페(CafeStay, 예약 5분 전 도착)면 여유가 적어도 계획대로라 경고 안 함
+        // 예약 바로 앞 칸이 예약에 맞춰 넣은 카페(CafeStay, 예약 5분 전 도착)면 여유가 적어도 계획대로라 경고 안 함
         if (slack != null && slack <= TIGHT_SLACK_MIN && !CafeStay.isFittedBefore(context.getTodayStops(), fixedStop, slack)) {
             return newAlert("tight-" + fixedStop.getId(), "warn",
                     fixedStop.getName() + "까지 여유가 " + Geo.toDuration(slack) + "뿐이에요", "다음 장소는 짧게 들르는 게 좋아요");
         }
-        return makeRainAlert(context); // 11/12: 다음 장소 지각(next-)은 알림 안 함 (위 설명)
+        return makeRainAlert(context); // 다음 장소 지각(next-)은 알림 안 함 (위 설명)
     }
 
     /** 다음 경로 비 알림 (가장 낮은 순위). key에 비 시작 시각을 넣어 예보가 바뀌면 다시 울림 */
@@ -125,7 +139,7 @@ public class LiveAlertMaker {
         String what = weather.isSnow() ? "눈" : "비";
         String movable = findMovableOutdoor(context);
         if (movable != null) {
-            // 돌발 ② (11/06 → 11/08 주형·강사님 피드백): 날씨는 수시로 바뀌니 "여행 중 돌발"이 아니라 나가기 전 아침에 일정 바꾸기를 권함
+            // 돌발 ②: 날씨는 수시로 바뀌어서, 여행 중이 아니라 나가기 전 아침에 일정 바꾸기를 권해요
             return newAlert("rain-move-" + weather.getTime().replace(":", ""), "warn",
                     "오늘 날씨가 바뀌었어요 · " + weather.getTime() + "부터 " + what + " (강수확률 " + weather.getPop() + "%)",
                     "나가기 전에 일정을 바꿀까요? " + movable + "을(를) " + what + " 오기 전에 먼저 가는 일정이 '대안 보기'에 있어요");
@@ -151,9 +165,10 @@ public class LiveAlertMaker {
     }
 
     /**
-     * 일정을 다시 짜는 게 좋은지 (화면에 지연 배너·'대안 보기'를 띄울지)
-     * 더 머묾 · 영업 끝·휴무·머묾 부족 · 고정 일정 지각 · 지난 일정 · 비 오기 전 옮길 야외 중 하나라도 맞으면 true.
-     * makeAlert는 하나만 고르므로 결과를 쓰지 않고 조건을 하나씩 다시 검사해요. (출발 알림·여유 10분 이하는 다시 짤 일이 아님)
+     * 일정을 다시 짜는 게 좋은지 (화면에 지연 배너·'대안 보기'를 띄울지).
+     * 이 중 하나라도 맞으면 true: 더 머묾 / 영업 끝·휴무·머묾 부족 / 고정 일정 지각 / 지난 일정 / 비 오기 전 옮길 야외.
+     * makeAlert는 하나만 고르니까, 그 결과 대신 조건을 하나씩 다시 검사해요.
+     * 출발 알림·여유 10분 이하는 다시 짤 일이 아니라서 빠져요.
      */
     public boolean isReplanNeeded(StatusContext context) {
         if (isOverdue(context)) {
@@ -168,49 +183,50 @@ public class LiveAlertMaker {
         if (findMissedFixed(context) != null) {
             return true;
         }
-        return findMovableOutdoor(context) != null; // 비 오기 전에 야외를 먼저 (11/06)
+        return findMovableOutdoor(context) != null; // 비 오기 전에 야외를 먼저
     }
 
-    // makeAlert에서
+    // makeAlert에서 쓰는 도우미
 
     /** 지금 칸에서 계획한 출발 시각이 지났는지 (더 머묾) */
     private boolean isOverdue(StatusContext context) {
         Stop nextStop = context.getNextStop();
-        boolean isBeforeFixed = nextStop != null && isFixed(nextStop); // 11/08: 다음이 예약일 때만 "나갈 시간"을 따짐 (느슨한 곳은 뒤 일정이 밀릴 뿐)
+        boolean isBeforeFixed = nextStop != null && isFixed(nextStop); // 다음이 예약일 때만 "나갈 시간"을 따짐 (느슨한 곳은 뒤 일정이 밀릴 뿐)
         return context.getCurrent() != null && isBeforeFixed && context.getNow() >= context.getLeaveAt();
     }
 
-    /** 지금 어떤 칸에 있고, 다음 칸이 예약(고정)인지 */
     /**
-     * "지금 나가지 않으면 늦어요"는 지금 바로 나가도 여유가 5분 이하일 때만 (11/19 주형: 예약 49m 앞 카페에 18:09 도착하자마자 떴어요.
-     * 계획대로 18:54에 나가면 18:55 도착인데, 여유 5분만 보고 50분 전부터 경고했어요).
-     * 지금 나가면 도착 = 지금 + 이동 분(예약 도착 예상 − 떠날 시각). 그 전에는 출발 알림("N분 뒤 출발해요")만
+     * "지금 나가지 않으면 늦어요"를 띄울지.
+     * 시연 계정: 지금 바로 나가도 여유가 5분 이하일 때만. 그 전에는 출발 알림("N분 뒤 출발해요")만 떠요.
+     *   지금 나가면 도착 = 지금 + 이동 분(예약 도착 예상 − 떠날 시각).
+     *   예) 예약 19:00, 이동 1분: 18:09에 나가면 18:10 도착 → 여유 50분이라 아직 경고 안 함
+     * 일반 계정, 이동 분을 모를 때: 계획대로 갔을 때 여유가 5분 이하면.
      */
     boolean isMustLeaveNow(StatusContext context) {
         if (!context.isDemo()) {
-            return context.getSlack() != null && context.getSlack() <= LEAVE_NOW_SLACK_MIN; // 11/20 주형: 일반 계정은 예지가 만든 예전 기준 그대로 (새 기준은 시연 계정만)
+            return context.getSlack() != null && context.getSlack() <= LEAVE_NOW_SLACK_MIN; // 일반 계정: 계획대로 갔을 때 여유로 판단
         }
         Stop fixedStop = context.getFixedStop();
         Integer eta = fixedStop == null || fixedStop.getId() == null ? null : context.getEtaMap().get(fixedStop.getId());
         if (eta == null || context.getLeaveAt() == null || fixedStop.getTime() == null) {
-            return context.getSlack() != null && context.getSlack() <= LEAVE_NOW_SLACK_MIN; // 이동 분을 모르면 예전 기준
+            return context.getSlack() != null && context.getSlack() <= LEAVE_NOW_SLACK_MIN; // 이동 분을 모르면 일반 계정과 같은 기준
         }
         int travel = Math.max(0, eta - context.getLeaveAt());
         int slackIfLeaveNow = Geo.toMinutes(fixedStop.getTime()) - (context.getNow() + travel);
         return slackIfLeaveNow <= LEAVE_NOW_SLACK_MIN;
     }
 
+    /** 지금 어떤 칸에 있고, 다음 칸이 예약(고정)인지 */
     private boolean isAtStopBeforeFixed(StatusContext context) {
         Stop nextStop = context.getNextStop();
         return context.getCurrent() != null && nextStop != null && isFixed(nextStop);
     }
 
-    /** 고정 일정에 가장 빠른 방법으로 지금 가도 늦는지 (11/12) */
+    /** 고정 일정에 가장 빠른 방법으로 지금 가도 늦는지 */
     private boolean isLost(StatusContext context) {
         return context.getFastestSlack() != null && context.getFastestSlack() < 0;
     }
 
-    /** 놓침 문구의 시각 이름: 식당·카페·술집이면 "예약 시각", 그 밖(광장 등)은 "약속 시각" (11/12) */
     /** 오늘 이미 떠난 칸이 있는지 (있으면 지금은 다음 칸으로 이동 중) */
     static boolean hasLeftAStop(List<Stop> todayStops) {
         for (Stop stop : todayStops) {
@@ -222,8 +238,10 @@ public class LiveAlertMaker {
     }
 
     /**
-     * 놓침 카드 둘째 줄 (11/17 주형: 쉽게). 택시 길을 받았으면 "택시로 가도 12:45 도착 (15분 늦음 · 약 20,000원)" — 시각·분·요금은 TMAP 실제 값.
-     * 요금을 모르면 요금만 빼고, 택시 길을 못 받았으면 예전 문구 ("가장 빠른 방법으로 가도 …보다 N분 늦어요")
+     * 놓침 카드 둘째 줄 문구.
+     *   - 택시로도 늦음: "택시로 가도 늦어요"
+     *   - 택시로 제시간: "택시로 가도 12:45 도착 (제시간 · 약 20,000원)" (시각·요금은 TMAP 실제 값, 요금을 모르면 요금만 뺌)
+     *   - 택시 길을 못 받음: "가장 빠른 방법으로 가도 …보다 N분 늦어요"
      */
     String makeLostText(StatusContext context, Stop fixedStop) {
         Integer taxiArrive = context.getTaxiArrive();
@@ -232,13 +250,14 @@ public class LiveAlertMaker {
         }
         int late = taxiArrive - Geo.toMinutes(fixedStop.getTime());
         if (late > 0) {
-            return "택시로 가도 늦어요"; // 11/19 PPT 14장: 시각·분·요금 대신 한마디로 (늦는 시각은 카드 첫 줄 "13:05 도착 · 35분 늦음")
+            return "택시로 가도 늦어요"; // 짧게 한마디만. 늦는 시각은 카드 첫 줄에 있어요 ("13:05 도착 · 35분 늦음")
         }
         String lateText = "제시간";
         String fare = context.getTaxiFare() == null || context.getTaxiFare() <= 0 ? "" : " · 약 " + String.format("%,d", context.getTaxiFare()) + "원";
         return "택시로 가도 " + Geo.toHhmm(taxiArrive) + " 도착 (" + lateText + fare + ")";
     }
 
+    /** 놓침 문구의 시각 이름: 식당·카페·술집이면 "예약 시각", 그 밖(광장 등)은 "약속 시각" */
     private String toTimeWord(StatusContext context) {
         return context.isFixedMeal() ? "예약 시각" : "약속 시각";
     }
@@ -248,7 +267,7 @@ public class LiveAlertMaker {
         return Boolean.TRUE.equals(stop.getFixed());
     }
 
-    /** 계획 시각이 지났는데 안 간 예약(고정) 일정 첫 칸 (없으면 null). 느슨한 곳은 시간이 밀릴 뿐이라 안 봄 (11/08) */
+    /** 계획 시각이 지났는데 안 간 예약(고정) 일정 첫 칸 (없으면 null). 느슨한 곳은 시간이 밀릴 뿐이라 안 봄 */
     private Stop findMissedFixed(StatusContext context) {
         for (Stop stop : context.getMissedStops()) {
             if (isFixed(stop)) {
@@ -269,7 +288,7 @@ public class LiveAlertMaker {
         return eta != null && Geo.toMinutes(nextStop.getTime()) - eta > DEMO_ROOMY_SLACK_MIN;
     }
 
-    /** 남은 분이 −10~10 안이면 LeaveInfo, 아니면 null */
+    /** 출발까지 남은 분이 −10~10 안이면 LeaveInfo (3분 뒤 출발 → 3, 2분 지남 → −2), 아니면 null */
     private LeaveInfo toLeave(Stop stop, int leaveAt, int minutesLeft, String to, boolean isAtStop) {
         if (Math.abs(minutesLeft) > LEAVE_WINDOW_MIN) {
             return null;
@@ -286,7 +305,8 @@ public class LiveAlertMaker {
 
     /**
      * 영업 알림 (남은 칸 중 첫 번째 하나, 없으면 null)
-     *  - 도착할 때 닫힘·휴무: danger / 열려 있지만 머무는 시간을 다 못 채움: warn
+     *  - 도착할 때 닫힘·휴무: danger
+     *  - 열려 있지만 머무는 시간을 다 못 채움: warn
      */
     private LiveAlert makeClosedAlert(StatusContext context) {
         for (Stop stop : context.getTodayStops()) {
@@ -313,7 +333,7 @@ public class LiveAlertMaker {
         return Boolean.TRUE.equals(open.getOpen()) && open.getMinutesLeft() != null && open.getMinutesLeft() < stay;
     }
 
-    /** 출발 알림: 10분 전·5분 전·지금·지남 묶음을 key에 넣어 묶음이 바뀔 때만 새로 울리게 함 (11/19: 예전엔 1분마다) */
+    /** 출발 알림. 묶음(10분 전·5분 전·지금·지남)을 key에 넣어, 묶음이 바뀔 때만 새로 울려요 (1분마다 울리면 시끄러워서) */
     private LiveAlert makeLeaveAlert(LeaveInfo leave) {
         int left = leave.getMinutesLeft();
         String title = Geo.toDuration(left) + " 뒤 출발해야 해요";

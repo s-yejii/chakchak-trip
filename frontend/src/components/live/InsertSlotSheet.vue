@@ -1,17 +1,18 @@
 <script setup>
 import { toDuration } from '@/utils/time'
-// 일정에 넣기 전에 순서 정하기 (④ 11/13). 구글 지도·카카오맵 "경유지 추가"처럼:
-//   새 장소가 남은 일정 목록에 끼워져 강조돼 보이고, 오른쪽 손잡이(≡)를 끌어 원하는 자리로 옮겨요 (위아래 화살표키도 됨)
-//   왼쪽 번호는 넣은 뒤의 일정 번호 (지도 핀 번호와 같음: 옮기면 지도 핀 번호도 같이 바뀜)
-//   놓을 때마다 POST /live/preview(저장 안 함)로 바뀐 시각을 받고 지도에 전체 경로를 그려요
-//   [이 순서로 넣기] → POST /live/insert (afterStopId = 새 장소 바로 앞 칸)
-// 일정 순서 바꾸기 끌기는 일정 편집(TripTimeline)과 같은 방식: 손가락 아래 칸의 위쪽 절반이면 그 앞, 아래쪽 절반이면 그 뒤
+// 넣을 순서 정하기 시트: [일정에 넣기]를 누르면 떠요 (구글 지도·카카오맵의 "경유지 추가"처럼)
+//   1. 새 장소가 남은 일정 목록 사이에 강조돼 끼워져 보여요
+//   2. 오른쪽 손잡이(≡)를 끌어 원하는 자리로 옮겨요 (위아래 화살표키도 돼요)
+//   3. 놓을 때마다 POST /live/preview(저장 안 함)로 바뀐 시각을 받고, 지도에 전체 경로를 그려요
+//   4. [이 순서로 넣기] → POST /live/insert (afterStopId = 새 장소 바로 앞 칸)
+// 왼쪽 번호 = 넣은 뒤의 일정 번호. 지도 핀 번호와 같아서, 옮기면 핀 번호도 같이 바뀌어요
+// 끌기 규칙은 일정 편집(TripTimeline)과 같아요: 손가락 아래 칸의 위쪽 절반이면 그 앞, 아래쪽 절반이면 그 뒤
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { insertPlace, previewPlan } from '@/api/trips'
 import { showToast } from '@/utils/toast'
 import '@/assets/css/live-panel.css'
 
-const CAFE_STAY_MIN = 30 // 새 칸 머무는 시간: 서버 일정에 넣기(LiveServiceImpl.getStay)와 같은 규칙. 카페는 서버가 다음 예약 5분 전 도착에 맞춰 바꿔요 (11/17 CafeStay)
+const CAFE_STAY_MIN = 30 // 새 칸 머무는 시간(분): 카페 30, 그 밖 60 (서버 LiveServiceImpl.getStay와 같은 규칙). 카페는 서버가 다음 예약 5분 전 도착에 맞춰 다시 정해요 (CafeStay)
 const OTHER_STAY_MIN = 60
 
 const props = defineProps({
@@ -22,7 +23,11 @@ const props = defineProps({
   fromName: { type: String, default: '지금 위치' }, // 맨 위 출발 줄 (지금 있는 칸 이름 또는 지금 위치)
   firstNo: { type: Number, default: 1 }, // 남은 첫 칸의 일정 번호 (여행 중 화면·지도 핀 번호)
 })
-// close: 뒤로(장소 카드로), route: 바뀐 순서의 전체 경로선 [[위도, 경도], ...], slot: 새 장소 자리 (지도 핀 번호를 맞춤)
+// 부모에게 알리는 것
+//   close: 뒤로 (장소 카드로)
+//   added: 다 넣음 (안내 문구)
+//   route: 바뀐 순서의 전체 경로선 [[위도, 경도], ...]
+//   slot: 새 장소 자리 (지도 핀 번호를 맞춤)
 const emit = defineEmits(['close', 'added', 'route', 'slot'])
 
 const slot = ref(0) // 새 장소 자리: 0이면 첫 칸 앞(바로 다음), i면 i번째 칸 뒤
@@ -48,7 +53,7 @@ const newEta = computed(() => {
   return added ? added.eta : ''
 })
 
-// 처음엔 바로 다음 자리(지금 동작과 같음)
+// 처음 열거나 장소가 바뀌면 바로 다음 자리(slot 0)부터
 watch(() => props.place.id, () => {
   result.value = null
   moveTo(0)
@@ -113,7 +118,7 @@ const dropSlot = ref(null) // 놓으면 갈 자리
 const dropTop = ref(0) // 놓을 자리 표시 선 위치(px, 목록 안). 줄을 끼워 넣지 않아 목록이 흔들리지 않음
 const listBox = ref(null)
 let startY = 0
-let frame = 0 // 손가락 움직임은 화면 한 장(requestAnimationFrame)에 한 번만 처리
+let frame = 0 // 손가락 움직임은 화면을 한 번 그릴 때(requestAnimationFrame)마다 한 번만 처리
 let lastEvent = null
 let scale = 1 // 화면이 폰 크기로 줄어 있으면 그 비율 (일정 편집과 같음)
 
@@ -129,7 +134,8 @@ function startDrag(e) {
   window.addEventListener('pointerup', endDrag)
   window.addEventListener('pointercancel', endDrag)
 }
-// 손가락 아래 줄(끄는 줄은 pointer-events: none이라 아래 줄이 잡힘)의 위쪽 절반이면 그 앞, 아래쪽 절반이면 그 뒤
+// 손가락 아래 줄의 위쪽 절반이면 그 앞, 아래쪽 절반이면 그 뒤에 놓아요
+//   (끄는 줄은 pointer-events: none이라 그 아래 줄이 잡혀요)
 function onDrag(e) {
   lastEvent = e
   if (!frame) frame = requestAnimationFrame(applyDrag)

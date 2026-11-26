@@ -14,6 +14,6 @@ public class PlaceAskResult {
     private String sql;            // AI가 쓴 SQL. 빈칸(:route 등) 그대로라 좌표는 없음. "이렇게 찾았어요"에 보여 줌
     private Integer slack;         // 다음 일정까지 지금 여유(분). 없으면 null
     private String band;           // 지도에 그릴 가는 길 띠 (GeoJSON). 가는 길로 찾지 않았으면 null
-    private AskArea area;          // 내 위치 대신 기준으로 삼은 곳 ("강남역 근처" 등, 11/18). 내 위치 기준이면 null
+    private AskArea area;          // 내 위치 대신 기준으로 삼은 곳 ("강남역 근처" 등). 내 위치 기준이면 null
     private List<AskedPlace> places = new ArrayList<>();
 }

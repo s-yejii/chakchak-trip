@@ -1,8 +1,10 @@
 <script setup>
-// S13-b 핀 눌러 미리 바꾸기 (④): 남은 장소 하나를 순서 바꾸기 / 머무는 시간 바꾸기 / 빼기
+// S13-b 핀 눌러 미리 바꾸기 (④): 여행 중 지도에서 고른 핀(고정 일정 아님)을 한 번 더 누르면 떠요
 // 주소: /live/pin?stopId={칸 id}
-// 고를 때마다 서버가 남은 일정을 다시 계산(POST /live/preview, 저장 안 함)해서 고정 일정 여유를 보여 주고,
-// "적용하기"를 누르면 그 계산을 그대로 저장(POST /live/apply)한 뒤 바뀐 일정 화면으로 가요.
+// 남은 장소 하나를 순서 바꾸기 / 머무는 시간 바꾸기 / 빼기 중 하나로 바꿔요.
+// 1. 고를 때마다 서버가 남은 일정을 다시 계산해요 (POST /live/preview, 저장 안 함)
+//    그 결과로 여유(고정 일정에 도착하고 남는 시간)를 보여 줘요
+// 2. [적용하기]를 누르면 그 계산을 그대로 저장(POST /live/apply)하고 바뀐 일정 화면으로 가요
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import BottomSheet from '@/components/common/BottomSheet.vue'
@@ -17,9 +19,9 @@ import { showToast } from '@/utils/toast'
 import { goBack } from '@/utils/back'
 import { updateStop } from '@/api/trips'
 
-const STAY_EXTRA_MAX = 60 // 슬라이더 최대: 기존 + 60분
+const STAY_EXTRA_MAX = 60 // 슬라이더 최대: 기존 머묾 + 60분 (10분 단위로 올림)
 const STAY_STEP = 10
-const PREVIEW_WAIT_MS = 400 // 슬라이더를 멈추고 이만큼 지나면 계산
+const PREVIEW_WAIT_MS = 400 // 슬라이더를 멈추고 0.4초 지나면 계산
 const PIN_MAP_PADDING = { top: 80, right: 60, bottom: 470, left: 60 }
 const ORDER_TEXT = ['다음 장소', '그다음 장소']
 
@@ -28,7 +30,7 @@ const router = useRouter()
 const replan = useReplanStore()
 const stopId = Number(route.query.stopId)
 
-const choice = ref(null) // swap | stay | skip
+const choice = ref(null) // 고른 방법: swap(순서 바꾸기) | stay(머묾 바꾸기) | skip(빼기)
 const stay = ref(0)
 const results = ref({ swap: null, stay: null, skip: null }) // 고른 것마다 서버 계산
 const isAsking = ref(false)
@@ -103,7 +105,8 @@ function previewSkip() {
   runPreview('skip', idList().filter((item) => item.id !== stopId))
 }
 
-// 마지막 한 곳 빼기: 대안 적용 대신 ②의 일정 칸 수정으로 state만 skipped
+// 남은 마지막 한 곳 빼기: 계산할 일정이 없어서 대안 적용 대신
+//   ②의 일정 칸 수정(updateStop)으로 state만 'skipped'로 바꿔요
 async function skipLastStop() {
   const original = replan.trip.stops.find((item) => item.id === stopId)
   const form = { time: original.time, stay: original.stay, state: 'skipped', mode: original.mode, memo: original.memo, importance: original.importance }
@@ -112,7 +115,7 @@ async function skipLastStop() {
   router.replace('/live')
 }
 
-// 슬라이더: 0분이면 뺄지 묻고, 아니면 멈춘 뒤 계산
+// 슬라이더가 움직이면: 0분이면 뺄지 묻고, 아니면 멈춘 뒤(PREVIEW_WAIT_MS) 계산
 watch(stay, (minutes) => {
   if (!stop.value || minutes === stop.value.stay && choice.value !== 'stay') return
   choice.value = 'stay'

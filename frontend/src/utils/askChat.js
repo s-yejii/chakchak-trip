@@ -1,7 +1,9 @@
-// AI에게 묻기 대화 기억 (④ 11/13): 한 여행에서 주고받은 말·찾은 곳을 이 브라우저에 남겨요 (localStorage)
-// 패널을 닫았다 열거나 새로고침해도 그대로. 너무 길어지지 않게 마지막 MAX_MESSAGES개만
-//   구분: 저장 이름 = tripbiseo.askChat.{여행 id}-{시작 날짜} (DB를 다시 만들어 여행 id가 겹쳐도 다른 여행으로)
-//   지우기: 여행을 끝낼 때 그 여행 대화(clearChat), 로그아웃할 때 전부(clearAllChats, ① 로그아웃에서 불러 달라고 요청)
+// AI에게 묻기 대화 기억 (④): 한 여행에서 주고받은 말·찾은 곳을 이 브라우저(localStorage)에 남겨요
+// 패널을 닫았다 열거나 새로고침해도 그대로예요. 너무 길어지지 않게 마지막 MAX_MESSAGES(60)개만 남겨요.
+//   저장 이름: tripbiseo.askChat.{여행 id}-{시작 날짜}
+//     DB를 다시 만들어 여행 id가 겹쳐도 다른 여행으로 보려고 날짜를 붙여요
+//   지우기: 여행을 끝내면 그 여행 대화만 (clearChat)
+//           로그아웃하면 전부 (clearAllChats, ① 내 정보 화면의 로그아웃에서 불러요)
 const KEY_PREFIX = 'tripbiseo.askChat.'
 const MAX_MESSAGES = 60
 

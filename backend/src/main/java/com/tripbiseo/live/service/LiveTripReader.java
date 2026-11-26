@@ -14,7 +14,7 @@ import lombok.RequiredArgsConstructor;
  *   1. 400 "내 위치를 먼저 찾아 주세요." (lat·lng 없음)
  *   2. 404 "여행을 찾을 수 없어요." (②의 getTrip이 던짐)
  *   3. 400 "진행 중인 여행이 아니에요. …" (status ≠ ongoing)
- * track·status·alternatives·apply·assist·recommend·insert가 모두 같은 순서라 한 곳에 둠.
+ * 여행 중 API(track·status·alternatives·apply 등)가 모두 같은 순서라 한 곳에 둠.
  */
 @Component
 @RequiredArgsConstructor

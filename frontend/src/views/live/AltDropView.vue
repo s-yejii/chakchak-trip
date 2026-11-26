@@ -1,8 +1,12 @@
 <script setup>
 import { toDuration } from '@/utils/time'
-// S16-b 대안 · 한 곳 빼기 (④): 남은 장소 중 뺄 곳을 고르고, 남는 시간을 다음 장소에 쓸지 정해요
-// 뺄 수 있는 곳마다 "빼면 어떻게 되는지"를 서버가 계산(POST /live/preview)하고, 고른 대로 적용(POST /live/apply)해요.
-// 고정 일정은 뺄 수 없어요. 꼭 갈 곳은 자물쇠를 보여 주고, 누르면 한 번 더 물어본 뒤 뺄 수 있어요.
+// S16-b 대안 · 한 곳 빼기 (④): 대안 고르기 화면 위 [한 곳 빼기] 탭으로 들어와요
+// 남은 장소 중 뺄 곳 하나를 고르고, 남는 시간을 다음 장소에 쓸지 정해요.
+// 1. 뺄 수 있는 곳마다 "빼면 어떻게 되는지"를 서버가 미리 계산해요 (POST /live/preview)
+// 2. 고른 대로 일정에 적용해요 (POST /live/apply)
+// 여유: 고정 일정에 도착하고 남는 시간(분)이에요. 음수면 늦어요.
+// 고정 일정(예약·공연처럼 시각이 정해진 칸)은 뺄 수 없어요.
+// 꼭 갈 곳은 자물쇠가 보이고, 누르면 한 번 더 물어본 뒤 뺄 수 있어요.
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import TopBar from '@/components/common/TopBar.vue'
@@ -15,13 +19,13 @@ import { useReplanStore } from '@/stores/replan'
 import { imageFor } from '@/utils/mapView'
 import { showToast } from '@/utils/toast'
 
-const BUFFER_MIN = 10 // 남는 시간을 다음 장소에 줄 때 남겨 둘 여유 (실제 길찾기가 추정보다 몇 분 길 수 있어서)
-const EXTRA_DIVIDE = 2 // 다음 장소에는 뺀 곳 머묾의 절반까지만 더 줌
+const BUFFER_MIN = 10 // 남는 시간을 다음 장소에 줄 때 남겨 둘 여유(분). 실제 길찾기가 추정보다 몇 분 길 수 있어서
+const EXTRA_DIVIDE = 2 // 다음 장소에는 뺀 곳 머묾의 절반까지만 더 줌 (예: 60분 머물 곳을 빼면 최대 30분)
 const STEP_MIN = 5
 
 const router = useRouter()
 const replan = useReplanStore()
-const results = ref({}) // 칸 id → 그 칸을 뺐을 때 계산
+const results = ref({}) // 칸 id → 그 칸을 뺐을 때 서버 계산 결과
 const dropId = ref(null) // 고른 뺄 곳
 const useExtra = ref(true) // 남는 시간을 다음 장소에 쓰기
 const final = ref(null) // 고른 대로(남는 시간 포함) 계산한 결과
@@ -41,13 +45,15 @@ onMounted(async () => {
   dropId.value = recommendedDropId()
 })
 
-// 숙소는 빼지 않음 (11/08: 숙소 도착은 마감이 아니라 늦어지면 뒤로 밀릴 뿐)
+// 추천할 뺄 곳 후보: 고정 일정·꼭 갈 곳·숙소는 빼요
+// 숙소 도착은 마감이 아니라 늦어지면 뒤로 밀릴 뿐이라 뺄 이유가 없어요
 const isStay = (stop) => /숙소|호텔|숙박|모텔|게스트하우스/.test(stop.category || '') || /^(숙소|예약해 둔 숙소)/.test(stop.memo || '')
 const droppable = computed(() => replan.stops.filter((stop) => !stop.fixed && stop.importance !== 'must' && !isStay(stop)))
 const basisName = computed(() => (replan.basisStop ? replan.basisStop.name : '마지막 일정'))
 const dropStop = computed(() => replan.stops.find((stop) => stop.id === dropId.value) || null)
 
-// 서버 추천(B 한 곳 빼기)이 뺀 곳, 없으면 빼면 여유가 가장 큰 곳
+// 처음에 골라 둘 곳: 서버 추천 대안 B(한 곳 빼기)가 뺀 곳
+// 그런 곳이 없으면, 뺐을 때 여유가 가장 큰 곳
 function recommendedDropId() {
   const option = replan.findOption('한 곳 빼기')
   if (option) {
@@ -63,14 +69,15 @@ function recommendedDropId() {
   return best
 }
 
-// 남는 시간을 받을 다음 장소: 뺀 곳 바로 다음 칸 (고정 일정·꼭 갈 곳이 아닐 때만)
+// 남는 시간을 받을 다음 장소: 뺀 곳 바로 다음 칸 (고정 일정이 아닐 때만)
 const extra = computed(() => {
   if (!dropStop.value || !results.value[dropId.value]) return null
   const index = replan.stops.indexOf(dropStop.value)
   const next = replan.stops[index + 1]
   if (!next || next.fixed) return null
   const isBeforeBasis = index + 1 < replan.stops.indexOf(replan.basisStop)
-  // 뺀 곳 머묾의 절반까지, 고정 일정 앞이면 여유를 10분은 남김
+  // 더 줄 시간: 뺀 곳 머묾의 절반까지 (5분 단위로 내림)
+  // 기준 칸(basisStop, 늦으면 안 되는 고정 일정) 앞이면 여유를 BUFFER_MIN(10분)은 남겨요
   const half = dropStop.value.stay / EXTRA_DIVIDE
   const room = isBeforeBasis ? results.value[dropId.value].slackMin - BUFFER_MIN : half
   const minutes = Math.floor(Math.min(half, room) / STEP_MIN) * STEP_MIN
@@ -83,7 +90,7 @@ const extraText = computed(() => {
   return `${extra.value.stop.name} ${toDuration(extra.value.stop.stay)} → ${toDuration(extra.value.stop.stay + extra.value.minutes)}`
 })
 
-// 뺄 곳을 빼고, (있으면) 다음 장소 머묾을 늘린 목록
+// 서버에 보낼 목록: id 칸을 빼고, extraInfo가 있으면 다음 장소 머묾을 늘려요
 function listWithout(id, extraInfo) {
   const list = []
   for (const stop of replan.stops) {
@@ -94,7 +101,7 @@ function listWithout(id, extraInfo) {
   return list
 }
 
-// 고른 것·남는 시간 쓰기가 바뀌면 적용할 일정을 다시 계산
+// 뺄 곳이나 [남는 시간 다음 곳에]가 바뀌면 적용할 일정을 다시 계산해요
 watch([dropId, useExtra], async () => {
   final.value = null
   if (!dropId.value) return
@@ -110,7 +117,7 @@ watch([dropId, useExtra], async () => {
   }
 })
 
-// 꼭 갈 곳 확인 창에서 "빼기"
+// 꼭 갈 곳 확인 창에서 [빼기]를 눌렀을 때
 function confirmDrop() {
   dropId.value = askingStop.value.id
   askingStop.value = null

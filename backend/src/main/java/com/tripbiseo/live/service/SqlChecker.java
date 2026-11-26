@@ -35,10 +35,16 @@ import net.sf.jsqlparser.statement.select.SelectItem;
 import net.sf.jsqlparser.util.TablesNamesFinder;
 
 /**
- * ④ AI(Gemini)가 쓴 SQL 검사. 통과한 SQL만 AskSqlRunner가 ask_reader 계정으로 실행해요.
- * 검사: 글자(#{ ${ ; 주석) → 문법 → SELECT 하나 → 첫 칸 id → 표 → 함수 → 빈칸 → 숫자 상한 → LIMIT
- * 통과하면 빈칸 :route·:me·:next → ST_GeogFromText(#{route}) 처럼, :slack → #{slack}으로 바꿔요 (MyBatis가 값을 안전하게 넣음)
- * :prev(앞 결과 id, 11/13)는 "id IN (:prev)" 꼴로만 쓸 수 있고 → id IN (SELECT unnest(string_to_array(#{prev}, ',')))
+ * ④ AI(Gemini)가 쓴 SQL 검사기. JSqlParser로 SQL을 조각조각 읽어서 봐요.
+ * 통과한 SQL만 AskSqlRunner가 ask_reader(묻기용 뷰만 읽을 수 있는 DB 계정)로 실행해요.
+ * 검사 순서:
+ *   1. 글자: #{ ${ ; 주석이 없는지
+ *   2. 문법이 맞는지, SELECT 하나인지, 첫 칸이 id인지
+ *   3. 표·함수·빈칸이 허용 목록에 있는지, 숫자가 상한 안인지
+ *   4. LIMIT 맞추기 (없거나 10보다 크면 10)
+ * 빈칸(:route 같은 이름)은 통과하면 MyBatis 값 자리로 바꿔요. 값은 MyBatis가 안전하게 넣어요.
+ *   :route·:me·:next → ST_GeogFromText(#{route}) 꼴,  :slack → #{slack}
+ *   :prev(앞 결과 id)는 "id IN (:prev)" 꼴로만 → id IN (SELECT unnest(string_to_array(#{prev}, ',')))
  * 덜 돌아가는 순·가까운 순이면 orderBy를 적고 후보를 5곳까지 넉넉히 뽑아요 (WalkRanker가 실제 걷는 길로 다시 줄 세움)
  */
 @Component
@@ -47,7 +53,7 @@ public class SqlChecker {
     private static final int MAX_LIMIT = 10;          // 결과는 많아야 10곳
     private static final int MAX_DETOUR_MIN = 15;     // 돌아가는 시간 상한(분)
     private static final int MAX_METERS = 1000;       // ST_DWithin 반경 상한(m)
-    private static final int MOOD_POOL = 30;          // 분위기 질문이면 후보 30곳을 뽑아 리뷰 RAG가 다시 고름 (11/15)
+    private static final int MOOD_POOL = 30;          // 분위기 질문이면 후보 30곳을 뽑아 리뷰 RAG가 다시 고름
     private static final int RERANK_POOL = 5;         // 다시 잴 후보 수. 1곳마다 길찾기 2번이라 5곳이면 1 + 5×2 = 11번
     private static final Set<String> ALLOWED_TABLES = Set.of("ask_place", "ask_review");
     private static final Set<String> ALLOWED_FUNCTIONS = Set.of(
@@ -63,7 +69,7 @@ public class SqlChecker {
         return checkSql(sql, false);
     }
 
-    /** 검사 + 분위기 질문이면(hasMood) 후보를 넉넉히 뽑게 LIMIT을 늘림 (리뷰 RAG가 그 안에서 다시 고름, 11/15) */
+    /** 검사 + 분위기 질문(hasMood)이면 LIMIT을 30으로 늘려 후보를 넉넉히 뽑음 (리뷰 RAG가 그 안에서 다시 고름) */
     public SqlCheck checkSql(String sql, boolean hasMood) {
         String text = sql == null ? "" : sql.trim();
         if (text.endsWith(";")) {
@@ -230,7 +236,10 @@ public class SqlChecker {
         return expression;
     }
 
-    /** 다시 줄 세울 거면 사용자가 원한 개수를 적어 두고, LIMIT을 5보다 작으면 5로 (직선 1등이 실제 걸음 1등이 아닐 수 있어서) */
+    /**
+     * 다시 줄 세울 때: 사용자가 원한 개수를 적어 두고, LIMIT이 5보다 작으면 5로 늘림.
+     * 직선으로 1등인 곳이 실제 걸음으로도 1등이라는 보장이 없어서예요
+     */
     private void widenLimitForRerank(PlainSelect select, SqlCheck check) {
         long want = ((LongValue) select.getLimit().getRowCount()).getValue(); // fixLimit 뒤라 늘 숫자
         check.setWantLimit((int) want);

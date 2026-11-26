@@ -11,13 +11,18 @@ import com.tripbiseo.live.dto.ReviewText;
 import com.tripbiseo.live.dto.ReviewVector;
 
 /**
- * ④ 리뷰 RAG: 리뷰 임베딩 (review_embedding). SQL은 resources/mapper/live/ReviewEmbeddingMapper.xml
- * 시연 동선 장소 500m 안, 가게마다 긴 리뷰 6개만 임베딩해요 (약 1,830개, 무료 한도 하루 약 1,000개 때문에 11/15·16에 줄임)
+ * ④ 리뷰 RAG: 리뷰 임베딩(글의 뜻을 숫자 배열로 바꾼 것) 표 review_embedding.
+ * SQL은 resources/mapper/live/ReviewEmbeddingMapper.xml
+ * 임베딩 범위: 시연 동선 장소 500m 안, 가게마다 긴 리뷰 6개만 (약 1,830개).
+ * Gemini 무료 한도가 하루 약 1,000개라 범위를 줄였어요.
  */
 @Mapper
 public interface ReviewEmbeddingMapper {
 
-    /** 아직 임베딩이 없는 시연 동선 리뷰를 count개 (minLength자 이상, 가게마다 긴 순 perPlace개 안에서, 리뷰 id 순) */
+    /**
+     * 아직 임베딩이 없는 시연 동선 리뷰를 count개, 리뷰 id 순으로.
+     * minLength자 이상인 리뷰 중 가게마다 긴 순 perPlace개 안에서만 골라요
+     */
     List<ReviewText> selectReviewToEmbedList(@Param("count") int count, @Param("minLength") int minLength,
                                              @Param("perPlace") int perPlace);
 
@@ -27,7 +32,10 @@ public interface ReviewEmbeddingMapper {
     /** 임베딩 여러 개를 INSERT 한 문장으로 저장 (이미 있으면 건너뜀) */
     void insertReviewEmbeddingList(@Param("list") List<ReviewVector> list, @Param("model") String model);
 
-    /** 후보 가게들의 리뷰(minLength자 이상) 중 질문(query 임베딩)과 가까운 리뷰를 가게마다 perPlace개 (가게별 가까운 순) */
+    /**
+     * 후보 가게마다 질문(query 임베딩)과 가장 가까운 리뷰 perPlace개, 가게별 가까운 순.
+     * minLength자 이상 리뷰만, 같은 model로 만든 임베딩끼리만 비교해요
+     */
     List<MoodReview> selectMoodReviewList(@Param("query") String query, @Param("placeIds") List<String> placeIds,
                                           @Param("perPlace") int perPlace, @Param("minLength") int minLength,
                                           @Param("model") String model);
