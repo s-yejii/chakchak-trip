@@ -20,7 +20,7 @@ public static class Palette
         { "Sidewalk", new Color(0.72f, 0.71f, 0.68f) },  // 인도 (그림이 없을 때 색)
         { "Curb", new Color(0.70f, 0.70f, 0.68f) },      // 연석·축대 (화강석)
         { "Wire", new Color(0.12f, 0.12f, 0.13f) },      // 전선
-        { "Route", new Color(0.16f, 0.46f, 1.00f) },     // 걸은 경로 선
+        { "Route", new Color(0.95f, 0.16f, 0.16f) },     // 다닌 경로 선 (11/23 피드백: 파랑 → 빨강, 이동 수단 구분 없이 한 색)
         { "Pin", new Color(0.93f, 0.36f, 0.24f) },       // 다녀온 곳 핀·걷는 사람
         { "RoofTile", new Color(0.50f, 0.27f, 0.22f) },  // 단독주택 기와지붕
         { "HanokRoof", new Color(0.25f, 0.26f, 0.28f) }, // 한옥 기와 (짙은 회색)
@@ -33,10 +33,10 @@ public static class Palette
         { "Props", Color.white },                        // 소품 (색은 꼭짓점마다 따로)
         { "Tree", Color.white },                         // 나무 (색은 꼭짓점마다 따로)
         { "Water", new Color(0.12f, 0.22f, 0.25f) },     // 강물 (짙은 청록, 하늘이 비침)
-        { "RideLine", new Color(1.00f, 0.55f, 0.15f) },  // 지하철·택시로 지나간 구간 선
-        { "BoatLine", new Color(0.88f, 0.96f, 1.00f) },  // 배가 지나간 물길 선
-        { "SubwayLine", new Color(0.56f, 0.40f, 0.95f) }, // 지하철 구간 선 (땅속이라 하늘로 휜 선)
-        { "BusLine", new Color(0.16f, 0.66f, 0.36f) },   // 버스 구간 띠 (서울 지선버스 초록)
+        { "RideLine", new Color(0.95f, 0.16f, 0.16f) },  // 지하철·택시로 지나간 구간 선 → 11/23: 경로 선 색을 하나로 통일 (걷기 선과 같은 파랑)
+        { "BoatLine", new Color(0.95f, 0.16f, 0.16f) },  // 배가 지나간 물길 선 → 11/23: 경로 선 색을 하나로 통일 (걷기 선과 같은 파랑)
+        { "SubwayLine", new Color(0.95f, 0.16f, 0.16f) }, // 지하철 구간 선 (땅속이라 하늘로 휜 선) → 11/23: 경로 선 색을 하나로 통일 (걷기 선과 같은 파랑)
+        { "BusLine", new Color(0.95f, 0.16f, 0.16f) },   // 버스 구간 띠 (서울 지선버스 초록) → 11/23: 경로 선 색을 하나로 통일 (걷기 선과 같은 파랑)
     };
 
     private static readonly Dictionary<string, Material> made = new Dictionary<string, Material>(); // 그 자리에서 만든 재질 (한 번만 만들게)

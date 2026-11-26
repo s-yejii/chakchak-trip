@@ -60,6 +60,9 @@ public class RoutePlayer : MonoBehaviour
     private bool isNavigation;  // 따라가기 중 사람 눈높이로 보기
     private int startClock;     // 경로 0분이 첫날 몇 시 몇 분인지 (화면 시계용)
     private int segment;        // 지금 몇 번째 점과 다음 점 사이인지
+    private const float MINUTES_PER_DAY = 1440f; // 하루 = 1440분
+    private int[] runStarts;        // 경로 줄 조각마다 시작 점 번호 (RetroMap이 넘겨줌, 11/23)
+    private GameObject[] runLines;  // 조각마다 줄 묶음. 그날 지금까지 지나온 것만 켬
     private float cameraYaw;    // 카메라가 바라보는 방향(도). 가는 쪽으로 천천히 따라 돎
     private Vector3 cameraVelocity; // SmoothDamp가 기억하는 카메라 속도 (그래야 다음 프레임에 부드럽게 이어짐)
     private float webMinute = -1;   // 웹이 마지막으로 보낸 재생 시각 (경로 0분부터, 없으면 -1). Update가 이 시각으로 부드럽게 따라감
@@ -84,7 +87,7 @@ public class RoutePlayer : MonoBehaviour
         // "지금 여기" 표시: 마스코트 트리피 그림 (11/20, 전에는 회색 알약 모양). 그림 판은 늘 카메라를 마주 봄
         GameObject body = new GameObject("Walker");
         body.transform.SetParent(transform, false);
-        Trippy.Create(body.transform, WALKER_HEIGHT_M);
+        NavArrow.Create(body.transform, WALKER_HEIGHT_M); // 11/23 피드백: 트리피 대신 내비게이션 화살표
         walker = body.transform;
         MakeBoat();
         bus = MakeVehicle("Bus", RouteData.BUS, StreetProps.BuildBus());
@@ -166,10 +169,42 @@ public class RoutePlayer : MonoBehaviour
     {
         Transform lines = transform.Find("RouteLines");
         if (lines == null) return;
-        foreach (Transform line in lines)
+        foreach (Transform run in lines) // 구간 묶음(Run) 안의 지하철 선 (11/23: 구간마다 묶음이 생김)
         {
-            if (line.name == "SubwayLine") line.gameObject.SetActive(isOn);
+            foreach (Transform line in run)
+            {
+                if (line.name == "SubwayLine") line.gameObject.SetActive(isOn);
+            }
         }
+    }
+
+    // 경로 줄 조각 받기: 그날 지금까지 다닌 길만 보이게 하려고 (11/23)
+    public void SetRuns(int[] starts, GameObject[] lines)
+    {
+        runStarts = starts;
+        runLines = lines;
+    }
+
+    // 그날 지금까지 다닌 길만 켬: 조각의 시작 점이 지금 자리(i)보다 앞이고, 같은 날이면 보임
+    //   예) 걸어 올라가는 중이면 나중에 탈 버스 줄은 안 보이고, 2일차에는 1일차 줄이 안 보임
+    private void ShowCurrentRun(int i)
+    {
+        if (runLines == null) return;
+        int today = DayOf(i);
+        for (int k = 0; k < runLines.Length; k++)
+        {
+            if (runLines[k] == null) continue; // 지도를 다시 만드는 중이라 줄이 지워졌으면 건너뜀 (안 건너뛰면 오류로 3D가 멈춤)
+            bool isPassed = runStarts[k] <= i;
+            runLines[k].SetActive(isPassed && DayOf(runStarts[k]) == today);
+        }
+    }
+
+    // 경로 i번째 점이 여행 몇째 날인지 (첫날 = 0). startClock = 경로 0분이 첫날 0시부터 몇 분인지
+    private int DayOf(int i)
+    {
+        int last = route.minutes.Length - 1;
+        if (i > last) i = last;
+        return Mathf.FloorToInt((startClock + route.minutes[i]) / MINUTES_PER_DAY);
     }
 
     // 웹의 [＋ / －] 버튼·마우스 휠: 1 = 가까이, -1 = 멀리 (위에서 보기 거리만 바뀜)
@@ -267,6 +302,7 @@ public class RoutePlayer : MonoBehaviour
         Vector2 at = Vector2.Lerp(from, to, span > 0 ? (minute - route.minutes[i]) / span : 0);
         mode = route.ModeAt(i);
         segment = i;
+        ShowCurrentRun(i);
 
         Vector2 heading = to - from;
         walker.position = new Vector3(at.x, SurfaceAt(at, heading) + WALKER_HEIGHT_M, at.y);

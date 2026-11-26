@@ -21,7 +21,6 @@ img { max-width: 100%; }
 @media (max-width: 760px) {
   .phone { width: 390px; height: 844px; border-radius: 0; background: transparent; box-shadow: none; }
   .phone__screen { left: 0; top: 0; border-radius: 0; }
-  .statusbar { display: none; }
 }
 
 /* 상태바 (시간·배터리) */
@@ -29,6 +28,10 @@ img { max-width: 100%; }
 .statusbar--light { color: #fff; }
 /* 11/08 주형: 위쪽 알림은 상태바 아래에서 내려와요 (시간·배터리가 늘 보이게) → yh.css .noti top */
 .statusbar__icons { display: flex; align-items: center; gap: 6px; }
+/* 폰에서는 진짜 상태바가 있으니 숨겨요. 시연 계정만 남겨요 (시연 시계가 보이고, 두 번 눌러 설정을 열 수 있게) */
+@media (max-width: 760px) {
+  .statusbar:not(.statusbar--demo) { display: none; }
+}
 
 /* 토스트: 아래에 잠깐 뜨는 안내 */
 .toast { position: absolute; left: 16px; right: 16px; bottom: 110px; z-index: 50; display: flex; align-items: center; justify-content: center; text-align: center; min-height: 48px; padding: 10px 16px; border-radius: 8px; background: #18213A; color: #fff; font: 500 14px/20px var(--font-sans); box-shadow: 0 8px 24px rgba(24, 33, 58, .3); }
