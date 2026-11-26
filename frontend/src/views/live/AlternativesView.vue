@@ -1,8 +1,11 @@
 <script setup>
 import { toDuration } from '@/utils/time'
-// S16-a 대안 · 시간 줄이기 (④): 남은 장소의 머무는 시간을 줄여서 고정 일정에 맞춰요
-// 장소를 누르면 S16-a2 슬라이더에서 몇 분 머물지 정해요. 정한 만큼 서버가 다시 계산(POST /live/preview)하고,
-// 적용하면 계산된 일정 그대로 저장(POST /live/apply)해요. 아무것도 안 정하면 서버 추천(A 시간 단축)을 적용해요.
+// S16-a 대안 · 시간 줄이기 (④): 지연 감지 화면의 [대안 N개 보기]로 들어와요
+// 남은 장소에 머무는 시간을 줄여서 고정 일정(예약·공연처럼 시각이 정해진 칸)에 맞춰요.
+// 1. 장소를 누르면 S16-a2 슬라이더에서 몇 분 머물지 정해요
+// 2. 정한 만큼 서버가 다시 계산해요 (POST /live/preview)
+// 3. 아래 버튼을 누르면 계산된 일정 그대로 저장해요 (POST /live/apply)
+// 아무것도 안 정했으면 서버 추천 대안 A(시간 단축)를 적용해요.
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import TopBar from '@/components/common/TopBar.vue'
@@ -27,7 +30,7 @@ onMounted(async () => {
 const isEdited = computed(() => Object.keys(replan.trimPlan).length > 0)
 const recommend = computed(() => replan.findOption('시간 단축'))
 
-// 서버 추천에서 줄인 칸 하나 ("60분 → 30분"이 붙은 첫 칸)
+// 추천 대안 A에서 줄인 칸 하나: change("60분 → 30분")가 붙은 첫 칸
 const recommendStop = computed(() => {
   if (!recommend.value) return null
   const changed = recommend.value.stops.find((stop) => stop.change)
@@ -36,7 +39,7 @@ const recommendStop = computed(() => {
   return { id: changed.id, name: changed.name, cut: original.stay - changed.stay }
 })
 
-// 정한 것들로 다시 계산
+// 사용자가 정한 머묾(trimPlan)으로 서버에 다시 계산
 async function recalc() {
   if (!isEdited.value) {
     result.value = null
@@ -49,7 +52,7 @@ async function recalc() {
   }
 }
 
-// 줄인 시간 합계 (뺀 곳은 머묾 전체)
+// 줄인 시간 합계 (뺀 곳은 머묾 전체를 셈)
 const cutTotal = computed(() => {
   let total = 0
   for (const stop of replan.stops) {
@@ -81,7 +84,7 @@ const button = computed(() => {
   return { text: `${toDuration(cutTotal.value)} 줄이기`, isOff: false }
 })
 
-// 칸 한 줄에 보일 글자
+// 장소 줄 아래 작은 글자: "뺌" / "60분 → 30분" / 원래 머묾
 function rowMeta(stop) {
   const planned = replan.trimPlan[stop.id]
   if (planned === 0) return '뺌'
@@ -148,13 +151,13 @@ async function apply() {
 
         <div style="display: flex; flex-direction: column; gap: 8px">
           <template v-for="stop in replan.stops" :key="stop.id">
-            <!-- 고정 일정: 못 줄여요 -->
+            <!-- 고정 일정 줄 (자물쇠): 못 줄여요 -->
             <div v-if="stop.fixed" class="opt is-locked">
               <img class="thumb" :src="imageFor(stop.category)" alt="" />
               <span class="opt__body"><b class="t-sub">{{ stop.name }}</b><span class="t-cap tn">{{ stop.eta }} 고정</span></span>
               <i class="ic i-lock subtle" aria-hidden="true"></i>
             </div>
-            <!-- 줄일 수 있는 곳 (꼭 갈 곳도 20분까지) -->
+            <!-- 줄일 수 있는 장소 줄: 누르면 슬라이더가 떠요 (꼭 갈 곳은 20분까지) -->
             <RouterLink
               v-else
               :to="'/live/alt/trim?id=' + stop.id"
@@ -198,7 +201,7 @@ async function apply() {
 .scr-Alternatives .tr-row .opt__body{gap:2px}
 .scr-Alternatives .tr-meta{font-size:13px;color:var(--ink-muted);font-variant-numeric:tabular-nums}
 .scr-Alternatives .tr-hint{display:flex;gap:6px;align-items:flex-start;margin:0;font-size:13px;color:var(--ink-muted)}
-/* 줄인 뒤 모습 */
+/* 줄인 뒤 모습 (초록 막대, 줄인 줄은 초록 테두리) */
 .scr-Alternatives .tsum__bar i.ok{background:var(--success)}
 .scr-Alternatives .tsum__res .textlink{margin-left:auto;min-height:24px;padding:0 2px;font-size:12px;font-weight:500}
 .scr-Alternatives .tr-meta s{color:var(--ink-subtle)}

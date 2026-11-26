@@ -25,7 +25,7 @@ public interface PlaceAskMapper {
                                      @Param("me") String me, @Param("next") String next,
                                      @Param("slack") Integer slack, @Param("prev") String prev);
 
-    /** 고른 장소에 정보 붙이기 (+분·점선 시작점은 route가 있을 때만) */
+    /** 고른 장소에 화면용 정보 붙이기. 더 걸리는 분·지도 점선 시작점은 route가 있을 때만 */
     List<AskedPlace> selectAskedPlaceList(@Param("ids") List<String> ids, @Param("route") String route);
 
     /** 지도용 경로 띠 (경로 양옆 meters m) → GeoJSON 글자 */

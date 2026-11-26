@@ -49,7 +49,7 @@ class TrackServiceImplTest {
         trackMapper = mock(TrackMapper.class);
         tripService = mock(TripService.class);
         LiveTripReader liveTripReader = mock(LiveTripReader.class);
-        AutoAdjuster autoAdjuster = mock(AutoAdjuster.class); // 늦게 떠났을 때 자동 조정 (③ 11/08 추가)
+        AutoAdjuster autoAdjuster = mock(AutoAdjuster.class); // 늦게 떠났을 때 자동 조정
         trackService = new TrackServiceImpl(trackMapper, tripService, liveTripReader, autoAdjuster);
 
         trip = new Trip();

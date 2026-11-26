@@ -1,11 +1,15 @@
 <script setup>
-// 놓친 예약과 비슷한 근처 가게 (④ 11/12): 놓침 카드의 [비슷한 근처 가게 찾기]에서 열려요.
-//   POST /live/recommend + similarTo(놓친 장소): 업종(biz_type)이 겹치는 곳, 같은 브랜드 다른 지점 먼저 (AI 안 씀, SQL 반경 검색 + 규칙)
-//   결과는 부모(여행 중 화면) 지도에 핀으로 → 핀을 누르고 [담기] → 놓친 칸 자리에 넣고 바로 다음 목적지로 (POST /live/insert + replaceStopId)
-//   모양·반경 버튼은 근처 찾기(NearSearch, ⑤)와 같게 맞췄어요
-//   11/16 ③(예지 OK): [예약했어요]를 켜고 시각을 고르면 🔒 고정 일정 + 그 시각으로 담아요 (POST /live/insert + reservedTime)
-//   11/16 ③ 요청: 기준 칩 [현위치] [다음 고정 일정 가는 길]. "가는 길"은 놓친 가게와 다음 고정 일정 사이 가운데를 중심으로,
-//     두 곳이 다 들어가는 반경으로 찾아요 (예: 강남 스시도를 놓치면 동서울 가는 길의 잠실 스시이세이). API는 그대로, 넘기는 좌표만 바뀜
+// 비슷한 근처 가게 찾기 패널
+//   놓침 카드(예약을 놓쳤을 때 가운데에 뜨는 카드)의 [비슷한 근처 가게 찾기]에서 열려요
+// 1. 찾기: POST /live/recommend + similarTo(놓친 장소)
+//    업종(biz_type)이 겹치는 곳, 같은 브랜드 다른 지점이 먼저 나와요 (AI 없이 SQL 반경 검색 + 규칙)
+// 2. 고르기: 결과는 부모(여행 중 화면) 지도에 핀으로 → 핀을 누르고 [담기]
+// 3. 담기: 놓친 칸 자리에 넣고 바로 다음 목적지로 (POST /live/insert + replaceStopId)
+//    [예약했어요]를 켜고 시각을 고르면 🔒 고정 일정(시각이 정해진 예약 칸)으로 담아요 (+ reservedTime)
+// 기준 칩: [현위치] / [다음 고정 일정 가는 길]
+//   가는 길 모드: 놓친 가게와 다음 고정 일정의 가운데를 중심으로, 두 곳이 다 들어가는 반경으로 찾아요
+//   예: 강남 스시도를 놓치면 동서울 가는 길의 잠실 스시이세이. API는 같고 넘기는 좌표만 달라요
+// 모양·반경 버튼은 근처 찾기(NearSearch, ⑤)와 같게 맞췄어요
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { askRecommend, insertPlace } from '@/api/trips'
@@ -14,10 +18,10 @@ import { showToast } from '@/utils/toast'
 import { appNow, devMode } from '@/utils/devMode'
 import { photoFor } from '@/utils/placePhoto'
 import { distanceMeters } from '@/utils/geo'
-import '@/assets/css/live-panel.css' // 지도 위 패널 생김새 (AI 채팅·근처 찾기·비슷한 가게 같이, 11/13)
+import '@/assets/css/live-panel.css' // 지도 위 패널 생김새 (AI 채팅·근처 찾기·비슷한 가게 같이)
 
-const DEFAULT_RADIUS = 500 // 처음 반경: 근처 찾기와 같은 값
-const ROUTE_MIN_RADIUS = 500  // 가는 길 반경: 두 곳 사이 거리의 절반, 이 범위 안으로 (서버는 100m~3km)
+const DEFAULT_RADIUS = 500 // 처음 반경 500m (근처 찾기와 같은 값)
+const ROUTE_MIN_RADIUS = 500  // 가는 길 반경 = 두 곳 사이 거리의 절반을 500m~3km 안으로 맞춘 값 (서버 허용은 100m~3km)
 const ROUTE_MAX_RADIUS = 3000
 
 const props = defineProps({
@@ -55,9 +59,10 @@ const isReserved = ref(false) // [예약했어요]를 켰는지
 const reservedTime = ref('')  // 예약 시각 "15:00"
 
 const picked = computed(() => places.value.find((place) => place.id === props.pickedId))
-// 11/19 PPT 15장: 시연 계정에서 스시이세이를 고르면 [예약했어요]가 15:00으로 미리 켜지던 것(11/17)을 뺌 → 시각을 안 골랐는데 예약된 것처럼 보였어요
-//   이제 발표자가 [예약했어요]를 눌러 켜고 시각을 15:00으로 바꿔요 (🔒 예약으로 담아야 한강버스 팝업이 떠요)
-const RESERVE_LEAD_MIN = 30 // [예약했어요]를 켜면 처음 시각 = 지금 + 30분 뒤의 가장 가까운 정각·30분 (12:18 → 13:00)
+// 시연 계정이라도 [예약했어요]를 미리 켜 두지 않아요 (시각을 안 골랐는데 예약된 것처럼 보여서)
+//   발표자가 직접 [예약했어요]를 켜고 시각을 15:00으로 바꿔요
+//   🔒 예약으로 담아야 한강버스 팝업이 떠요
+const RESERVE_LEAD_MIN = 30 // [예약했어요]를 켜면 처음 시각 = 지금 + 30분을 30분 단위로 올린 값 (예: 12:18 → 13:00)
 const RESERVE_STEP_MIN = 30
 
 // 결과·반경이 바뀌면 부모 지도에 핀과 원을 알려 줌 (가는 길이면 원 중심도 같이)
@@ -117,13 +122,14 @@ async function search(meters, center = props.position) {
   }
 }
 
-// [예약했어요] 켜기·끄기. 켤 때 시각이 비어 있으면 지금(시연 시계) + 30분 뒤 가장 가까운 정각·30분을 넣어 둠
-// 11/19 PPT 15장: 비워 두면 시각 칸이 "--:--"로 보여서, 처음엔 가까운 시각(12~13시)을 보여 주고 사용자가 실제 예약 시각으로 고쳐요
+// [예약했어요] 켜기·끄기
+//   켤 때 시각이 비어 있으면 firstReserveTime()으로 가까운 시각을 넣어 둬요 (비워 두면 "--:--"로 보여서)
+//   사용자가 실제 예약 시각으로 고쳐요
 function toggleReserved() {
   isReserved.value = !isReserved.value
   if (isReserved.value && !reservedTime.value) reservedTime.value = firstReserveTime()
 }
-// 지금 + 30분을 30분 단위로 올림 → "13:00". 자정을 넘기면 23:30으로 둠
+// 지금(appNow, 시연 계정이면 시연 시계) + 30분을 30분 단위로 올림 → "13:00". 자정을 넘기면 23:30으로 둬요
 function firstReserveTime() {
   const now = appNow()
   const minutes = now.getHours() * 60 + now.getMinutes() + RESERVE_LEAD_MIN
@@ -131,8 +137,9 @@ function firstReserveTime() {
   return String(Math.floor(rounded / 60)).padStart(2, '0') + ':' + String(rounded % 60).padStart(2, '0')
 }
 
-// 11/20 주형(시연 계정만): 놓친 칸이 예약(🔒)이면 [예약했어요] 없이 담지 않고 먼저 켜서 시각을 고르게 해요
-//   (그냥 담으면 일반 칸으로 들어가 한강버스 카드가 안 뜨고 시나리오에서 벗어났어요). 시각은 미리 안 정하고 발표자가 직접 (11/19 결정)
+// 시연 계정만: 놓친 칸이 예약(🔒)이면 [담기]를 눌러도 바로 담지 않아요
+//   먼저 [예약했어요]를 켜서 시각을 고르게 해요 (시각은 발표자가 직접 골라요)
+//   그냥 담으면 일반 칸으로 들어가 한강버스 카드가 안 떠서, 시연 순서에서 벗어나요
 const isAskReserve = computed(() => devMode.isOn && !!props.stop && !!props.stop.fixed && !isReserved.value)
 
 // 담기: 놓친 칸 자리에 넣고 바로 다음 목적지로 (예약했으면 그 시각 고정 일정으로)
@@ -158,7 +165,7 @@ async function addPicked() {
 
 <template>
   <div class="addbar">
-    <!-- 11/13 디자인: 근처 찾기·AI 채팅과 같은 카드 모양 (동작은 그대로, 닫기는 머리줄로) -->
+    <!-- 지도 아래 패널: 근처 찾기·AI 채팅과 같은 모양 (닫기 X는 머리줄에) -->
     <section class="addcard lp-panel" aria-label="비슷한 근처 가게">
       <header class="lp-head">
         <span class="lp-avatar lp-avatar--similar" aria-hidden="true"><i class="ic ic--s i-food"></i></span>
@@ -180,7 +187,7 @@ async function addPicked() {
           <button type="button" class="iconbtn" aria-label="목록으로" @click="emit('update:pickedId', null)"><i class="ic i-close muted" aria-hidden="true"></i></button>
         </div>
         <p class="lp-place__dist tn">{{ pickedDistText }}</p>
-        <!-- 11/16 ③: 전화·앱으로 예약했으면 시각을 골라 🔒 고정 일정으로 -->
+        <!-- 전화·앱으로 예약했으면 시각을 골라 🔒 고정 일정으로 -->
         <div class="lp-reserve">
           <button type="button" class="chip chip--sm" :class="{ 'is-on': isReserved }" :aria-pressed="isReserved" @click="toggleReserved"><i class="ic ic--s i-lock" aria-hidden="true"></i>예약했어요</button>
           <input v-if="isReserved" v-model="reservedTime" type="time" step="600" class="lp-reserve__time tn" aria-label="예약 시각" />
@@ -188,7 +195,7 @@ async function addPicked() {
         </div>
         <div class="lp-actions" :class="{ 'lp-actions--wide': picked.naverUrl }">
           <button type="button" class="btn btn--secondary btn--md" @click="router.push('/place?id=' + encodeURIComponent(picked.id))">자세히</button>
-          <!-- 11/17 주형: 네이버 가게 페이지 (주소가 있을 때만). 11/19 PPT 15장: 예약 페이지가 아니라 네이버 지도가 열려서 이름을 바꿈 -->
+          <!-- 네이버 지도의 가게 페이지를 열어요 (주소가 있을 때만). 예약 페이지가 아니라서 버튼 이름이 "네이버 지도에서 보기" -->
           <a v-if="picked.naverUrl" :href="picked.naverUrl" target="_blank" rel="noopener" class="btn btn--secondary btn--md lp-actions__map">네이버 지도에서 보기</a>
           <button type="button" class="btn btn--primary btn--md lp-actions__add" :disabled="isAdding" @click="addPicked">
             <i class="ic ic--s i-plus" aria-hidden="true"></i>{{ isAdding ? '담는 중…' : isReserved ? (reservedTime ? reservedTime + ' 예약으로 담기' : '예약 시각을 골라 주세요') : '담기 · 다음 목적지로' }}
@@ -218,7 +225,7 @@ async function addPicked() {
           <template v-else-if="places.length"><i class="ic ic--s i-pin c-navy" aria-hidden="true"></i>{{ places.length }}곳 · 지도에서 핀을 눌러 보세요<template v-if="closedSkipped"> · 지금 문 닫은 {{ closedSkipped }}곳은 뺐어요</template></template>
           <template v-else><i class="ic ic--s i-info" aria-hidden="true"></i>이 반경엔 비슷한 가게가 없어요 · 더 넓게 찾아보세요</template>
         </p>
-        <!-- 11/17 ③: 가는 길이면 이름 목록 (서버 순서 = 평점 4.9·리뷰 1000개 넘는 곳 중 덜 돌아가는 순). 누르면 지도 핀을 누른 것과 같아요 -->
+        <!-- 가는 길 모드면 가게 이름 목록도 보여 줘요 (누르면 지도 핀을 누른 것과 같아요). 순서는 서버 그대로: 평점 4.9·리뷰 1000개 이상인 곳을 덜 돌아가는 순으로 먼저 -->
         <ol v-if="isOnRoute && !isLoading && places.length" class="lp-names">
           <li v-for="(place, index) in places" :key="place.id">
             <button type="button" class="lp-names__item tn" @click="emit('update:pickedId', place.id)">
@@ -242,7 +249,8 @@ async function addPicked() {
 .lp-names__rate{display:inline-flex;align-items:center;gap:2px;white-space:nowrap}
 .lp-names__name{display:inline-flex;align-items:center;gap:6px;min-width:0}
 .lp-names__why{margin:2px 4px 4px;color:var(--ink-muted)}
-/* 11/19: [네이버 지도에서 보기]가 있으면 위 줄에 [자세히]·[네이버] 반반, 아래 줄에 [담기]를 길게 (담기가 반쪽만 있어서 어색했어요) */
+/* [네이버 지도에서 보기]가 있을 때 버튼 배치
+   위 줄: [자세히]·[네이버] 반반, 아래 줄: [담기]를 길게 (담기가 반쪽이면 어색해서) */
 .lp-actions--wide{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
 .lp-actions--wide .lp-actions__map{padding-left:8px;padding-right:8px} /* 글자가 길어 칸 밖으로 나가지 않게 옆 여백만 줄임 */
 .lp-actions--wide .lp-actions__add{grid-column:1 / -1}

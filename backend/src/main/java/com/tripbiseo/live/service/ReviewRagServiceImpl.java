@@ -35,10 +35,10 @@ public class ReviewRagServiceImpl implements ReviewRagService {
 
     private static final int MAX_LIMIT = 5000;
     private static final int TOO_MANY_REQUESTS = 429;
-    private static final int REVIEWS_PER_PLACE = 2;          // 가게마다 근거 리뷰 2개 (지금 규칙 "리뷰 2개 이상에 나와야 인정"과 같음)
-    private static final double MAX_MOOD_DISTANCE = 0.40;    // 이보다 멀면 분위기와 상관없는 가게로 봄 (임시값, 7단계 평가로 정함)
-    private static final int MIN_REVIEW_LENGTH = 20;         // 이보다 짧은 리뷰("좋아요")는 근거로 안 씀 (11/15 시험: 아무 질문에나 가깝게 나옴). 임베딩도 안 함
-    private static final int EMBED_PER_PLACE = 6;            // 임베딩은 가게마다 긴 리뷰 6개만 (무료 한도 때문에, 11/16)
+    private static final int REVIEWS_PER_PLACE = 2;          // 가게마다 근거 리뷰 2개 ("리뷰 2개 이상에 나와야 인정" 규칙과 같은 수)
+    private static final double MAX_MOOD_DISTANCE = 0.40;    // 거리가 이보다 멀면 분위기와 상관없는 가게로 봄 (0이면 뜻이 같음. 임시값, 7단계 평가로 정함)
+    private static final int MIN_REVIEW_LENGTH = 20;         // 20자보다 짧은 리뷰("좋아요")는 임베딩도, 근거로도 안 씀. 짧은 글은 아무 질문에나 가깝게 나와서
+    private static final int EMBED_PER_PLACE = 6;            // 임베딩은 가게마다 긴 리뷰 6개만 (무료 한도 때문에)
 
     private static final int JUDGE_COUNT = 8;                // Gemini에게 보여 줄 후보 수 (벡터 상위 8곳 × 리뷰 2개)
     private static final int KEYWORD_MIN_COUNT = 2;          // 예전 방식: 리뷰 2개 이상에 글자가 나와야 인정
@@ -55,7 +55,7 @@ public class ReviewRagServiceImpl implements ReviewRagService {
     private final AiService aiService;
     private final MemberService memberService;     // 관리 계정 확인 (① 회원 읽기만)
 
-    // 리뷰 RAG 관리 계정 아이디 (쉼표로). 기본 ragadmin (db/20_review_rag.sql로 만드는 계정)
+    // 리뷰 RAG 관리 계정 아이디. 여러 개면 쉼표로 (예: "ragadmin,admin2"). 기본 ragadmin은 db/20_review_rag.sql이 만들어요
     @Value("${RAG_ADMIN_ACCOUNTS:ragadmin}")
     private String adminAccounts;
 
@@ -72,8 +72,9 @@ public class ReviewRagServiceImpl implements ReviewRagService {
     }
 
     /**
-     * 100개씩: 꺼내기 → Gemini로 임베딩 → 저장. 한도(429)에 걸리면 거기서 멈추고 된 만큼 알려 줘요.
-     * @Transactional을 일부러 안 붙여요: 붙이면 한도에 걸릴 때 앞에서 저장한 것까지 전부 취소돼요. 여기선 된 만큼 남기는 게 맞아요
+     * 리뷰를 100개씩 꺼내서 Gemini로 임베딩하고 저장해요.
+     * 한도(429)에 걸리면 거기서 멈추고 된 만큼 알려 줘요.
+     * @Transactional은 일부러 안 붙여요. 붙이면 한도에 걸릴 때 앞에서 저장한 것까지 전부 취소돼서, 된 만큼 남기려고요
      */
     @Override
     public EmbedResult embedReviews(int limit) {
@@ -119,8 +120,11 @@ public class ReviewRagServiceImpl implements ReviewRagService {
     }
 
     /**
-     * 질문을 임베딩 → 후보 가게마다 가까운 리뷰 2개 → 가게 점수 = 2개 거리 평균 → 점수 좋은 순.
-     * 근거 리뷰가 2개가 안 되거나(한 리뷰만 우연히 비슷한 곳) 점수가 MAX_MOOD_DISTANCE보다 나쁘면 뺌
+     * 분위기로 가게 줄 세우기.
+     *   1. 질문을 임베딩
+     *   2. 후보 가게마다 질문과 가장 가까운 리뷰 2개를 찾음
+     *   3. 가게 점수 = 그 2개 거리의 평균. 작을수록 앞
+     * 근거 리뷰가 2개가 안 되거나(한 리뷰만 우연히 비슷한 곳) 점수가 MAX_MOOD_DISTANCE보다 크면 빼요
      */
     @Override
     public List<MoodMatch> rankByMood(List<String> placeIds, String mood) {
@@ -141,7 +145,13 @@ public class ReviewRagServiceImpl implements ReviewRagService {
         return matches;
     }
 
-    /** 분위기 질문: R(벡터로 상위 8곳) → A·G(Gemini가 리뷰를 읽고 맞는 곳만 고름) → 인용 검사. 안 되면 예전 방식·벡터 순위로 */
+    /**
+     * 분위기 질문 (리뷰 RAG).
+     *   R 찾기: 벡터로 상위 8곳
+     *   A·G 넣고 만들기: Gemini가 그 리뷰를 읽고 맞는 곳만 고름
+     *   검사: 인용문이 실제 리뷰에 있는지
+     * 임베딩이 없거나 실패하면 예전 방식(리뷰 글자), Gemini가 실패하면 벡터 순위 그대로
+     */
     @Override
     public List<MoodMatch> findByMood(List<String> placeIds, String mood, String moodWord) {
         if (placeIds == null || placeIds.isEmpty()) {

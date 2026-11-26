@@ -33,22 +33,24 @@ import com.tripbiseo.trip.service.TripService;
 import lombok.RequiredArgsConstructor;
 
 /**
- * ④ 대안 A·B·C 만들기·적용 (POST /live/alternatives, /live/apply). LiveServiceImpl이 너무 커져서 나눔.
+ * ④ 대안 A·B·C 만들기·적용 (POST /live/alternatives, /live/apply). LiveServiceImpl이 너무 커서 따로 둠.
  * 예전 코드: git show backend-v0:backend/src/main/java/com/tripbiseo/service/LiveService.java (alternatives/fit/chain/substitute/apply)
  * 칸 고르기는 LiveStopFinder, 몇 시 도착 계산은 AlternativeCalculator가 해요.
+ * 고정 일정 = 시각을 꼭 지켜야 하는 예약 칸(KTX·회식 등).
+ * 여유(분) = 고정 일정 계획 시각 − 예상 도착. 음수면 지각이에요.
  */
 @Service
 @RequiredArgsConstructor
 public class AlternativeServiceImpl implements AlternativeService {
 
-    private static final int TRIM_STAY_DIVIDE = 2;  // A 시간 단축: 한 칸에서 최대 이만큼 나눈 만큼까지 줄임 (절반)
-    private static final int MUST_MIN_STAY_MIN = 20; // A 시간 단축: 꼭 갈 곳은 여기까지만 줄임
-    private static final int TRIM_BUFFER_MIN = 5;   // A 시간 단축: 늦는 시간보다 이만큼 더 줄여서 여유를 둠
+    private static final int TRIM_STAY_DIVIDE = 2;  // A 시간 단축: 한 칸은 머묾의 절반까지만 줄임 (60분이면 최대 30분)
+    private static final int MUST_MIN_STAY_MIN = 20; // A 시간 단축: 꼭 갈 곳은 머묾을 이 분까지만 줄임
+    private static final int TRIM_BUFFER_MIN = 5;   // A 시간 단축: 늦는 시간보다 5분 더 줄여 여유를 둠 (12분 늦음 → 17분 줄임)
     // B 한 곳 빼기: 뺄 순위 (클수록 먼저 뺌)
     private static final int DROP_RANK_CLOSED = 3;  // 도착하면 문 닫은 곳
     private static final int DROP_RANK_MISSED = 2;  // 계획 시간이 지난 곳
     private static final int DROP_RANK_OPTIONAL = 1; // 중요도 "빼도 됨"
-    private static final int DROP_RANK_NORMAL = 0;  // 그 밖 (그중 오래 머무는 곳)
+    private static final int DROP_RANK_NORMAL = 0;  // 그 밖 (같은 순위면 오래 머무는 곳)
     private static final String IMPORTANCE_MUST = "must";     // 꼭 갈 곳: 자동으로 빼지 않음 (머묾은 20분까지 줄일 수 있음)
     private static final String IMPORTANCE_OPTIONAL = "drop"; // 빼도 되는 곳: 먼저 뺌
     private static final int SWAP_CANDIDATE_COUNT = 10;       // 장소 바꾸기 후보 수
@@ -58,7 +60,7 @@ public class AlternativeServiceImpl implements AlternativeService {
     private static final int NEW_STOP_START_MIN = 30; // 대안 적용: 새 칸에 시각이 없으면 지금부터 30분 뒤
     private static final int LEAVE_ALERT_BEFORE_MIN = 10; // 대안 적용: 출발 이만큼 전부터 알림
     private static final String[] ALTERNATIVE_KEYS = {"A", "B", "C"}; // 대안 이름표 (만들어진 순서대로)
-    private static final String RAIN_SHORT_NAME = "비 피하기"; // 비 오기 전에 야외 먼저 (11/06)
+    private static final String RAIN_SHORT_NAME = "비 피하기"; // 비 오기 전에 야외 먼저
     private static final int MEMO_MAX_LENGTH = 200;          // trip_stop.memo 저장 규칙
 
     private final TripService tripService;                     // 오늘 칸 읽기·고치기 (②)
@@ -67,12 +69,12 @@ public class AlternativeServiceImpl implements AlternativeService {
     private final LiveTripReader liveTripReader;               // 공통 오류 검사 + 진행 중인 여행 (④ 도우미)
     private final AlternativeCalculator alternativeCalculator; // 바뀐 칸 목록으로 몇 시 도착·여유 계산 (④ 도우미)
     private final NotificationService notificationService;     // 적용했다는 알림 남기기 (①)
-    private final LiveWeatherChecker liveWeatherChecker;       // 오늘 비 시작 시각 (④ 도우미, 11/06)
-    private final TransferFinder transferFinder;               // 고정 일정까지 더 빨리 가는 방법 (④ 도우미, 11/06)
+    private final LiveWeatherChecker liveWeatherChecker;       // 오늘 비 시작 시각 (④ 도우미)
+    private final TransferFinder transferFinder;               // 고정 일정까지 더 빨리 가는 방법 (④ 도우미)
 
-    /** 대안 A·B·C */
-    // 규칙 대안만 만들어요. 비 올 때 실내로 바꾸는 대안은 만들지 않음 (11/02 결정: 비는 알림만)
-    // 11/06: 대신 "비 오기 전에 야외 먼저"(순서만 바꿈)는 만들어요 (돌발 ②, 김주형 요청)
+    /** 대안 A·B·C 만들기 (저장 안 함) */
+    // 규칙으로만 만들어요. 비 올 때 실내로 바꾸는 대안은 없어요 (비는 알림만 하기로 함).
+    // 대신 "비 오기 전에 야외 먼저"(순서만 바꿈)는 만들어요 (돌발 ②)
     // TODO: ④ (여유) Gemini 대안 — aiService.askJson으로 규칙 대안을 다듬기. 좌표는 프롬프트에 넣지 않기
     @Override
     public AlternativesResponse makeAlternatives(long memberId, long tripId, AlternativesRequest request) {
@@ -88,7 +90,7 @@ public class AlternativeServiceImpl implements AlternativeService {
         // 2. 대안 A·B·C 만들기
         List<Alternative> alternatives = removeLateAlternatives(makeRuleAlternatives(trip, current, remainingStops, request));
 
-        // 3. 마무리: 영업 정보·닫힌 곳 수 → 이름표 A·B·C → 추천 하나
+        // 3. 마무리: 영업 정보와 닫힌 곳 수 채우기, 이름표 A·B·C 붙이기, 추천 하나 고르기
         for (Alternative alternative : alternatives) {
             fillOpenInfo(alternative);
         }
@@ -103,7 +105,7 @@ public class AlternativeServiceImpl implements AlternativeService {
         return response;
     }
 
-    // ---------------------------------------------------------------- 마무리 (6단계)
+    // ---------------------------------------------------------------- 마무리 (makeAlternatives 3단계)
 
     /** 대안의 칸마다 도착 시각 기준 영업 정보(닫는 시각·닫힌 이유)를 채우고, 도착할 때 닫힌 곳 수를 셈 */
     private void fillOpenInfo(Alternative alternative) {
@@ -124,7 +126,7 @@ public class AlternativeServiceImpl implements AlternativeService {
         alternative.setClosedCount(closedCount);
     }
 
-    /** 그래도 늦는 대안("5분 늦음")은 빼요. 다 늦으면 덜 늦는 것을 고르게 그대로 둠 (11/08 주형: 늦는 대안은 보여 줄 이유가 없음) */
+    /** 그래도 늦는 대안("5분 늦음")은 빼요 (보여 줄 이유가 없어서). 다 늦으면 덜 늦는 걸 고를 수 있게 그대로 둬요 */
     private List<Alternative> removeLateAlternatives(List<Alternative> alternatives) {
         List<Alternative> onTime = new ArrayList<>();
         for (Alternative alternative : alternatives) {
@@ -144,8 +146,8 @@ public class AlternativeServiceImpl implements AlternativeService {
 
     /** 추천 대안 하나: 안 늦고 닫힌 곳 없는 대안 중 바뀐 칸이 가장 적은 것. 없으면 여유가 가장 많은 것 */
     private void chooseRecommended(List<Alternative> alternatives) {
-        // 1번째: 좋은 대안(안 늦음 + 닫힌 곳 없음) 중 바뀐 칸이 가장 적은 것. 같으면 먼저 나온 것
-        //        단, 비 피하기(맨 앞)가 좋은 대안이면 그걸 추천 (비 소식 때문에 다시 짜는 거라서, 11/06)
+        // 1순위: 좋은 대안(안 늦고 닫힌 곳 없음) 중 바뀐 칸이 가장 적은 것. 같으면 먼저 나온 것.
+        //        단, 비 피하기(맨 앞)가 좋은 대안이면 그걸 추천해요 (비 소식 때문에 다시 짜는 거라서)
         Alternative best = null;
         for (Alternative alternative : alternatives) {
             boolean isGood = alternative.getSlackMin() >= 0 && alternative.getClosedCount() == 0;
@@ -157,7 +159,7 @@ public class AlternativeServiceImpl implements AlternativeService {
                 best = alternative;
             }
         }
-        // 2번째: 좋은 대안이 없으면 덜 늦는 것 (여유가 가장 많은 것)
+        // 2순위: 좋은 대안이 없으면 덜 늦는 것 (여유가 가장 많은 것)
         if (best == null) {
             for (Alternative alternative : alternatives) {
                 if (best == null || alternative.getSlackMin() > best.getSlackMin()) {
@@ -179,23 +181,28 @@ public class AlternativeServiceImpl implements AlternativeService {
         return fixedStop.getName() + "에 늦지 않는 대안";
     }
 
-    /** 규칙 대안 A·B·C (만들 수 없는 대안은 빠짐). B와 C는 같은 "뺄 곳"을 씀: B는 빼고, C는 다른 곳으로 바꿈 */
+    /**
+     * 규칙 대안 A·B·C (만들 수 없는 대안은 빠짐).
+     * 넣는 순서: 비 피하기 → A 시간 단축 → 갈아타기 → B 한 곳 빼기 → C 장소 바꾸기 (3개까지).
+     * B와 C는 같은 "뺄 곳"을 써요: B는 그곳을 빼고, C는 다른 곳으로 바꿔요.
+     */
     private List<Alternative> makeRuleAlternatives(Trip trip, Stop current, List<Stop> remainingStops, AlternativesRequest request) {
         double lat = request.getLat();
         double lng = request.getLng();
         List<Alternative> alternatives = new ArrayList<>();
         if (Boolean.TRUE.equals(remainingStops.get(0).getFixed())) {
-            // 바로 다음이 예약(회식·KTX)이면 그 사이에 줄이거나 뺄 곳이 없어서 "빨리 가는 방법"만 (11/08: 뒤에 장소가 더 있어도)
+            // 바로 다음이 예약(회식·KTX)이면 그 사이에 줄이거나 뺄 곳이 없어요.
+            // 그래서 뒤에 장소가 더 있어도 "빨리 가는 방법"만 보여 줘요
             return makeGoNowAlternatives(trip, current, remainingStops, lat, lng);
         }
         Alternative rainAlternative = makeRainAlternative(trip, current, remainingStops, lat, lng);
         if (rainAlternative != null) {
-            alternatives.add(rainAlternative); // 비 소식이 있으면 맨 앞에 (11/06)
+            alternatives.add(rainAlternative); // 비 소식이 있으면 맨 앞에
         }
         alternatives.add(makeTrimAlternative(trip, current, remainingStops, lat, lng));
         Alternative transferAlternative = makeTransferAlternative(trip, current, remainingStops, lat, lng);
         if (transferAlternative != null) {
-            alternatives.add(transferAlternative); // 고정 일정에 늦을 때 갈아타기 (11/06)
+            alternatives.add(transferAlternative); // 고정 일정에 늦을 때 갈아타기
         }
 
         Stop dropStop = findDropStop(remainingStops);
@@ -208,7 +215,7 @@ public class AlternativeServiceImpl implements AlternativeService {
         }
         Alternative swapAlternative = makeSwapAlternative(trip, current, remainingStops, lat, lng, dropStop);
         if (swapAlternative != null && alternatives.size() < ALTERNATIVE_KEYS.length) {
-            alternatives.add(swapAlternative); // 대안은 3개까지 (비 피하기가 있으면 장소 바꾸기는 빠짐)
+            alternatives.add(swapAlternative); // 대안은 3개까지라, 앞에서 다 차면 빠짐
         }
         return alternatives;
     }
@@ -224,11 +231,11 @@ public class AlternativeServiceImpl implements AlternativeService {
         return remainingStops;
     }
 
-    // ---------------------------------------------------------------- 대안 A·B·C (3~5단계)
+    // ---------------------------------------------------------------- 대안 A·B·C (makeAlternatives 2단계)
 
     /**
      * A 시간 단축: 가는 곳은 그대로, 머무는 시간만 줄임.
-     * 고정 일정에 늦을 때만, 늦는 시간 + 5분을 고정 일정 앞 칸에서 차례로 줄임 (한 칸에 최대 절반)
+     * 고정 일정에 늦을 때만 줄여요: 늦는 시간 + 5분을 고정 일정 앞 칸에서 차례로 (한 칸은 최대 절반).
      */
     private Alternative makeTrimAlternative(Trip trip, Stop current, List<Stop> remainingStops, double lat, double lng) {
         // 1. 그대로 갔을 때 계산 (원본을 고치면 B·C 계산까지 바뀌어서 복사본으로)
@@ -254,8 +261,9 @@ public class AlternativeServiceImpl implements AlternativeService {
     }
 
     /**
-     * 갈아타기 (돌발 ③, 11/06): 가는 곳·머묾은 그대로, 고정 일정(KTX)으로 가는 마지막 구간만 더 빠른 방법으로.
-     * 그대로 가면 늦을 때만 만들고, 실제 길찾기로 "지하철로 ○○역까지 → 택시"나 "택시로 바로"가 더 빠를 때만. 아니면 null
+     * 갈아타기 (돌발 ③): 가는 곳·머묾은 그대로 두고, 고정 일정(KTX)으로 가는 마지막 구간만 더 빠른 방법으로 바꿔요.
+     * 그대로 가면 늦고, 실제 길찾기로 "지하철로 ○○역까지 → 택시"나 "택시로 바로"가 더 빠를 때만 만들어요.
+     * 아니면 null
      */
     private Alternative makeTransferAlternative(Trip trip, Stop current, List<Stop> remainingStops, double lat, double lng) {
         Alternative alternative = alternativeCalculator.calculate(trip, current, alternativeCalculator.copyStops(remainingStops), lat, lng);
@@ -292,8 +300,9 @@ public class AlternativeServiceImpl implements AlternativeService {
     }
 
     /**
-     * 남은 곳이 예약(예: 서울역 KTX) 하나뿐일 때: 지금 바로 가는 방법 두 가지 (11/08 시연 돌발: 타임스퀘어에서 늦어짐).
-     * A 지하철(대중교통)로 바로 / B 택시로 바로. 둘 다 실제 길찾기 값, 예약을 빼는 대안은 만들지 않음
+     * 바로 다음 칸이 예약(예: 서울역 KTX)일 때: 지금 바로 가는 방법 두 가지 (시연 돌발: 타임스퀘어에서 늦어짐).
+     *   A 지하철(대중교통)로 바로 / B 택시로 바로 — 둘 다 실제 길찾기 값이에요.
+     * 예약을 빼는 대안은 만들지 않아요.
      */
     private List<Alternative> makeGoNowAlternatives(Trip trip, Stop current, List<Stop> remainingStops, double lat, double lng) {
         List<Alternative> alternatives = new ArrayList<>();
@@ -309,7 +318,7 @@ public class AlternativeServiceImpl implements AlternativeService {
                                              String mode, String title, String reason) {
         List<Stop> stops = alternativeCalculator.copyStops(remainingStops);
         stops.get(0).setMode(mode);
-        // 첫 구간(지금 → 서울역)은 진짜 길찾기 값으로: 여행 중 화면·적용 뒤 화면과 같은 숫자가 나오게 (11/08)
+        // 첫 구간(지금 → 서울역)은 진짜 길찾기 값으로: 여행 중 화면·적용 뒤 화면과 같은 숫자가 나오게
         Alternative alternative = alternativeCalculator.calculate(trip, current, stops, lat, lng, 1);
         alternative.setChanges(1);
         alternative.setShortName("transit".equals(mode) ? "지하철" : "택시");
@@ -340,8 +349,9 @@ public class AlternativeServiceImpl implements AlternativeService {
     }
 
     /**
-     * 비 피하기 (돌발 ②, 11/06): 오늘 비가 오면, 비 시작 뒤까지 있을 야외 칸을 남은 일정 맨 앞으로 옮김.
-     * 가는 곳·머무는 시간은 그대로, 순서만 바꿈. 고정 일정은 옮기지 않음. 비 소식이나 옮길 칸이 없으면 null
+     * 비 피하기 (돌발 ②): 오늘 비가 오면, 비가 시작된 뒤에도 머물 야외 칸을 남은 일정 맨 앞으로 옮겨요.
+     * 가는 곳·머무는 시간은 그대로고 순서만 바꿔요. 고정 일정은 옮기지 않아요.
+     * 비 소식이나 옮길 칸이 없으면 null
      */
     private Alternative makeRainAlternative(Trip trip, Stop current, List<Stop> remainingStops, double lat, double lng) {
         Integer rainStart = liveWeatherChecker.findRainStart(lat, lng);
@@ -503,7 +513,7 @@ public class AlternativeServiceImpl implements AlternativeService {
         int dropRank = -1;
         for (Stop stop : stops) {
             if (Boolean.TRUE.equals(stop.getFixed()) || LiveStopFinder.isStay(stop)) {
-                continue; // 고정 일정·숙소는 빼지 않음 (11/08)
+                continue; // 고정 일정·숙소는 빼지 않음
             }
             if (isMust(stop)) {
                 continue; // 꼭 갈 곳은 빼지 않음
@@ -519,7 +529,7 @@ public class AlternativeServiceImpl implements AlternativeService {
         return dropStop;
     }
 
-    /** 뺄 순위: 문 닫은 곳 > 계획 시간 지난 곳 > 그 밖 */
+    /** 뺄 순위: 문 닫은 곳 > 계획 시간 지난 곳 > 빼도 되는 곳 > 그 밖 */
     private int getDropRank(Stop stop) {
         if (isClosedAtArrival(stop)) {
             return DROP_RANK_CLOSED;
@@ -568,8 +578,10 @@ public class AlternativeServiceImpl implements AlternativeService {
     }
 
     /**
-     * 고정 일정 앞 칸부터 차례로 줄여서 need분을 채움. 먼저 꼭 갈 곳이 아닌 칸을 최대 절반까지,
-     * 그래도 모자라면 꼭 갈 곳도 20분까지 줄임 (꼭 = 빼지 않는다는 뜻. 11/04 사용자 요청으로 "머묾도 그대로"에서 바뀜)
+     * 고정 일정 앞 칸부터 차례로 줄여서 합쳐 need분을 채워요.
+     *   1. 꼭 갈 곳이 아닌 칸: 머묾의 절반까지
+     *   2. 그래도 모자라면 꼭 갈 곳도: 20분까지
+     * "꼭 갈 곳"은 빼지 않는다는 뜻이라 머묾은 줄일 수 있어요 (사용자 요청).
      */
     private void trimStays(List<Stop> stops, int need) {
         int left = need;
@@ -673,7 +685,8 @@ public class AlternativeServiceImpl implements AlternativeService {
         // 3. 계산 + 영업 정보 + 바뀐 곳 표시
         Alternative alternative = alternativeCalculator.calculate(trip, current, chosenStops, request.getLat(), request.getLng(), PREVIEW_PRECISE_COUNT);
         if (CafeStay.fitNewCafe(chosenStops, liveStopFinder.findFixedStop(chosenStops, null), alternative.getSlackMin())) {
-            // 11/17: 새로 넣는 카페는 다음 예약 5분 전 도착에 맞춰 머묾 → 미리보기에 "N분 늦어요"가 안 뜨게 ([일정에 넣기]와 같은 계산)
+            // 새로 넣는 카페는 다음 예약에 5분 일찍 닿도록 머묾을 맞춰요 ([일정에 넣기]와 같은 계산).
+            // 그래야 미리보기에 "N분 늦어요"가 안 떠요
             alternative = alternativeCalculator.calculate(trip, current, chosenStops, request.getLat(), request.getLng(), PREVIEW_PRECISE_COUNT);
         }
         fillOpenInfo(alternative);
@@ -684,7 +697,10 @@ public class AlternativeServiceImpl implements AlternativeService {
         return alternative;
     }
 
-    /** 남은 칸 하나를 바꿀 장소 후보: 1.5km 안, 도착할 때 영업 중, 평점 있음, 일정에 없음. 가까운 순 최대 10곳 */
+    /**
+     * 남은 칸 하나와 바꿀 장소 후보 (가까운 순 최대 10곳).
+     * 조건: 1.5km 안, 도착할 때 영업 중, 평점 있음, 아직 일정에 없음
+     */
     @Override
     public List<SwapCandidate> getSwapCandidateList(long memberId, long tripId, long stopId, Double lat, Double lng) {
         // 1. 공통 오류 검사 후 바꿀 칸 찾기
@@ -807,7 +823,7 @@ public class AlternativeServiceImpl implements AlternativeService {
         return IMPORTANCE_MUST.equals(stop.getImportance());
     }
 
-    // ---------------------------------------------------------------- 대안 적용 도우미 (4번)
+    // ---------------------------------------------------------------- 대안 적용 도우미 (applyAlternative 2단계)
 
     /**
      * 고른 대안의 칸마다: id가 남은 칸이면 수정(updateStop), id가 없으면 새 칸 추가(createStop).
@@ -850,11 +866,11 @@ public class AlternativeServiceImpl implements AlternativeService {
         update.setMode(original.getMode()); // ②의 updateStop은 mode·memo를 보낸 값으로 덮어써서, 원래 값을 그대로 보냄
         update.setMemo(original.getMemo());
         if (isFixed && chosen.getChange() != null && chosen.getChange().contains("택시")) {
-            update.setMemo(trimMemo(chosen.getChange())); // 갈아타기·택시로 바로 가기: 메모로 남기고 택시로 (11/06)
+            update.setMemo(trimMemo(chosen.getChange())); // 갈아타기·택시로 바로 가기: 바뀐 점을 메모로 남기고 이동 수단은 택시
             update.setMode("taxi");
             noteMap.put(original.getId(), chosen.getChange()); // 바뀐 일정 화면에 "택시로 바로 가기"
         } else if (isFixed && chosen.getChange() != null && chosen.getChange().contains("지하철로 바로")) {
-            update.setMemo(trimMemo(chosen.getChange())); // 지하철로 바로 가기 (11/08)
+            update.setMemo(trimMemo(chosen.getChange())); // 지하철로 바로 가기
             update.setMode("transit");
             noteMap.put(original.getId(), chosen.getChange());
         }
@@ -904,11 +920,11 @@ public class AlternativeServiceImpl implements AlternativeService {
         stop.setLng(chosen.getLng());
         stop.setTime(chosen.getEta() == null ? Geo.toHhmm(Geo.nowMinutes() + NEW_STOP_START_MIN) : chosen.getEta());
         stop.setStay(chosen.getStay() == null ? DEFAULT_STAY_MIN : chosen.getStay());
-        stop.setFixed(Boolean.TRUE.equals(chosen.getFixed())); // 보통은 고정 아님. 예약 시각을 받아 넣은 칸만 고정 (11/16 ③)
+        stop.setFixed(Boolean.TRUE.equals(chosen.getFixed())); // 보통은 고정 아님. 예약 시각을 받아 넣은 칸만 고정
         return stop;
     }
 
-    // ---------------------------------------------------------------- 대안 적용 응답 (4번 3단계)
+    // ---------------------------------------------------------------- 대안 적용 응답 (applyAlternative 3단계)
 
     /** 적용 후 안내 문구: 남은 고정 일정이 있으면 "{고정 일정}에 늦지 않게 일정을 바꿨어요!" */
     private String getApplyMessage(List<Stop> remainingStops) {
@@ -947,7 +963,10 @@ public class AlternativeServiceImpl implements AlternativeService {
         return appliedStops;
     }
 
-    /** 칸 표시: done(다녀옴·지금 있는 곳) > added(적용 전에 없던 칸) > changed(머묾이 바뀜) > kept(그대로) */
+    /**
+     * 칸 표시 (위에서부터 먼저 맞는 것):
+     * done(다녀옴·지금 있는 곳) / added(적용 전에 없던 칸) / changed(머묾이 바뀜) / kept(그대로)
+     */
     private String getApplyTag(Stop stop, List<Stop> beforeTodayStops, Stop current, Map<Long, String> noteMap) {
         boolean isHere = current != null && current.getId().equals(stop.getId());
         if (!liveStopFinder.isTodo(stop) || isHere) {

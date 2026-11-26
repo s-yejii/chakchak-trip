@@ -1,7 +1,8 @@
 <script setup>
-// 예약 놓침 카드 (④ 11/12): 식당·카페 예약에 가장 빠른 방법으로도 못 닿을 때(서버 lost- 알림), 또는 "못 가게 됐어요"를 눌렀을 때.
-// 가운데 카드 모양(뒤 어둡게). 앱은 가게가 실제로 취소했는지 몰라서 사용자가 버튼으로 정해요
-// 11/16 ③ 요청: "13:05 도착 (35분 늦음)" 한 줄 + [가게에 전화하기] (늦어도 받아 주는지 물어보기)
+// 놓침 카드: 화면 가운데에 뜨는 "예약을 놓쳤어요" 카드 (뒤는 어둡게)
+//   언제: 식당·카페 예약에 가장 빠른 방법으로도 못 닿을 때(서버 lost- 알림), 또는 [못 가게 됐어요]를 눌렀을 때
+//   가게가 정말 취소했는지 앱은 몰라서, 사용자가 버튼으로 정해요
+//   맨 위에 "13:05 도착 (35분 늦음)" 한 줄, 그 아래 [가게에 전화하기] (늦어도 받아 주는지 물어보기)
 import { onMounted, ref } from 'vue'
 import { getPlaceDetail } from '@/api/trips'
 import { devMode } from '@/utils/devMode'
@@ -39,7 +40,7 @@ function callDemo() {
       <span v-if="text" class="crit__text">{{ text }}</span>
       <span v-if="canFindSimilar" class="crit__text">비슷한 근처 가게를 찾아 드릴까요?</span>
       <div class="lost__buttons">
-        <!-- 맨 위: 먼저 가게에 전화해 보고, 안 되면 아래 [비슷한 근처 가게 찾기] (11/16 ③) -->
+        <!-- 버튼 순서: [가게에 전화하기] → [비슷한 근처 가게 찾기] → [빼고 다음 장소로] (먼저 전화로 물어보게) -->
         <template v-if="tel">
           <button v-if="devMode.isOn" type="button" class="btn btn--secondary btn--lg btn--block" @click="callDemo"><i class="ic ic--s i-phone" aria-hidden="true"></i>가게에 전화하기</button>
           <a v-else :href="'tel:' + tel" class="btn btn--secondary btn--lg btn--block"><i class="ic ic--s i-phone" aria-hidden="true"></i>가게에 전화하기</a>
@@ -53,7 +54,7 @@ function callDemo() {
 </template>
 
 <style>
-/* 가운데 카드 모양 (11/12: 예전 CriticalAlertCard를 지우면서 스타일을 여기로 옮김) */
+/* 가운데 카드 모양: 뒤를 어둡게 덮고(.crit) 카드를 화면 가운데에 */
 .crit { position: absolute; inset: 0; z-index: 58; display: grid; place-items: center; padding: 24px; background: rgba(15, 20, 35, 0.45); }
 .crit__card { width: 100%; max-width: 320px; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 22px 18px 18px; border-radius: 20px; background: var(--surface-raised, #fff); box-shadow: 0 16px 40px -8px rgba(24, 33, 58, 0.45); text-align: center; }
 .crit__icon { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 16px; background: var(--warning-soft, #fff3e0); color: var(--warning, #c46a00); }

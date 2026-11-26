@@ -11,16 +11,22 @@ import com.tripbiseo.live.dto.TrackPoint;
 
 /**
  * ④ GPS 기록 (trip_track). SQL은 resources/mapper/live/TrackMapper.xml
- * 예전에는 GPS SQL이 TripMapper(②)에 있었는데, 테이블 주인(④)의 Mapper로 옮겼어요.
+ * trip_track 주인(④)의 Mapper라서 GPS SQL은 모두 여기에 둬요.
  */
 @Mapper
 public interface TrackMapper {
 
-    /** GPS 한 점 저장. accuracy는 선택이라 null 가능 (그래서 Double). recordedAt = Geo.now() (시연 계정은 시연 시계, 11/17) */
+    /**
+     * GPS 한 점 저장. accuracy는 선택이라 null일 수 있어서 Double이에요.
+     * recordedAt = Geo.now() (시연 계정은 시연 시계)
+     */
     int insertTrack(@Param("tripId") long tripId, @Param("lat") double lat, @Param("lng") double lng,
                     @Param("accuracy") Double accuracy, @Param("recordedAt") LocalDateTime recordedAt);
 
-    /** 최근 GPS 점, 새 것부터 최대 count개 (도착·출발 판정용). 오차가 maxAccuracy보다 큰 점, now에서 seconds초보다 오래된 점은 뺌 */
+    /**
+     * 최근 GPS 점, 새 것부터 최대 count개 (도착·출발 판정용).
+     * 오차가 maxAccuracy(m)보다 큰 점, now보다 seconds초 넘게 오래된 점은 빼요
+     */
     List<TrackPoint> selectRecentTrackList(@Param("tripId") long tripId, @Param("count") int count,
                                            @Param("seconds") int seconds, @Param("maxAccuracy") int maxAccuracy,
                                            @Param("now") LocalDateTime now);

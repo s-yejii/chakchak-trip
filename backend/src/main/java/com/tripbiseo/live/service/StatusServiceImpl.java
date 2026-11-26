@@ -38,7 +38,9 @@ import com.tripbiseo.trip.service.PlaceService;
 import lombok.RequiredArgsConstructor;
 
 /**
- * ④ 지금 상황 다시 계산 (POST /live/status). LiveServiceImpl이 너무 커져서 나눔.
+ * ④ 지금 상황 다시 계산 (POST /live/status). LiveServiceImpl이 너무 커서 따로 둠.
+ * 고정 일정 = 시각을 꼭 지켜야 하는 예약 칸(KTX·회식 등).
+ * 여유(slack, 분) = 고정 일정 계획 시각 − 예상 도착. 음수면 지각이에요.
  * 예전 코드: git show backend-v0:backend/src/main/java/com/tripbiseo/service/LiveService.java (status/today/start/alert/rain)
  */
 @Service
@@ -46,31 +48,33 @@ import lombok.RequiredArgsConstructor;
 public class StatusServiceImpl implements StatusService {
 
     private static final int PRECISE_ROUTE_COUNT = 3;   // 가까운 3구간만 진짜 길찾기, 나머지는 거리로 추정
-    private static final Set<String> MEAL_KINDS = Set.of("food", "cafe", "bar"); // 놓침 카드를 띄울 장소 종류 (PlaceMapper kindCase 값, 11/12)
-    private static final int DEMO_TAXI_LATE_MIN = 21;   // 시연 계정 놓침 카드: 택시로 가도 예약보다 21분 늦음 (11/17 주형 결정, 일반 계정은 실제 계산)
+    private static final Set<String> MEAL_KINDS = Set.of("food", "cafe", "bar"); // 놓침 카드를 띄울 장소 종류 (PlaceMapper kindCase 값)
+    private static final int DEMO_TAXI_LATE_MIN = 21;   // 시연 계정 놓침 카드: 택시로 가도 예약보다 21분 늦음 (일반 계정은 실제 계산)
     private static final int LATE_STEP_MIN = 10;        // late- 알림과 같은 간격: 10분 더 늦어질 때마다만 가장 빠른 방법을 다시 계산
     private static final String CLOSE_WORD = "에 영업이 끝나요"; // ② OpeningHours가 도착 때 닫혀 있으면 붙이는 끝말 ("22:00에 영업이 끝나요")
 
-    private final AutoAdjuster autoAdjuster; // 최근 자동 일정 조정 안내 (③ 11/08)
+    private final AutoAdjuster autoAdjuster; // 최근 자동 일정 조정 안내
     private final LiveTripReader liveTripReader;         // 공통 오류 검사 + 진행 중인 여행 (④ 도우미)
     private final PlaceService placeService;             // 장소 영업 정보 (②)
-    private final RouteClient routeClient;               // 이동 시간 (후보 비교는 isPrecise=false)
+    private final RouteClient routeClient;               // 이동 시간. 후보를 여러 개 비교할 때는 isPrecise=false(거리로 어림)
     private final LiveStopFinder liveStopFinder;         // 오늘 칸·지금 칸·남은 칸 고르기 (④ 도우미)
     private final LiveAlertMaker liveAlertMaker;         // 출발 알림·맨 위 알림 만들기 (④ 도우미)
     private final LiveWeatherChecker liveWeatherChecker; // 비 소식 + 비 맞을 야외 일정 (④ 도우미)
     private final NotificationService notificationService; // 맨 위 알림을 알림함에도 남김 (①)
-    private final RouteGuideClient routeGuideClient;     // 택시 길찾기(TMAP 자동차): 놓침 카드에 택시 도착·요금 (11/17)
+    private final RouteGuideClient routeGuideClient;     // 택시 길찾기(TMAP 자동차): 놓침 카드에 택시 도착·요금
     private final DevService devService;                 // 시연 계정인지 (공통)
     private final TransferFinder transferFinder;         // 가장 빠른 방법 (④ 도우미, 놓침 판단)
-    // "칸 id-늦음 단계" → 가장 빠른 방법으로 가도 남는 여유(분). 여러 요청이 동시에 써도 안전한 Map이라 ConcurrentHashMap (TMAP 호출 줄이기)
+    // 가장 빠른 방법으로 가도 남는 여유(분)를 기억해 TMAP 호출을 줄여요.
+    // key = "칸 id-늦음 단계" (늦음 단계 = 늦은 분 ÷ 10). ConcurrentHashMap: 여러 요청이 동시에 써도 안전한 Map
     private final Map<String, Integer> fastestSlackCache = new ConcurrentHashMap<>();
     private final Map<String, RouteGuide> taxiGuideCache = new ConcurrentHashMap<>(); // 놓침 카드 택시 길 (같은 늦음 단계면 다시 안 부름)
 
     /** 지금 상황 다시 계산 */
     @Override
     public StatusResponse getStatus(long memberId, long tripId, LocationRequest request) {
-        // 1단계: now, currentStopId, stops[] / 2단계: eta, next / 3단계: fixed, reach, hint, area
-        // 4단계: leave, alert / 5단계: 영업 정보 / 6단계: weather / 7단계: replan
+        // 응답 필드를 채우는 단계 (아래 "N단계" 주석과 같은 번호)
+        //   1. now, currentStopId, stops[]   2. eta, next   3. fixed, reach, hint, area
+        //   4. leave, alert   5. 영업 정보   6. weather   7. replan
         Trip trip = liveTripReader.getOngoingTrip(memberId, tripId, request.getLat(), request.getLng()); // 공통 오류 검사
         double lat = request.getLat();
         double lng = request.getLng();
@@ -82,7 +86,7 @@ public class StatusServiceImpl implements StatusService {
         Map<Long, Route> routeMap = new HashMap<>(); // 칸 id → 앞에서 오는 길 (카드 사이 이동 칩)
         Map<Long, Integer> etaMap = getEtaMap(trip, todayStops, current, lat, lng, routeMap);
         Map<Long, String> reachMap = getReachMap(trip, todayStops, current, fixedStop, lat, lng);
-        Set<Long> mealStopIds = new HashSet<>(); // 남은 칸 중 식당·카페·술집 (영업 정보 읽을 때 같이 채움 → 쿼리 추가 없음)
+        Set<Long> mealStopIds = new HashSet<>(); // 남은 칸 중 식당·카페·술집 (영업 정보 읽을 때 같이 채워서 쿼리가 늘지 않음)
         Map<Long, OpenInfo> openMap = getOpenInfoMap(todayStops, current, etaMap, mealStopIds);
         // 여유(분) = 고정 일정 계획 시각 − 예상 도착. 음수면 지각
         Integer slack = fixedStop == null ? null : Geo.toMinutes(fixedStop.getTime()) - etaMap.get(fixedStop.getId());
@@ -100,12 +104,12 @@ public class StatusServiceImpl implements StatusService {
         response.setHint(getHint(todayStops, fixedStop, slack, reachMap));
         response.setArea(getArea(fixedStop, nextStop, slack, etaMap, lat, lng));
 
-        // 알림은 LiveAlertMaker, 날씨는 LiveWeatherChecker가 (계산 결과를 context 하나로 넘김)
+        // 알림은 LiveAlertMaker, 날씨는 LiveWeatherChecker가 만들어요 (계산 결과를 context 하나로 넘김)
         StatusContext context = toContext(todayStops, current, nextStop, fixedStop, slack, etaMap, openMap);
-        context.setFastestSlack(getFastestSlack(fixedStop, slack, lat, lng)); // 어떤 방법으로도 못 닿는지 (lost-·늦음 카드 문구)
+        context.setFastestSlack(getFastestSlack(fixedStop, slack, lat, lng)); // 어떤 방법으로도 못 닿는지 (lost- 알림·늦음 카드 문구에 씀)
         context.setDemo(devService.isDemoAccount(memberId));
-        setTaxi(context, fixedStop, lat, lng, context.isDemo()); // 놓침 카드 "택시로 가도 12:45 도착 · 약 N원" (11/17)
-        context.setFixedMeal(fixedStop != null && mealStopIds.contains(fixedStop.getId())); // 놓침 문구: 식당이면 "예약 시각", 아니면 "약속 시각" (11/12)
+        setTaxi(context, fixedStop, lat, lng, context.isDemo()); // 놓침 카드 "택시로 가도 12:45 도착 · 약 N원"
+        context.setFixedMeal(fixedStop != null && mealStopIds.contains(fixedStop.getId())); // 놓침 문구: 식당이면 "예약 시각", 아니면 "약속 시각"
         context.setWeather(liveWeatherChecker.check(lat, lng, context)); // 알림(rain-)도 이 값을 씀
         response.setWeather(context.getWeather());
         LeaveInfo leave = liveAlertMaker.makeLeave(context);
@@ -122,7 +126,7 @@ public class StatusServiceImpl implements StatusService {
 
     // ---------------------------------------------------------------- 지금 상황(status) 도우미
 
-    /** 맨 위 알림을 알림함에도 남김. 같은 알림은 ①이 noticeKey로 한 번만 저장 */
+    /** 맨 위 알림을 알림함에도 남김. noticeKey(알림함 중복을 막는 키)가 같으면 ①이 한 번만 저장해요 */
     private void sendAlertNotice(long memberId, long tripId, LiveAlert alert) {
         if (alert == null) {
             return;
@@ -133,26 +137,35 @@ public class StatusServiceImpl implements StatusService {
         notice.setLevel(alert.getLevel());
         notice.setTitle(alert.getTitle());
         notice.setText(alert.getText());
-        notice.setLink("/live?id=" + tripId); // 어느 여행 알림인지 (여행 중 화면은 id를 안 봐도 됨, 시연 연습 알림 숨기기에 씀, 11/06)
+        notice.setLink("/live?id=" + tripId); // 어느 여행 알림인지 (여행 중 화면은 id를 안 봐도 됨, 시연 연습 알림 숨기기에 씀)
         notice.setNoticeKey("trip" + tripId + "-" + Geo.now().toLocalDate() + "-" + toNoticeKey(alert.getKey()));
         notificationService.send(notice);
     }
 
-    /** 알림 키에서 알림함용 키 만들기: 1분·5분마다 끝 숫자가 바뀌는 출발·더 머묾·지각 알림은 "앞부분-칸 id"만 써서 칸마다 한 번만 */
+    /**
+     * 알림 key → 알림함용 noticeKey.
+     * 출발·더 머묾·지각 알림은 "앞부분-칸 id"만 써서 칸마다 한 번만 남겨요.
+     * 출발(묶음마다)·지각(10분마다)은 key 끝 숫자가 바뀌어서, 그대로 쓰면 알림함에 여러 번 쌓여요.
+     */
     private static String toNoticeKey(String alertKey) {
         boolean isCounting = alertKey.startsWith("leave-") || alertKey.startsWith("overdue-") || alertKey.startsWith("late-");
         if (!isCounting) {
             return alertKey;
         }
-        String[] parts = alertKey.split("-"); // 예: leave-12-9 → [leave, 12, 9]
+        String[] parts = alertKey.split("-"); // 예: leave-12-5 → [leave, 12, 5]
         return parts[0] + "-" + parts[1];
     }
 
-    /** 남은 칸마다 예상 도착 시각(자정부터 센 분). key = 칸 id. 앞 칸 출발 시각에 이동 시간을 차례로 더해 감. 구간 길은 routeMap에 담음 */
+    /**
+     * 남은 칸마다 예상 도착 시각(자정부터 센 분, 13:30 → 810). key = 칸 id.
+     * 앞 칸 출발 시각에 이동 시간을 차례로 더해 가요. 구간 길은 routeMap에 담아요.
+     */
     private Map<Long, Integer> getEtaMap(Trip trip, List<Stop> todayStops, Stop current, double lat, double lng,
                                          Map<Long, Route> routeMap) {
         Map<Long, Integer> etaMap = new HashMap<>();
-        // 출발점: 지금 어떤 칸에 있으면 그 칸에서 (머무는 시간이 끝나면 출발), 이동 중이면 내 위치에서 지금 출발
+        // 출발점과 출발 시각
+        //   - 어떤 칸에 있으면: 그 칸에서, 머무는 시간이 끝날 때
+        //   - 이동 중이면: 내 위치에서, 지금
         double fromLat = lat;
         double fromLng = lng;
         int clock = Geo.nowMinutes();
@@ -183,7 +196,9 @@ public class StatusServiceImpl implements StatusService {
 
     /**
      * 고정 일정 전의 남은 칸마다 "들렀다가 고정 일정에 맞출 수 있나". key = 칸 id
-     * ok: 내 위치 → 그 칸 → 머묾 → 고정 일정이 남은 시간 안 / tight: 머묾을 절반으로 줄이면 안 / no: 그래도 안 됨
+     *   ok: 내 위치 → 그 칸 → 머묾 → 고정 일정이 남은 시간 안
+     *   tight: 머묾을 절반으로 줄이면 안
+     *   no: 그래도 안 됨
      */
     private Map<Long, String> getReachMap(Trip trip, List<Stop> todayStops, Stop current, Stop fixedStop, double lat, double lng) {
         Map<Long, String> reachMap = new HashMap<>();
@@ -294,7 +309,10 @@ public class StatusServiceImpl implements StatusService {
         return next;
     }
 
-    /** Stop → 화면용 StatusStop. eta: 남은 칸이면 예상 도착, 아니면 계획 시각. open: 영업 정보, route: 앞에서 오는 길 (둘 다 없으면 null) */
+    /**
+     * Stop → 화면용 StatusStop.
+     * eta: 남은 칸이면 예상 도착, 아니면 계획 시각. open: 영업 정보, route: 앞에서 오는 길 (둘 다 없으면 null)
+     */
     private StatusStop toStatusStop(Stop stop, Integer eta, String reach, OpenInfo open, Route route, boolean isMeal) {
         StatusStop status = new StatusStop();
         status.setId(stop.getId());
@@ -349,7 +367,7 @@ public class StatusServiceImpl implements StatusService {
 
     // ---------------------------------------------------------------- 영업 정보 (5단계)
 
-    /** 남은 칸마다 예상 도착 시각 기준 영업 정보. key = 칸 id. DB에 없는 장소(placeId 없음)는 모름이라 빠짐 */
+    /** 남은 칸마다 예상 도착 시각 기준 영업 정보. key = 칸 id. DB에 없는 장소(placeId 없음)는 영업시간을 몰라서 빠져요 */
     private Map<Long, OpenInfo> getOpenInfoMap(List<Stop> todayStops, Stop current, Map<Long, Integer> etaMap, Set<Long> mealStopIds) {
         Map<Long, OpenInfo> openMap = new HashMap<>();
         LocalDate today = Geo.now().toLocalDate();
@@ -363,7 +381,7 @@ public class StatusServiceImpl implements StatusService {
                 fixClosedReason(open, place, today);
                 openMap.put(stop.getId(), open);
                 if (MEAL_KINDS.contains(place.getKind())) {
-                    mealStopIds.add(stop.getId()); // 11/12: 놓침 카드·"못 가게 됐어요" 버튼은 식당·카페·술집만 (KTX 등은 빠짐)
+                    mealStopIds.add(stop.getId()); // 놓침 카드·"못 가게 됐어요" 버튼은 식당·카페·술집만 (KTX 등은 빠짐)
                 }
             }
         }
@@ -371,8 +389,10 @@ public class StatusServiceImpl implements StatusService {
     }
 
     /**
-     * "22:00에 영업이 끝나요"를 지금 시각 기준으로 나눔 (11/13 ④).
-     * ②는 도착 시각만 알아서 이미 닫은 곳도 "끝나요"라고 함 → 지금도 닫혔으면 "끝났어요", 지금은 열렸으면 "도착 전 …"
+     * "22:00에 영업이 끝나요"를 지금 시각 기준으로 나눠요.
+     * ②는 도착 시각만 봐서, 이미 닫은 곳도 "끝나요"라고 해요. 그래서
+     *   - 지금도 닫혔으면: "22:00에 영업이 끝났어요"
+     *   - 지금은 열려 있으면: "도착 전 22:00에 영업이 끝나요"
      */
     private void fixClosedReason(OpenInfo open, Place place, LocalDate today) {
         String reason = open.getClosedReason();
@@ -388,7 +408,10 @@ public class StatusServiceImpl implements StatusService {
         }
     }
 
-    /** 어떤 방법으로도 못 닿을 때(놓침)만: 지금 택시로 바로 가면 도착 시각·요금 (TMAP 자동차 길찾기 실제 값, 못 받으면 비워 둠) */
+    /**
+     * 놓침(어떤 방법으로도 못 닿음)일 때만: 지금 택시로 바로 가면 몇 시 도착, 요금 얼마인지.
+     * TMAP 자동차 길찾기 실제 값이고, 못 받으면 비워 둬요.
+     */
     private void setTaxi(StatusContext context, Stop fixedStop, double lat, double lng, boolean isDemo) {
         if (fixedStop == null || context.getFastestSlack() == null || context.getFastestSlack() >= 0) {
             return;
@@ -406,7 +429,7 @@ public class StatusServiceImpl implements StatusService {
         context.setTaxiFare(taxi.getFare());
     }
 
-    /** 고정 일정에 늦을 때: 가장 빠른 방법으로 지금 바로 가도 남는 여유(분). 안 늦으면 null (11/12 ④) */
+    /** 고정 일정에 늦을 때: 가장 빠른 방법으로 지금 바로 가도 남는 여유(분). 안 늦으면 null */
     private Integer getFastestSlack(Stop fixedStop, Integer slack, double lat, double lng) {
         if (slack == null || slack >= 0) {
             return null; // 안 늦으면 계산 안 함 (TMAP 호출 줄이기)
@@ -422,7 +445,7 @@ public class StatusServiceImpl implements StatusService {
         return fastestSlack;
     }
 
-    /** 장소 하나 (지워진 장소면 404 대신 null → 영업 정보 없이 계속) */
+    /** 장소 하나. 지워진 장소면 404 대신 null을 돌려줘서 영업 정보 없이 계속해요 */
     private Place findPlace(String placeId) {
         try {
             return placeService.getPlace(placeId);

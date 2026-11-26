@@ -1,5 +1,6 @@
 <script setup>
-// 시간 · 점 · 내용 · 배지 한 줄씩 보여 주는 작은 타임라인 (지연 감지, 예약에 늦어요 화면)
+// 작은 타임라인: 한 줄에 시간 · 색 점 · 내용 · 배지
+// 지연 감지 화면과 예약에 늦어요 화면에서 써요
 // items: [{ time, timeCls, color, icon, text, badgeCls, badgeIcon, badge }]
 defineProps({
   items: { type: Array, required: true },

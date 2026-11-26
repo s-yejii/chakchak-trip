@@ -1,7 +1,9 @@
 <script setup>
-// 여행 중 화면 첫 안내 (④ 11/16): 화면을 어둡게 하고 버튼 하나만 구멍처럼 밝게 비춘 뒤, 트리피가 흰 글씨로 설명해요 (코치 마크)
-//  단계·문구는 utils/liveTour.js. 짚을 버튼은 LiveView에서 data-tour="ask" 처럼 이름표를 달아 둬요
-//  구멍: 버튼 자리에 투명한 칸을 놓고, 그 칸의 아주 큰 그림자(box-shadow 9999px)로 나머지 화면을 어둡게 칠하는 방법
+// 여행 중 화면 첫 안내 (코치 마크)
+//   화면을 어둡게 하고 버튼 하나만 구멍처럼 밝게 비춘 뒤, 트리피가 흰 글씨로 설명해요
+//   단계·문구는 utils/liveTour.js에 있어요
+//   짚을 버튼에는 LiveView에서 data-tour="ask"처럼 이름표를 달아요
+//   구멍 만드는 법: 버튼 자리에 투명한 칸을 놓고, 아주 큰 그림자(box-shadow 9999px)로 나머지를 어둡게 칠해요
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import AppNoti from '@/components/common/AppNoti.vue'
 import { TOUR_STEPS } from '@/utils/liveTour'
@@ -9,11 +11,11 @@ import { TOUR_STEPS } from '@/utils/liveTour'
 const emit = defineEmits(['finish'])
 
 const HOLE_PAD = 6     // 버튼보다 구멍을 이만큼 넉넉하게 (px)
-const TIP_GAP = 16     // 구멍과 설명 글 사이
+const TIP_GAP = 16     // 구멍과 설명 글 사이 (px)
 const TIP_WIDTH = 260
-const EDGE = 16        // 화면 가장자리 여백
-const ARROW_EDGE = 22  // 화살표가 설명 글 모서리에 붙지 않게
-const NOTI_IN_MS = 480  // 가짜 알림이 내려오는 시간(yh.css notiIn .45s) 뒤에 자리를 한 번 더 잼
+const EDGE = 16        // 화면 가장자리 여백 (px)
+const ARROW_EDGE = 22  // 화살표가 설명 글 모서리에 붙지 않게 (px)
+const NOTI_IN_MS = 480  // 예시 알림이 다 내려온 뒤(yh.css notiIn 0.45초) 자리를 한 번 더 재요
 
 const root = ref(null)
 const nextButton = ref(null)
@@ -49,7 +51,8 @@ const arrowLeft = computed(() => {
   return Math.min(Math.max(centerX, ARROW_EDGE), TIP_WIDTH - ARROW_EDGE) + 'px'
 })
 
-// 지금 단계 버튼의 자리 재기. 화면이 축소돼 보이면(휴대폰 틀) 그만큼 나눠서 앱 틀 기준 px로
+// 지금 단계 버튼의 자리를 재요
+//   PC에서 휴대폰 틀이 줄어 보이면 그 비율(scale)로 나눠서 앱 틀 기준 px로 바꿔요
 function measure() {
   const app = root.value && root.value.closest('.app')
   if (!app) return
@@ -100,7 +103,7 @@ onUnmounted(() => window.removeEventListener('resize', measure))
 </script>
 
 <template>
-  <!-- 11/16: 화면 아무 곳이나 눌러도 다음으로 (다음 버튼 자리가 단계마다 달라서 찾지 않아도 되게). 건너뛰기는 설명 글 오른쪽 위 -->
+  <!-- 화면 아무 곳이나 눌러도 다음 단계로 가요 (단계마다 [다음] 버튼 자리가 달라서). [건너뛰기]는 설명 글 오른쪽 위 -->
   <div ref="root" class="tour" role="dialog" aria-modal="true" aria-label="여행 중 화면 안내" @click="next" @keydown.esc="skip" @keydown.right="next">
     <!-- 버튼을 비추는 구멍 (나머지는 그림자로 어둡게) / 짚을 게 없으면 화면 전체를 어둡게 -->
     <span v-if="hole" class="tour__hole" :style="holeStyle" aria-hidden="true"></span>

@@ -19,8 +19,8 @@ import lombok.RequiredArgsConstructor;
 
 /**
  * ④ 지금 상황(status)의 날씨: 오늘 지금 이후 비·눈이 오는 첫 시간 + 그때 야외에 있을 일정.
- * StatusServiceImpl 안에서 쓰는 도우미라 인터페이스 없이 @Component (LiveAlertMaker와 같은 방식).
- * 나중에 대안("비 올 때 실내로 바꾸기")에서도 씀.
+ * StatusServiceImpl·AlternativeServiceImpl에서 쓰는 도우미라 인터페이스 없이 @Component (LiveAlertMaker와 같은 방식).
+ * 대안 "비 오기 전에 야외 먼저"(AlternativeServiceImpl)는 findRainStart를 씀.
  */
 @Component
 @RequiredArgsConstructor
@@ -38,9 +38,9 @@ public class LiveWeatherChecker {
      * 예보 위치는 다음 칸 (없으면 내 위치). 기상청 격자가 5km라 같은 동네면 결과가 거의 같아요.
      */
     public WeatherInfo check(double lat, double lng, StatusContext context) {
-        String demoRain = DemoWeather.rainFrom(); // 시연 계정이 개발자 모드에서 넣은 비 (11/06)
+        String demoRain = DemoWeather.rainFrom(); // 시연 계정이 개발자 모드에서 넣은 비
         if (DemoWeather.DRY.equals(demoRain)) {
-            return null; // 시연 중 비를 안 넣었으면 비 없음 (11/08)
+            return null; // 시연 중 비를 안 넣었으면 비 없음
         }
         if (demoRain != null) {
             return makeDemoRain(demoRain, context);
@@ -62,7 +62,7 @@ public class LiveWeatherChecker {
         WeatherInfo weather = new WeatherInfo();
         weather.setTime(rainHour.getTime());
         weather.setPop(toNumber(rainHour.getPop()));
-        weather.setSnow(pty == 2 || pty == 3); // 2 비/눈, 3 눈
+        weather.setSnow(pty == 2 || pty == 3); // pty(강수 형태): 2 = 비/눈, 3 = 눈
         weather.setOutdoor(findOutdoorStops(context, Geo.toMinutes(rainHour.getTime())));
         return weather;
     }
@@ -83,7 +83,7 @@ public class LiveWeatherChecker {
 
     /**
      * 오늘 비가 시작하는 시각(분). 비 소식이 없거나 예보를 못 받으면 null.
-     * 대안 "비 오기 전에 야외 먼저"에서 씀 (AlternativeServiceImpl, 11/06)
+     * 대안 "비 오기 전에 야외 먼저"에서 씀 (AlternativeServiceImpl)
      */
     public Integer findRainStart(double lat, double lng) {
         int now = Geo.nowMinutes();
@@ -103,7 +103,7 @@ public class LiveWeatherChecker {
         }
     }
 
-    /** 오늘, 아직 안 지난 시간 중 비·눈이 오거나(pty ≠ 0) 강수확률 60% 이상인 첫 시간 (없으면 null) */
+    /** 오늘, 아직 안 지난 시간 중 비·눈이 오거나(pty 강수 형태 ≠ 0) 강수확률 60% 이상인 첫 시간 (없으면 null) */
     private Forecast.Hour findRainHour(Forecast forecast, int now) {
         String today = Geo.now().toLocalDate().toString().replace("-", ""); // "2026-11-01" → "20261101"
         for (Forecast.Hour hour : forecast.getHours()) {

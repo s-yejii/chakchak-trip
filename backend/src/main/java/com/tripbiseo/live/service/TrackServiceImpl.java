@@ -24,6 +24,7 @@ import lombok.RequiredArgsConstructor;
 
 /**
  * ④ GPS 저장·도착 판정, GPS 기록 조회·삭제.
+ * 경계 칸 = 공원처럼 넓어서 점 하나 대신 경계(place_area)로 도착을 보는 칸. 그 밖은 일반 칸이에요.
  * 예전 코드: git show backend-v0:backend/src/main/java/com/tripbiseo/service/LiveService.java (track 메서드)
  */
 @Service
@@ -43,12 +44,13 @@ public class TrackServiceImpl implements TrackService {
     private final TrackMapper trackMapper;
     private final TripService tripService;         // 도착·출발 기록은 trip_stop 주인(②)의 메서드로
     private final LiveTripReader liveTripReader;   // 공통 오류 검사 + 진행 중인 여행 (④ 도우미)
-    private final AutoAdjuster autoAdjuster;       // 늦게 떠났을 때 자동 일정 조정 (③ 11/08)
+    private final AutoAdjuster autoAdjuster;       // 늦게 떠났을 때 자동 일정 조정
 
     /** GPS 한 점 저장 + 도착·출발 판정 */
-    // 규칙: 지금 있는 칸은 하나만. 새 칸에 도착하면 전 칸은 다녀옴.
-    //   도착: 최근 4점(2분 안)으로 봄. 1순위 일반 칸 = 다 150m 안 + 멈춰 있음(40m 안)
-    //                                  2순위 경계 칸(공원) = 다 경계 30m 안 + 걷는 속도(점 사이 60m 안)
+    // 규칙: 지금 있는 칸은 하나만. 새 칸에 도착하면 전 칸은 다녀온 것으로 해요.
+    //   도착: 최근 4점(2분 안)으로 봐요.
+    //     1순위 일반 칸: 4점 다 150m 안 + 멈춰 있음(처음~끝 40m 안)
+    //     2순위 경계 칸(공원): 4점 다 경계 30m 안 + 걷는 속도(점 사이 60m 안)
     //   출발: 지금 점·앞 점 둘 다 지금 칸 밖 (일반 칸 200m, 경계 칸은 경계 80m)
     @Override
     @Transactional
@@ -57,7 +59,7 @@ public class TrackServiceImpl implements TrackService {
         Trip trip = liveTripReader.getOngoingTrip(memberId, tripId, request.getLat(), request.getLng());
 
         // 2. 지금 점 저장
-        LocalDateTime now = Geo.now().toLocalDateTime(); // 시연 계정은 시연 시계 (회고 다시 보기, 11/17)
+        LocalDateTime now = Geo.now().toLocalDateTime(); // 시연 계정은 시연 시계 (회고 다시 보기)
         trackMapper.insertTrack(tripId, request.getLat(), request.getLng(), request.getAccuracy(), now);
 
         // 3. 판정할 수 없는 점이면 여기서 끝
@@ -102,7 +104,7 @@ public class TrackServiceImpl implements TrackService {
         List<Map<Long, Double>> areaList = new ArrayList<>();
         for (TrackPoint point : recent) {
             Map<Long, Double> areaMeters = new HashMap<>();
-            // 경계 칸이 있는지는 점과 상관없음 → 첫 점에서 없으면 나머지 점은 안 물어봄
+            // 경계 칸이 있는지는 점과 상관없어요. 첫 점에서 없으면 나머지 점은 DB에 안 물어봐요
             boolean hasAreaStop = areaList.isEmpty() || !areaList.get(0).isEmpty();
             if (hasAreaStop) {
                 for (StopAreaMeters row : trackMapper.selectAreaMetersList(tripId, point.getLat(), point.getLng())) {
@@ -257,7 +259,7 @@ public class TrackServiceImpl implements TrackService {
     /** 칸 출발 기록 (departed_at = 지금, state = done) */
     private void leaveStop(long memberId, long tripId, Stop stop) {
         tripService.departStop(memberId, tripId, stop.getId());
-        autoAdjuster.adjustAfterLeave(memberId, tripId, stop); // 늦게 떠났으면 뒤 일정을 밀거나 느슨한 곳을 줄이고 안내 (11/08)
+        autoAdjuster.adjustAfterLeave(memberId, tripId, stop); // 늦게 떠났으면 뒤 일정을 밀거나 느슨한 곳을 줄이고 안내
     }
 
     /** 여행의 GPS 점 */

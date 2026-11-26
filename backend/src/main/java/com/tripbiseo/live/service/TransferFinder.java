@@ -13,9 +13,9 @@ import lombok.Data;
 import lombok.RequiredArgsConstructor;
 
 /**
- * ④ 돌발 ③ (11/06): 고정 일정(KTX)에 늦을 때 "지하철로 ○○역까지 간 뒤 택시"처럼 더 빨리 가는 방법 찾기.
+ * ④ 돌발 ③: 고정 일정(KTX)에 늦을 때 "지하철로 ○○역까지 간 뒤 택시"처럼 더 빨리 가는 방법 찾기.
  * 숫자는 모두 실제 길찾기(TMAP 자동차, ODsay 대중교통)로 계산하고, 대중교통 그대로보다 빠를 때만 알려 줘요.
- * AlternativeServiceImpl·StatusServiceImpl(놓침 판단, 11/12)에서만 쓰는 도우미라 인터페이스 없이 @Component (LiveWeatherChecker와 같은 방식).
+ * AlternativeServiceImpl·StatusServiceImpl(놓침 판단)에서만 쓰는 도우미라 인터페이스 없이 @Component (LiveWeatherChecker와 같은 방식).
  */
 @Component
 @RequiredArgsConstructor
@@ -51,7 +51,7 @@ public class TransferFinder {
         try {
             steps = routeGuideClient.getGuide(fromLat, fromLng, toLat, toLng, "subway").getSteps();
         } catch (RuntimeException e) {
-            steps = List.of(); // 지하철 안내를 못 받으면(키 없음·느린 인터넷) "택시로 바로 가기"만 비교 (11/08: 발표장에서 ③ 대안이 안 나오는 일 없게)
+            steps = List.of(); // 지하철 안내를 못 받으면(키 없음·느린 인터넷) "택시로 바로 가기"만 비교 (발표장에서 대안 ③이 안 나오는 일 없게)
         }
         int lastGetoff = findLastGetoff(steps);
         for (int i = 0; i < lastGetoff; i++) {
@@ -68,7 +68,7 @@ public class TransferFinder {
         return best.getMinutes() < transit ? best : null;
     }
 
-    /** 출발점 → 도착 칸까지 가장 빠른 방법의 분: 택시·갈아타기가 더 빠르면 그 분, 아니면 대중교통 분 (놓침 판단, 11/12 ④) */
+    /** 출발점 → 도착 칸까지 가장 빠른 방법의 분: 택시·갈아타기가 더 빠르면 그 분, 아니면 대중교통 분 (놓침 판단) */
     public int findFastestMinutes(double fromLat, double fromLng, double toLat, double toLng) {
         Option faster = findFaster(fromLat, fromLng, toLat, toLng);
         if (faster != null) {
@@ -89,7 +89,7 @@ public class TransferFinder {
         return option;
     }
 
-    /** 마지막 "내리기" 안내의 위치 (없으면 0이라 후보가 없음) */
+    /** 마지막 "내리기" 안내의 순번. 마지막으로 내리는 역은 갈아탈 역 후보에서 빠져요 (없으면 0 → 후보 없음) */
     private int findLastGetoff(List<GuideStep> steps) {
         int last = 0;
         for (int i = 0; i < steps.size(); i++) {

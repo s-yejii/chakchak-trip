@@ -1,5 +1,6 @@
 <script setup>
-// S13-d GPS 끊김 (④): 위치가 안 잡히면 마지막 위치로 계산하고, 지금 어디인지 물어봐요
+// S13-d GPS 끊김 (④): 위치가 안 잡힐 때의 화면이에요 (예시 값으로 그렸고, 화면 목록 /screens에서 열어요)
+// 마지막 위치로 계산하고, 지금 어디인지 물어봐요
 import BottomSheet from '@/components/common/BottomSheet.vue'
 </script>
 

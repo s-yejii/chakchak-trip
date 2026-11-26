@@ -19,12 +19,14 @@ import com.tripbiseo.trip.service.TripService;
 import lombok.RequiredArgsConstructor;
 
 /**
- * 자동 일정 조정 (③ 11/08 주형, ④ 규칙 확장): 느슨한 곳(식당·카페·공원·쇼핑)에서 계획보다 늦게 떠나면
- *  - 뒤에 예약(회식·KTX)이 없거나 여유가 넉넉하면 뒤 일정이 밀리기만 함 → "○○ 도착이 N분 늦어져요"
- *  - 밀려서 예약까지 여유가 빠듯해지면(20분 미만) 그 사이 느슨한 곳의 머무는 시간을 알아서 줄임 (원래의 70%까지, 5분 단위)
- *    → "○○에서 N분 더 머물러서 △△을 60분 → 50분으로 줄였어요"
- * 숙소·예약·꼭 갈 곳은 안 줄임. 줄여도 늦으면 여행 중 화면의 늦음 카드가 대안을 보여 줌.
- * 안내는 알림함에 한 줄 남기고, 여행 중 화면 위쪽에도 잠깐 보여 주도록 최근 안내를 기억해 둠(상황 응답 adjust).
+ * 자동 일정 조정: 느슨한 곳(식당·카페·공원·쇼핑처럼 시각이 안 정해진 곳)에서 계획보다 늦게 떠나면 뒤 일정을 맞춰요.
+ * 여유(분) = 예약 시각 − 예상 도착.
+ *  1. 뒤에 예약(회식·KTX)이 없거나 여유가 넉넉하면: 뒤 일정이 밀리기만 해요.
+ *     → "○○ 도착이 N분 늦어져요"
+ *  2. 예약까지 여유가 빠듯해지면(20분 미만, 시연 계정은 45분 미만): 그 사이 느슨한 곳의 머무는 시간을 줄여요.
+ *     원래의 70%까지, 5분 단위로요. → "○○에서 N분 더 머물러서 △△을 60분 → 50분으로 줄였어요"
+ * 숙소·예약·꼭 갈 곳은 줄이지 않아요. 줄여도 늦으면 여행 중 화면의 늦음 카드가 대안을 보여 줘요.
+ * 안내는 알림함에 한 줄 남겨요. 여행 중 화면 위쪽에도 잠깐 보이게 최근 안내를 기억해 둬요 (상황 응답의 adjust).
  */
 @Component
 @RequiredArgsConstructor
@@ -32,7 +34,8 @@ public class AutoAdjuster {
 
     private static final int LATE_LEAVE_MIN = 10;    // 이만큼 이상 늦게 떠났을 때만 안내·조정
     private static final int TARGET_SLACK_MIN = 20;  // 예약까지 이만큼 여유를 남기려고 줄임
-    // 시연 계정만: 서울역 칸이 KTX 출발 19:00이라 여유가 넉넉해서, 이보다 적으면 줄임 (11/09 주형: "60분 → 50분" 알림이 시연에서 보이게)
+    // 시연 계정의 여유 기준(분). 시연의 서울역 KTX(19:00)는 여유가 넉넉해서,
+    // 기준을 높여야 "60분 → 50분" 알림이 시연에서 보여요
     static final int DEMO_TARGET_SLACK_MIN = 45;
     private static final double KEEP_RATE = 0.7;     // 머무는 시간은 원래의 70%까지만 줄임
     private static final int STEP_MIN = 5;           // 5분 단위
@@ -43,7 +46,7 @@ public class AutoAdjuster {
     private final AlternativeCalculator alternativeCalculator;
     private final NotificationService notificationService;
     private final DevService devService;               // 시연 계정인지 (common/dev)
-    private final Map<Long, LiveAlert> recentMap = new ConcurrentHashMap<>(); // 여행 id → 최근 안내 (key에 만든 분)
+    private final Map<Long, LiveAlert> recentMap = new ConcurrentHashMap<>(); // 여행 id → 최근 안내. 안내 key 끝에 만든 시각(분)을 넣어 둠
 
     /** 예약까지 남기려는 여유(분): 시연 계정은 45분, 다른 계정은 20분 */
     static int targetSlackFor(boolean isDemo) {
@@ -52,7 +55,7 @@ public class AutoAdjuster {
 
     /** 칸에서 떠난 직후: 늦게 떠났으면 뒤 일정을 밀거나 줄이고 안내 */
     public void adjustAfterLeave(long memberId, long tripId, Stop left) {
-        int lateMin = roundDown(Geo.nowMinutes() - liveStopFinder.getLeaveMinutes(left)); // 5분 단위로 (걸어서 나온 1~2분은 빼고)
+        int lateMin = roundDown(Geo.nowMinutes() - liveStopFinder.getLeaveMinutes(left)); // 5분 단위로 내림 (걸어 나온 1~2분은 안 셈)
         if (lateMin < LATE_LEAVE_MIN || LiveStopFinder.isStay(left)) {
             return;
         }
@@ -115,7 +118,7 @@ public class AutoAdjuster {
         return -1;
     }
 
-    /** 앞에서부터 느슨한 곳의 머무는 시간을 need분만큼 줄여 저장 (②의 updateStop). 바뀐 곳 "이름 60분 → 50분" 목록 */
+    /** 앞 칸부터 차례로, 합쳐서 need분이 될 때까지 느슨한 곳의 머무는 시간을 줄여 저장 (②의 updateStop). 돌려주는 값: "이름 60분 → 50분" 목록 */
     private List<String> trimStays(long memberId, long tripId, List<Stop> before, int need) {
         List<String> changes = new ArrayList<>();
         int left = need;
@@ -136,7 +139,7 @@ public class AutoAdjuster {
         return changes;
     }
 
-    /** 머무는 시간만 바꿔 저장 (시각·이동 수단·메모는 그대로, ②의 updateStop은 보낸 값으로 덮어씀) */
+    /** 머무는 시간만 바꿔 저장. ②의 updateStop은 보낸 값으로 다 덮어써서, 시각·이동 수단·메모는 원래 값을 그대로 보내요 */
     private void saveStay(long memberId, long tripId, Stop stop, int stay) {
         Stop update = new Stop();
         update.setTime(stop.getTime());

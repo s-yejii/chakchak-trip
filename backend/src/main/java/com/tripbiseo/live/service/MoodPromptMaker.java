@@ -7,8 +7,10 @@ import org.springframework.stereotype.Component;
 import com.tripbiseo.live.dto.MoodMatch;
 
 /**
- * ④ 리뷰 RAG의 A·G: 벡터로 찾은 후보 가게의 리뷰를 프롬프트에 넣고(Augmented), 분위기에 맞는 곳만 고르게(Generation) 하는 글.
- * 가게 이름·좌표는 넣지 않고 번호와 리뷰 글만 넣어요. 답은 JSON(MoodJudgeAnswer)으로만.
+ * ④ 리뷰 RAG에서 Gemini에 보낼 글을 만들어요.
+ * RAG: 근거 자료를 먼저 찾아(R) 프롬프트에 넣고(A) 그 근거로 답을 만들게(G) 하는 방식.
+ * 여기서는 벡터로 찾은 후보 가게의 리뷰를 넣고(A), 분위기에 맞는 곳만 고르게(G) 해요.
+ * 가게 이름·좌표는 빼고 번호와 리뷰 글만 넣어요. 답은 JSON(MoodJudgeAnswer)으로만 받아요.
  */
 @Component
 public class MoodPromptMaker {

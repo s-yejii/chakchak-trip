@@ -1,7 +1,10 @@
 <script setup>
-// S16-c 장소 바꾸기 (④): 남은 장소 하나(?id=, 없으면 서버 추천 C가 바꾼 곳)를 근처 다른 곳으로 바꿔요
-// 후보는 서버(GET /live/swap-candidates): 1.5km 안 · 도착할 때 영업 중 · 평점 있음 · 가까운 순, 바꿨을 때 여유까지 계산돼 와요.
-// 고르면 바꾼 일정을 계산(POST /live/preview)해서 그대로 적용(POST /live/apply)해요.
+// S16-c 장소 바꾸기 (④): 대안 고르기 화면 위 [장소 바꾸기] 탭으로 들어와요 (비 올 때 [실내로 바꾸기]도 여기로)
+// 남은 장소 하나를 근처 다른 곳으로 바꿔요. 바꿀 곳은 ?id=, 없으면 서버 추천 대안 C가 바꾼 곳이에요.
+// 후보는 서버가 골라 줘요 (GET /live/swap-candidates):
+//   1.5km 안, 도착할 때 영업 중, 평점 있는 곳을 가까운 순으로
+//   바꿨을 때 여유(고정 일정에 도착하고 남는 시간)도 같이 와요
+// 하나 고르면 바꾼 일정을 계산(POST /live/preview)해서 그대로 적용(POST /live/apply)해요.
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import TopBar from '@/components/common/TopBar.vue'
@@ -22,7 +25,7 @@ const router = useRouter()
 const replan = useReplanStore()
 const candidates = ref(null)
 const pickedId = ref(null)
-const openId = ref(null) // 정보를 펼친 줄
+const openId = ref(null) // 정보를 펼친 후보 줄 (장소 id)
 const fromId = ref(null) // 바꿀 칸 id
 const isApplying = ref(false)
 const error = ref('')
@@ -42,7 +45,8 @@ onMounted(async () => {
   }
 })
 
-// 서버 추천(C 장소 변경)이 바꾼 곳, 없으면 바꿀 수 있는 첫 칸
+// 바꿀 칸 고르기: 서버 추천 대안 C(장소 변경)가 바꾼 곳
+// 없으면 바꿀 수 있는(고정 일정·꼭 갈 곳이 아닌) 첫 칸
 function recommendedFromId() {
   const option = replan.findOption('장소 변경')
   const swappable = replan.stops.filter((stop) => !stop.fixed && stop.importance !== 'must')
@@ -64,7 +68,7 @@ const whyText = computed(() => {
   return '안 늦어요'
 })
 
-// 지도 핀: 후보 번호 (고른 곳 강조)
+// 지도 핀: 후보 번호 (고른 곳·정보를 펼친 곳 강조)
 const mapPins = computed(() => (candidates.value || []).map((place, i) => ({
   key: place.id,
   id: place.id,
@@ -85,7 +89,7 @@ function toggleInfo(id) {
   openId.value = openId.value === id ? null : id
 }
 
-// 바꾼 일정: 바꿀 칸 자리에 고른 장소 (머묾은 원래 칸 그대로)
+// 서버에 보낼 바꾼 일정: 바꿀 칸 자리에 고른 장소를 넣어요 (머묾은 원래 칸 그대로)
 function swappedList() {
   const list = []
   for (const stop of replan.stops) {

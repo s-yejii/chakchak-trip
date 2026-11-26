@@ -1,7 +1,10 @@
 <script setup>
 import { toDuration } from '@/utils/time'
-// 여행 중 링크 추가: 인스타·유튜브·네이버 링크 → 장소 찾기(POST /plans/links) → 하나 고르기 → 남은 일정에 넣어 보기(POST /live/link-fit)
-//   방해 없이 들어가면 여기서 바로 넣고, 늦어지거나 식당·카페가 겹치면 고르는 화면(/live/link-fit)으로 넘어가요
+// 여행 중 [링크 추가] 시트: 인스타·유튜브·네이버 게시물 링크로 장소를 넣어요
+//   1. 링크에서 장소 찾기 (POST /plans/links)
+//   2. 넣을 곳 고르기
+//   3. 남은 일정에 넣어 보기 (POST /live/link-fit)
+//   문제없이 들어가면 여기서 바로 넣고, 늦어지거나 식당·카페가 겹치면 고르는 화면(/live/link-fit)으로 넘어가요
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { findLinkPlaces, fitLinkPlaces } from '@/api/trips'
@@ -21,7 +24,7 @@ const isFinding = ref(false)
 const isFitting = ref(false)
 const found = ref(null) // 찾은 장소 카드 (찾기 전에는 null)
 const picked = ref({}) // 고른 장소 { 이름: true }
-const fit = ref(null) // 바로 넣어도 될 때의 넣어 본 결과
+const fit = ref(null) // 넣어 본 결과 (바로 넣어도 될 때만 채워요)
 const MAX_PICK = 5
 const pickedPlaces = computed(() => (found.value ? found.value.filter((place) => picked.value[place.name]) : []))
 
@@ -81,7 +84,7 @@ async function addNow() {
   }
 }
 
-// 고르기·풀기 (한 번에 5곳까지)
+// 고르기·풀기 (한 번에 MAX_PICK = 5곳까지)
 function togglePick(place) {
   if (!picked.value[place.name] && pickedPlaces.value.length >= MAX_PICK) return (error.value = MAX_PICK + '곳까지 고를 수 있어요')
   error.value = ''

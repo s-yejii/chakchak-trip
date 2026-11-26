@@ -14,7 +14,11 @@ import org.springframework.stereotype.Component;
 @Component
 public class SqlPromptMaker {
 
-    /** 예시: {사용자 말, SQL (못 찾는 질문이면 null), 설명 또는 못 찾는 이유, (분위기가 있으면) mood, moodWord, (다른 곳이면) place} */
+    /**
+     * 프롬프트에 넣을 예시. 칸 순서:
+     *   0 사용자 말, 1 SQL (못 찾는 질문이면 null), 2 설명 또는 못 찾는 이유,
+     *   3·4 mood·moodWord (분위기가 있을 때), 5 place (다른 곳 기준일 때)
+     */
     static final List<String[]> EXAMPLES = List.of(
         new String[] {"가는 길에 5분 안에 들를 카페",
             "SELECT id FROM ask_place WHERE kind = 'cafe' AND detour_minutes(geom, :route) <= 5 "
@@ -53,7 +57,7 @@ public class SqlPromptMaker {
         new String[] {"만원 이하 파스타", null,
             "가격 정보가 없어서 가격으로는 찾을 수 없어요"});
 
-    /** 이어지는 질문 예시 (앞 결과가 있을 때만 프롬프트에 넣음, 11/13). 한 문장에 맞추지 않게 정렬·조건을 여러 가지로 */
+    /** 이어지는 질문 예시. 앞 결과가 있을 때만 넣어요. Gemini가 한 문장만 따라 하지 않게 정렬·조건을 여러 가지로 */
     static final List<String[]> FOLLOW_EXAMPLES = List.of(
         new String[] {"이 중에 제일 안 돌아가는 데",
             "SELECT p.id FROM ask_place p WHERE p.id IN (:prev) ORDER BY detour_minutes(p.geom, :route) LIMIT 1",

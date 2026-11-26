@@ -13,18 +13,22 @@ import lombok.RequiredArgsConstructor;
 
 /**
  * ④ 여행 중 채팅 말 분류: 추천(recommend) / 일정 바꾸기(change) / 질문(question).
- * 규칙 먼저 → 한 종류만 걸리면 확실해서 바로 결과 → 애매할 때만 Gemini(JSON, 고를 값 고정) → 서버가 값 확인 → 그래도 모르면 질문.
- * 근거: 자주 하는 말은 정해져 있어 규칙이 빠르고 늘 같은 결과. Gemini가 꺼져도 채팅이 돌아감. 좌표는 프롬프트에 넣지 않음.
+ * 순서:
+ *   1. 낱말 규칙: 한 종류만 걸리면 확실해서 바로 결과
+ *   2. 애매할 때만 Gemini (JSON으로, 고를 값을 정해 줌) → 서버가 값 확인
+ *   3. 그래도 모르면 질문으로
+ * 규칙을 먼저 쓰는 이유: 자주 하는 말은 정해져 있어서 빠르고 늘 같은 결과예요. Gemini가 꺼져도 채팅이 돌아가요.
+ * 좌표는 프롬프트에 넣지 않아요.
  */
 @Component
 @RequiredArgsConstructor
 public class LiveChatClassifier {
 
     private static final String[] RECOMMEND_WORDS = {"추천", "근처", "어디 가", "갈 만한", "갈만한", "먹을", "마실", "배고",
-                                                     "가는 길", "들를", "들르", "다녀올"}; // 뒤 4개: AI에게 묻기 (11/08)
+                                                     "가는 길", "들를", "들르", "다녀올"}; // 뒤 4개: AI에게 묻기용
     private static final String[] CHANGE_WORDS = {"바꿔", "바꾸", "늦", "빼", "다시 짜", "일정 변경"};
     private static final String[] QUESTION_WORDS = {"몇 시", "몇시", "다음", "언제", "여유", "남았", "날씨", "비 와", "비와", "출발"};
-    private static final String[] FOLLOW_WORDS = {"이 중", "이중", "그중", "그 중", "여기서", "거기서"}; // 앞 결과를 가리키는 말 (11/13)
+    private static final String[] FOLLOW_WORDS = {"이 중", "이중", "그중", "그 중", "여기서", "거기서"}; // 앞 결과를 가리키는 말
     private static final String[] CATEGORIES = {"카페", "디저트", "식당", "술집"};
     private static final String DEFAULT_CATEGORY = "카페";
 
@@ -59,7 +63,7 @@ public class LiveChatClassifier {
 
     /** 낱말 규칙: 한 종류만 걸리면 그 종류, 아무것도 안 걸리거나 여러 종류면 null(애매) */
     private ChatIntent classifyByRule(String message) {
-        // 장소 종류 + 추천 말이 같이 있으면 "다음·여유"가 섞여도 추천 ("다음 장소 근처 카페", 11/08)
+        // 장소 종류 + 추천 말이 같이 있으면 "다음·여유"가 섞여도 추천 ("다음 장소 근처 카페")
         boolean isClearRecommend = findCategory(message) != null && containsAny(message, RECOMMEND_WORDS);
         if (isClearRecommend && !containsAny(message, CHANGE_WORDS)) {
             return makeIntent("recommend", message);

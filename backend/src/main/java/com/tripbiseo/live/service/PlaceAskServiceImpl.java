@@ -36,13 +36,18 @@ import com.tripbiseo.trip.service.PlaceService;
 import lombok.RequiredArgsConstructor;
 
 /**
- * ④ 여행 중 AI에게 묻기 (Text-to-SQL).
- * 순서: 상황 모으기 → Gemini가 SQL 작성 → SqlChecker 검사(떨어지면 한 번 더) → AskSqlRunner로 실행
- *       → (덜 돌아가는·가까운 순이면) WalkRanker가 실제 걷는 길로 다시 줄 세움 → 영업·여유 계산.
- * 이어지는 질문("이 중에 …", 11/13)이면 앞 결과 id를 빈칸 :prev로 넣어 그 안에서만 찾아요.
- * 어디서 막히면 fallback = true를 돌려주고, 부르는 쪽(LiveServiceImpl.assist)이 예전 반경 고르기로 이어 가요.
- * (여기서 예전 추천을 직접 부르지 않는 이유: LiveServiceImpl이 이 서비스를 부르니 서로 부르는 구조가 됨)
- * 좌표는 Gemini에 보내지 않아요. SQL에는 빈칸 이름만 있고 값은 서버가 넣어요.
+ * ④ 여행 중 AI에게 묻기 (Text-to-SQL: Gemini가 사용자 말을 SQL로 바꿔 주는 방식).
+ * 순서:
+ *   1. 지금 상황 모으기 (내 위치, 다음 장소, 가는 길, 여유)
+ *   2. Gemini가 SQL 작성
+ *   3. SqlChecker로 검사 (떨어지면 이유를 붙여 한 번 더 물음)
+ *   4. AskSqlRunner로 실행
+ *   5. 덜 돌아가는 순·가까운 순이면 WalkRanker가 실제 걷는 길로 다시 줄 세움
+ *   6. 영업 중인지, 들르고 남는 여유 계산
+ * 빈칸: SQL 안의 :me, :route 같은 이름. 값(좌표 등)은 서버가 넣어서 Gemini에는 좌표를 보내지 않아요.
+ * 이어지는 질문("이 중에 …")이면 앞 결과 id를 빈칸 :prev에 넣어 그 안에서만 찾아요.
+ * 중간에 막히면 fallback = true를 돌려주고, 부르는 쪽(LiveServiceImpl.assist)이 반경 고르기로 이어 가요.
+ * 여기서 반경 추천을 직접 부르지 않는 이유: LiveServiceImpl이 이 서비스를 부르니 서로 부르는 구조가 돼요.
  */
 @Service
 @RequiredArgsConstructor
@@ -50,8 +55,8 @@ public class PlaceAskServiceImpl implements PlaceAskService {
 
     private static final Logger log = LoggerFactory.getLogger(PlaceAskServiceImpl.class); // 왜 못 찾았는지 남김 (좌표·질문 원문은 안 남김)
 
-    private static final double MIN_RATING = 4.0; // 이 보정 평점 아래는 결과에서 뺌 (11/17)
-    private static final int STAY_MINUTES = CafeStay.BASE_MIN; // 들르면 머무는 시간(분) 30. 프롬프트 규칙과 같음. 카페는 여유가 많으면 CafeStay 규칙으로 늘림 (11/17)
+    private static final double MIN_RATING = 4.0; // 보정 평점(리뷰 수까지 반영한 평점)이 이보다 낮으면 결과에서 뺌
+    private static final int STAY_MINUTES = CafeStay.BASE_MIN; // 들르면 머무는 시간 30분 (프롬프트 규칙과 같음). 카페는 여유가 많으면 CafeStay가 늘림
     private static final int BAND_METERS = 190;  // 지도 띠 폭: 가는 길 양옆 190m = 걸어서 왕복 약 5분
     private static final String ROUTE = "route";
     private static final String ME = "me";
@@ -59,7 +64,7 @@ public class PlaceAskServiceImpl implements PlaceAskService {
     private static final String SLACK = "slack";
     private static final String PREV = "prev";
     private static final int MAX_PREV_IDS = 10;  // 앞 결과는 많아야 10곳 (AI SQL LIMIT 상한과 같음)
-    private static final int MOOD_WALK_POOL = 5; // 분위기로 고른 뒤 실제 걷는 길로 다시 잴 곳 수 (길찾기 호출 수 때문에, SqlChecker RERANK_POOL과 같음)
+    private static final int MOOD_WALK_POOL = 5; // 분위기로 고른 뒤 실제 걷는 길로 다시 잴 곳 수. 길찾기 호출을 줄이려고 5곳만 (SqlChecker RERANK_POOL과 같음)
 
     private final LiveTripReader liveTripReader;   // 진행 중인 여행인지 확인 (④ 도우미)
     private final StatusService statusService;     // 다음 칸·가는 길·여유 (④)
@@ -69,9 +74,9 @@ public class PlaceAskServiceImpl implements PlaceAskService {
     private final SqlChecker sqlChecker;
     private final AskSqlRunner askSqlRunner;
     private final PlaceService placeService;       // 영업 중인지 (②)
-    private final WalkRanker walkRanker;           // 실제 걷는 길로 다시 줄 세우기 (11/13)
-    private final ReviewRagService reviewRagService; // 분위기 조건은 리뷰 RAG로 고르기 (11/15)
-    private final LocationSearchClient locationSearchClient; // "강남역 근처"처럼 다른 곳 이름 → 좌표 (카카오 검색, 공통, 11/18)
+    private final WalkRanker walkRanker;           // 실제 걷는 길로 다시 줄 세우기
+    private final ReviewRagService reviewRagService; // 분위기 조건은 리뷰 RAG로 고르기 (뜻이 가까운 리뷰를 찾아 Gemini가 근거로 판단)
+    private final LocationSearchClient locationSearchClient; // "강남역 근처"처럼 다른 곳 이름 → 좌표 (카카오 검색, 공통)
 
     /** 사용자 말로 장소 찾기 (prevPlaceIds가 있으면 그 안에서만) */
     @Override
@@ -114,7 +119,13 @@ public class PlaceAskServiceImpl implements PlaceAskService {
 
     // ---------------------------------------------------------------- 1. 상황 모으기
 
-    /** 빈칸 값: 내 위치는 항상, 다음 칸·여유는 남은 일정이 있으면, 가는 길은 걸어가는 구간일 때만, 앞 결과는 이어지는 질문일 때만 */
+    /**
+     * 빈칸에 넣을 값 모으기.
+     *   내 위치(:me): 항상
+     *   다음 장소(:next)·여유(:slack): 남은 일정이 있을 때
+     *   가는 길(:route): 다음 장소까지 걸어갈 때만
+     *   앞 결과(:prev): 이어지는 질문일 때만
+     */
     private AskSituation collectSituation(Trip trip, StatusResponse status, double lat, double lng, List<String> prevPlaceIds) {
         AskSituation situation = new AskSituation();
         situation.setMe(toPoint(lat, lng));
@@ -152,7 +163,10 @@ public class PlaceAskServiceImpl implements PlaceAskService {
         return null;
     }
 
-    /** 다음 칸까지 걸어가는지 (길찾기와 같은 규칙: 고른 수단, 없으면 700m 안은 도보). 대중교통이면 "가는 길" 근처는 의미 없음 */
+    /**
+     * 다음 칸까지 걸어가는지. 길찾기와 같은 규칙: 사용자가 고른 수단, 없으면 700m 안은 도보.
+     * 대중교통이면 "가는 길 근처"가 의미 없어서 확인해요
+     */
     private boolean isWalkingToNext(Trip trip, Stop nextStop, double lat, double lng) {
         double meters = Geo.distanceMeters(lat, lng, nextStop.getLat(), nextStop.getLng());
         return "walk".equals(routeClient.chooseMode(nextStop.getMode(), meters, trip.getTransports()));
@@ -164,7 +178,8 @@ public class PlaceAskServiceImpl implements PlaceAskService {
     }
 
     /**
-     * 다른 곳 기준으로 찾기 (11/18): :me를 그곳 좌표로 바꾸고, 내 일정에 묶인 값(가는 길·다음 장소·여유)은 지움.
+     * 다른 곳 기준으로 찾기 (예: "강남역 근처 카페").
+     * :me를 그곳 좌표로 바꾸고, 내 일정에 묶인 가는 길·다음 장소·여유는 지워요.
      * 그곳을 못 찾으면 false (상황은 그대로)
      */
     private boolean moveToPlace(AskSituation situation, String place) {
@@ -185,8 +200,10 @@ public class PlaceAskServiceImpl implements PlaceAskService {
     }
 
     /**
-     * 장소 이름 → {위도, 경도}. "○○구·○○동"이면 지역 가운데, 아니면 역·건물·가게 키워드 검색 첫 번째(내 위치 쪽).
-     * 카카오 검색에 내 위치를 보내는 건 괜찮아요 (Gemini에는 안 보냄). 못 찾거나 키가 없으면 null
+     * 장소 이름 → {위도, 경도}. 못 찾거나 카카오 키가 없으면 null.
+     *   "○○구", "○○동"으로 끝나면: 그 지역 가운데 (못 찾으면 아래 키워드 검색)
+     *   역·건물·가게: 키워드 검색 첫 번째 (내 위치에서 가까운 쪽)
+     * 카카오 검색에는 내 위치를 보내도 돼요 (Gemini에는 안 보냄)
      */
     private double[] findPlacePoint(String place, double myLat, double myLng) {
         try {
@@ -241,7 +258,11 @@ public class PlaceAskServiceImpl implements PlaceAskService {
         }
     }
 
-    /** SqlChecker 검사 + 지금 값이 없는 빈칸을 썼는지 (예: 대중교통 구간인데 :route) + 이어지는 질문인데 :prev를 빠뜨렸는지 */
+    /**
+     * SQL 검사. SqlChecker 검사에 두 가지를 더 봐요.
+     *   1. 지금 값이 없는 빈칸을 썼는지 (예: 대중교통 구간인데 :route)
+     *   2. 이어지는 질문인데 :prev를 빠뜨렸는지
+     */
     private SqlCheck checkAnswer(SqlAnswer answer, Set<String> usable) {
         SqlCheck check = sqlChecker.checkSql(answer.getSql(), hasMood(answer));
         if (!check.isOk()) {
@@ -266,7 +287,13 @@ public class PlaceAskServiceImpl implements PlaceAskService {
 
     // ---------------------------------------------------------------- 4·5. 실행·후처리
 
-    /** 실행 → (덜 돌아가는·가까운 순이면) 실제 걷는 길로 다시 줄 세움 → 영업·여유 → 원한 개수만. DB가 막으면(3초 초과·권한 밖) fallback */
+    /**
+     * SQL 실행 뒤 마무리.
+     *   1. 실행 (3초가 넘거나 권한 밖이라 DB가 막으면 fallback)
+     *   2. 분위기 조건이 있으면 리뷰 RAG로 고르기
+     *   3. 덜 돌아가는 순·가까운 순이면 실제 걷는 길로 다시 줄 세우기
+     *   4. 영업·여유를 채우고 사용자가 원한 개수만 남기기
+     */
     private PlaceAskResult runAndFinish(SqlAnswer answer, SqlCheck check, AskSituation situation) {
         List<AskedPlace> places;
         try {
@@ -276,7 +303,7 @@ public class PlaceAskServiceImpl implements PlaceAskService {
             return makeFallback();
         }
         log.info("AI에게 묻기 SQL: {} → {}곳", answer.getSql(), places.size());
-        boolean isMoodMissed = false; // 분위기에 맞는 곳이 없어서 근처 곳을 대신 보여 주는지 (11/18)
+        boolean isMoodMissed = false; // 분위기에 맞는 곳이 없어서 근처 곳을 대신 보여 주는지
         if (hasMood(answer)) {
             List<AskedPlace> moodPlaces = applyMood(places, answer);
             if (moodPlaces.isEmpty() && !places.isEmpty()) {
@@ -308,7 +335,7 @@ public class PlaceAskServiceImpl implements PlaceAskService {
         return answer.getMood() != null && !answer.getMood().isBlank();
     }
 
-    /** 분위기 질문: 리뷰 RAG로 분위기에 맞는 곳만 그 순서로 남기고, 고른 이유·근거 리뷰를 붙임 */
+    /** 분위기 질문: 리뷰 RAG로 맞는 곳만 그 순서로 남기고, 고른 이유와 근거 리뷰를 붙임 */
     private List<AskedPlace> applyMood(List<AskedPlace> places, SqlAnswer answer) {
         List<String> placeIds = new ArrayList<>();
         for (AskedPlace place : places) {
@@ -347,7 +374,7 @@ public class PlaceAskServiceImpl implements PlaceAskService {
         List<AskedPlace> openPlaces = new ArrayList<>();
         for (AskedPlace place : places) {
             if (isLowRated(place)) {
-                continue; // 평점 낮은 곳은 권하지 않음 (11/17: "제일 가까운 카페"로 3.43점 가게가 나왔어요. AI SQL이 가까운 순이면 평점 정렬이 빠짐)
+                continue; // 평점 낮은 곳은 권하지 않음. AI SQL이 가까운 순으로만 정렬하면 3점대 가게도 섞이기 때문
             }
             OpenInfo open = placeService.getOpenInfo(toPlace(place), Geo.now().toLocalDate(), Geo.nowMinutes(), STAY_MINUTES);
             if (open != null && Boolean.FALSE.equals(open.getOpen())) {
@@ -372,8 +399,10 @@ public class PlaceAskServiceImpl implements PlaceAskService {
     }
 
     /**
-     * 카드에 머무는 시간·여유. 카페는 [일정에 넣기]와 같은 CafeStay 계산 (다음 예약 5분 전 도착에 맞춰 머묾, 최대 60분)
-     * → 화면 "N분 쉬었다 가면 돼요". 15분도 못 있으면 stayMinutes null (화면 "들르면 빠듯해요"). 카페 아닌 곳은 30분 기준 그대로
+     * 카드에 보여 줄 머무는 시간과 여유.
+     *   카페 아닌 곳, 여유를 모를 때: 30분 기준 그대로
+     *   카페: [일정에 넣기]와 같은 CafeStay 계산. 다음 예약 5분 전에 닿게 머묾 (최대 60분) → 화면 "N분 쉬었다 가면 돼요"
+     *   카페인데 15분도 못 있으면: stayMinutes null → 화면 "들르면 빠듯해요"
      */
     private void setStayAndSlack(AskedPlace place, Integer slackAfterBase) {
         if (!CafeStay.isCafe(place.getCategory()) || slackAfterBase == null) {
@@ -407,7 +436,7 @@ public class PlaceAskServiceImpl implements PlaceAskService {
         return result;
     }
 
-    /** 질문에 나온 곳을 지도에서 못 찾았을 때 (11/18) */
+    /** 질문에 나온 곳을 지도에서 못 찾았을 때 */
     private PlaceAskResult makePlaceNotFound(String place) {
         PlaceAskResult result = new PlaceAskResult();
         result.setMessage("'" + place + "'을(를) 지도에서 찾지 못했어요. 역이나 동네 이름으로 다시 물어봐 주세요.");
@@ -430,7 +459,7 @@ public class PlaceAskServiceImpl implements PlaceAskService {
         return result;
     }
 
-    /** AI로 찾지 못함 → 부르는 쪽이 예전 반경 고르기로 */
+    /** AI로 찾지 못함 → 부르는 쪽이 반경 고르기로 넘어감 */
     private PlaceAskResult makeFallback() {
         PlaceAskResult result = new PlaceAskResult();
         result.setFallback(true);

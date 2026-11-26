@@ -39,8 +39,11 @@ import com.tripbiseo.trip.service.TripService;
 import lombok.RequiredArgsConstructor;
 
 /**
- * ④ 여행 중 AI 채팅 → 근처 추천 → 일정에 넣기. 대안은 AlternativeServiceImpl, 지금 상황은 StatusServiceImpl.
- * AI 원칙: 규칙 먼저, 애매할 때만 Gemini(분류·답 문장만). 추천·시각 계산은 코드로. 좌표는 프롬프트에 넣지 않음.
+ * ④ 여행 중 AI 채팅, 근처 추천, 일정에 넣기. (대안은 AlternativeServiceImpl, 지금 상황은 StatusServiceImpl)
+ * AI 원칙:
+ *   - 규칙 먼저, 애매할 때만 Gemini. Gemini는 분류와 답 문장만 맡아요
+ *   - 추천·시각 계산은 코드로 해요
+ *   - 좌표는 프롬프트에 넣지 않아요
  */
 @Service
 @RequiredArgsConstructor
@@ -50,18 +53,18 @@ public class LiveServiceImpl implements LiveService {
     private static final int MIN_RADIUS_M = 100;
     private static final int MAX_RADIUS_M = 3000;
     private static final int RECOMMEND_COUNT = 3;
-    private static final int ON_ROUTE_COUNT = 5;          // 비슷한 가게 [다음 고정 일정 가는 길]: 5곳까지 (11/17 ③, ④ 예지 OK)
-    private static final double TRUSTED_RATING = 4.9;     // 가는 길: 평점 이 이상 + 리뷰 이 개수 이상이면 "검증된 가게" → 덜 돌아가는 순으로 맨 앞
+    private static final int ON_ROUTE_COUNT = 5;          // 비슷한 가게 [다음 고정 일정 가는 길]: 5곳까지
+    private static final double TRUSTED_RATING = 4.9;     // 가는 길 모드: 평점 4.9 이상 + 리뷰 1000개 이상이면 "검증된 가게"로 보고 맨 앞에
     private static final int TRUSTED_REVIEWS = 1000;
-    private static final String HHMM = "([01]\\d|2[0-3]):[0-5]\\d"; // 예약 시각 15:00 (11/16 ③)
-    private static final int CAFE_STAY_MIN = CafeStay.BASE_MIN; // 일정에 넣기: 카페·디저트·베이커리 30분(여유가 많으면 CafeStay 규칙으로 늘림), 아니면 60분 (API.md, 11/17)
+    private static final String HHMM = "([01]\\d|2[0-3]):[0-5]\\d"; // 예약 시각 꼴 (예: 15:00)
+    private static final int CAFE_STAY_MIN = CafeStay.BASE_MIN; // 일정에 넣을 때 머무는 시간: 카페·디저트·베이커리 30분, 그 밖 60분 (API.md). 카페는 여유가 많으면 CafeStay가 늘림
     private static final int OTHER_STAY_MIN = 60;
-    private static final double WALK_METERS_PER_MIN = 75; // 도착 예상: 걸어서 분당 75m, 길 돌아감 1.3배
+    private static final double WALK_METERS_PER_MIN = 75; // 도착 예상: 걸어서 1분에 75m, 실제 길은 직선의 1.3배로 봄
     private static final double ROAD_FACTOR = 1.3;
     private static final String FOOD_WORDS = ".*(식당|맛집|음식|밥|한식|중식|일식|양식|고기|분식).*";
     private static final String NOT_FOOD_WORDS = ".*(카페|디저트|베이커리|숙박|관광|문화|공원|쇼핑).*";
     private static final String DRINK_WORDS = ".*(주점|이자카야|호프|맥주|와인|포차|칵테일).*";
-    // 비슷한 가게: 네이버 업종 이름이 달라도 같은 일식으로 봄 (스시도 "일식당" ↔ 스시이세이 "초밥,롤", 11/16 ③ 요청)
+    // 비슷한 가게: 네이버 업종 이름이 달라도 같은 일식으로 봄 (스시도 "일식당" ↔ 스시이세이 "초밥,롤")
     private static final Set<String> JAPANESE_TYPES = Set.of("일식", "일식당", "초밥", "롤", "스시", "오마카세");
     private static final String JAPANESE_GROUP = "일식";
 
@@ -75,9 +78,14 @@ public class LiveServiceImpl implements LiveService {
     private final LiveChatClassifier liveChatClassifier;   // 말 분류 (규칙 → Gemini)
     private final LiveChatAnswerer liveChatAnswerer;       // 질문 답 (템플릿 → Gemini RAG)
     private final PlaceTagReader placeTagReader;           // 리뷰 태그 점수·이유 칩
-    private final PlaceAskService placeAskService;         // 추천 질문 → SQL로 바꿔 찾기 (Text-to-SQL, 11/08)
+    private final PlaceAskService placeAskService;         // 추천 질문 → SQL로 바꿔 찾기 (Text-to-SQL)
 
-    /** 여행 중 채팅: 말 분류 → 추천이면 질문으로 바로 찾기(못 찾으면 반경 묻기), 바꾸기면 대안, 질문이면 오늘 상황으로 답 */
+    /**
+     * 여행 중 채팅: 말을 분류해서 종류에 맞게 답해요.
+     *   추천: 질문으로 바로 장소 찾기 (못 찾으면 반경 묻기)
+     *   일정 바꾸기: 대안 만들기
+     *   질문: 오늘 상황을 근거로 답
+     */
     @Override
     public AssistResponse assist(long memberId, long tripId, AssistRequest request) {
         String message = request.getMessage() == null ? "" : request.getMessage().trim();
@@ -86,7 +94,7 @@ public class LiveServiceImpl implements LiveService {
         }
         liveTripReader.getOngoingTrip(memberId, tripId, request.getLat(), request.getLng());
         AssistResponse response = new AssistResponse();
-        // 이어지는 질문("이 중에 …", 11/13): 앞 결과 안에서 다시 찾음. 아니면 앞 결과는 안 씀
+        // 이어지는 질문("이 중에 …"): 앞 결과 안에서 다시 찾음. 아니면 앞 결과는 안 씀
         if (liveChatClassifier.isFollowUp(message, request.getPrevPlaceIds())) {
             ChatIntent intent = liveChatClassifier.classifyFollowUp(message, request.getPrevMessage());
             answerRecommend(response, memberId, tripId, request, message, intent, true);
@@ -106,8 +114,12 @@ public class LiveServiceImpl implements LiveService {
     }
 
     /**
-     * 반경 안 추천 3곳: PostGIS 반경 검색 → 평점 없는 곳 빼기 → 점수(보정 평점 + 원하는 리뷰 태그) 순
-     * → 도착할 때 닫힌 곳 빼기(closedSkipped) → 영업 정보 + 이유 칩
+     * 반경 안 추천 3곳.
+     *   1. PostGIS로 반경 안 장소 찾기 (평점 없는 곳은 뺌)
+     *   2. 점수(보정 평점 + 원하는 리뷰 태그) 높은 순으로 정렬
+     *   3. 도착할 때 닫힌 곳은 빼고 셈 (closedSkipped)
+     *   4. 영업 정보와 이유 칩 붙이기
+     * 놓친 가게(similarTo)가 있으면 업종이 겹치는 곳만, 가는 길 모드면 5곳 (정렬은 sortOnRoute)
      */
     @Override
     public RecommendResponse recommend(long memberId, long tripId, RecommendRequest request) {
@@ -122,10 +134,10 @@ public class LiveServiceImpl implements LiveService {
         int stay = getStay(request.getCategory());
         Place missed = null;
         if (request.getSimilarTo() != null) {
-            // 11/12: 놓친 예약과 비슷한 가게 (업종이 겹치는 곳만, 머무는 시간은 놓친 칸 그대로)
+            // 놓친 예약과 비슷한 가게 (업종이 겹치는 곳만, 머무는 시간은 놓친 칸 그대로)
             missed = placeService.getPlace(request.getSimilarTo()); // 없으면 404
             if (Boolean.TRUE.equals(request.getOnRoute())) {
-                candidates = findSameTypePlaces(request, missed); // 가는 길은 반경이 넓어서 가까운 200곳에 안 들어가는 가게가 생김 (11/17)
+                candidates = findSameTypePlaces(request, missed); // 가는 길 모드는 반경이 넓어서, 가까운 200곳만 보면 빠지는 가게가 생겨 업종 낱말로 다시 찾음
             }
             candidates = keepSimilarPlaces(candidates, missed, trip);
             stay = getMissedStay(trip, missed, stay);
@@ -150,10 +162,12 @@ public class LiveServiceImpl implements LiveService {
     }
 
     /**
-     * 추천 장소를 바로 다음 일정으로. 새 칸을 맨 앞에 둔 "대안"을 계산해서 대안 적용(applyAlternative)으로 저장해요.
-     * 고정 일정에 늦으면 고정 일정 바로 앞 칸 머무는 시간을 최대 절반까지 줄임 (API.md)
-     * replaceStopId가 있으면 맨 앞 대신 그 칸 자리에 넣고, 그 칸은 skipped (놓친 예약 바꾸기, 11/12)
-     * afterStopId가 있으면 그 칸 다음에 넣음 (사용자가 넣을 자리를 고름, 11/13)
+     * 추천 장소를 일정에 넣어요. 새 칸을 넣은 "대안"을 계산해서 대안 적용(applyAlternative)으로 저장해요.
+     * 넣는 자리:
+     *   기본: 바로 다음(맨 앞)
+     *   replaceStopId가 있으면: 그 칸 자리에 넣고 그 칸은 skipped (놓친 예약 바꾸기)
+     *   afterStopId가 있으면: 그 칸 다음 (사용자가 자리를 고름)
+     * 고정 일정에 늦으면 그 바로 앞 칸 머무는 시간을 최대 절반까지 줄여요 (API.md)
      */
     @Override
     @Transactional
@@ -163,7 +177,7 @@ public class LiveServiceImpl implements LiveService {
         List<Stop> todayStops = liveStopFinder.getTodayStops(trip);
         Stop current = liveStopFinder.findCurrentStop(todayStops, request.getLat(), request.getLng());
         if (isPlanned(todayStops, current, place.getId())) {
-            throw fail(400, "이미 일정에 있는 곳이에요."); // 같은 곳을 두 번 넣지 않게 (11/13)
+            throw fail(400, "이미 일정에 있는 곳이에요."); // 같은 곳을 두 번 넣지 않게
         }
 
         if (request.getReplaceStopId() != null) {
@@ -174,11 +188,11 @@ public class LiveServiceImpl implements LiveService {
             after = findRemainingStop(todayStops, current, request.getAfterStopId(), "넣을 자리를 찾을 수 없어요."); // 남은 칸이 아니면 400
         }
         Stop newStop = toNewStop(place, liveStopFinder.getToday(trip));
-        setReservedTime(newStop, request.getReservedTime()); // 예약했으면 고정 일정으로 (11/16)
+        setReservedTime(newStop, request.getReservedTime()); // 예약했으면 고정 일정으로
         List<Stop> plan = makeInsertPlan(todayStops, current, newStop, request.getReplaceStopId(), request.getAfterStopId());
         plan = alternativeCalculator.copyStops(plan); // 원본을 고치지 않게 복사본으로 계산
         Alternative result = alternativeCalculator.calculate(trip, current, plan, request.getLat(), request.getLng());
-        if (CafeStay.fitNewCafe(plan, liveStopFinder.findFixedStop(plan, null), result.getSlackMin())) { // 카페는 다음 예약 5분 전 도착에 맞춰 머묾 (11/17, AI 카드와 같은 계산)
+        if (CafeStay.fitNewCafe(plan, liveStopFinder.findFixedStop(plan, null), result.getSlackMin())) { // 카페는 다음 예약 5분 전 도착에 맞춰 머묾 (AI 카드와 같은 계산)
             result = alternativeCalculator.calculate(trip, current, plan, request.getLat(), request.getLng());
         }
         String shortened = shortenBeforeFixed(plan, result);
@@ -193,7 +207,7 @@ public class LiveServiceImpl implements LiveService {
         return response;
     }
 
-    /** 못 가게 된 일정 하나를 빼고, 남은 일정을 앞으로 당겨 다시 계산 (11/12 놓친 예약) */
+    /** 못 가게 된 일정 하나를 빼고, 남은 일정을 앞으로 당겨 다시 계산 (놓친 예약) */
     @Override
     @Transactional // 칸 빼기(skipped) + 남은 칸 시각 다시 저장. 하나라도 실패하면 전부 되돌림
     public InsertResponse skipStop(long memberId, long tripId, SkipRequest request) {
@@ -224,7 +238,10 @@ public class LiveServiceImpl implements LiveService {
 
     // ---------------------------------------------------------------- 채팅 도우미
 
-    /** 추천 질문: Text-to-SQL로 바로 찾기 (places). AI로 못 찾으면 예전처럼 반경 묻기 (ask-radius). isFollowUp이면 앞 결과 안에서 */
+    /**
+     * 추천 질문: Text-to-SQL(AI가 말을 SQL로 바꿈)로 바로 찾아 kind "places"로 답해요.
+     * AI로 못 찾으면 반경을 묻는 "ask-radius". isFollowUp이면 앞 결과 안에서만 찾아요
+     */
     private void answerRecommend(AssistResponse response, long memberId, long tripId, AssistRequest request,
                                  String message, ChatIntent intent, boolean isFollowUp) {
         String prevMessage = isFollowUp ? request.getPrevMessage() : null;
@@ -291,7 +308,7 @@ public class LiveServiceImpl implements LiveService {
         places.sort((first, second) -> Double.compare(scoreMap.get(second.getId()), scoreMap.get(first.getId())));
     }
 
-    /** 놓친 가게와 같은 업종 낱말로 반경 안을 찾기 (가는 길 모드, 11/17). 평점 없는 곳은 빼고 같은 곳은 한 번만 */
+    /** 놓친 가게와 같은 업종 낱말로 반경 안을 찾기 (가는 길 모드). 평점 없는 곳은 빼고 같은 곳은 한 번만 */
     private List<Place> findSameTypePlaces(RecommendRequest request, Place missed) {
         Set<String> words = new HashSet<>();
         for (String word : (missed.getCategory() == null ? "" : missed.getCategory()).split(",")) {
@@ -315,7 +332,10 @@ public class LiveServiceImpl implements LiveService {
         return new ArrayList<>(found.values());
     }
 
-    /** 가게마다 더 도는 거리(m): 놓친 가게 → 가게 → 다음 고정 일정 − 놓친 가게 → 다음 고정 일정 (손에 있는 점이라 Geo로) */
+    /**
+     * 가게마다 더 도는 거리(m, 직선) = (놓친 가게 → 이 가게 → 다음 고정 일정) − (놓친 가게 → 다음 고정 일정).
+     * 이미 손에 있는 점끼리라 SQL 대신 Geo로 계산해요
+     */
     private Map<String, Integer> getDetours(List<Place> places, Place missed, double toLat, double toLng) {
         double direct = Geo.distanceMeters(missed.getLat(), missed.getLng(), toLat, toLng);
         Map<String, Integer> detours = new HashMap<>();
@@ -328,8 +348,9 @@ public class LiveServiceImpl implements LiveService {
     }
 
     /**
-     * 가는 길 정렬 (11/17 주형): 1) 검증된 가게(평점 4.9 이상 + 리뷰 1000개 이상)를 덜 돌아가는 순으로 맨 앞
-     * 2) 나머지는 평점 × log(리뷰 수) 큰 순 (평점이 같으면 리뷰 많은 곳, 리뷰가 몇 개뿐인 5점은 뒤로)
+     * 가는 길 모드 정렬.
+     *   1. 검증된 가게(평점 4.9 이상 + 리뷰 1000개 이상)를 맨 앞에, 덜 돌아가는 순으로
+     *   2. 나머지는 평점 × log(리뷰 수) 큰 순. 평점이 같으면 리뷰 많은 곳이 앞이고, 리뷰 몇 개뿐인 5점은 뒤로 가요
      */
     static void sortOnRoute(List<Place> places, Map<String, Integer> detours) {
         places.sort((first, second) -> {
@@ -398,7 +419,7 @@ public class LiveServiceImpl implements LiveService {
         return recommend;
     }
 
-    /** 카페·디저트·베이커리면 30분(넣을 때 다음 예약에 맞춰 CafeStay.fitNewCafe가 바꿈), 아니면 60분 */
+    /** 머무는 시간: 카페·디저트·베이커리 30분, 그 밖 60분. 카페는 넣을 때 CafeStay.fitNewCafe가 다음 예약에 맞춰 바꿈 */
     private int getStay(String category) {
         return CafeStay.isCafe(category) ? CAFE_STAY_MIN : OTHER_STAY_MIN;
     }
@@ -421,7 +442,10 @@ public class LiveServiceImpl implements LiveService {
         return stop;
     }
 
-    /** 예약 시각을 받았으면 새 칸을 고정 일정 + 그 시각으로 (예: 놓친 예약 대신 전화로 15:00에 잡은 가게). 형식이 틀리면 400 */
+    /**
+     * 예약 시각을 받았으면 새 칸을 그 시각의 고정 일정으로 만들어요. 형식이 틀리면 400.
+     * 예: 놓친 예약 대신 전화로 15:00에 잡은 가게
+     */
     static void setReservedTime(Stop newStop, String reservedTime) {
         if (reservedTime == null || reservedTime.isBlank()) {
             return; // 예약 안 함: 지금처럼 고정 아닌 칸
@@ -462,7 +486,7 @@ public class LiveServiceImpl implements LiveService {
         return apply;
     }
 
-    // ---------------------------------------------------------------- 놓친 예약 도우미 (11/12)
+    // ---------------------------------------------------------------- 놓친 예약 도우미
 
     /**
      * 넣을 일정: replaceStopId가 있으면 그 칸 자리에 (그 칸은 빠져서 skipped가 됨),

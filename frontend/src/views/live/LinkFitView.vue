@@ -1,6 +1,10 @@
 <script setup>
-// 링크로 넣을 때 늦어지거나 겹치면 (③·④): 서버가 만든 방법(바꾸기·둘 다 가기·빼기) 중 고르거나, 곳마다 직접 줄이고 빼요
-// 숫자는 전부 서버 계산 (POST /live/link-fit, 직접 고치면 POST /live/preview). 저장은 POST /live/apply → 바뀐 일정 화면
+// 링크로 넣기 · 방법 고르기 (③·④): 여행 중 링크 추가에서 넣었는데 늦어지거나 겹치면 이 화면으로 와요
+// 서버가 만든 방법(바꾸기·둘 다 가기·빼기) 중 하나를 고르거나, [직접 고르기]로 곳마다 줄이고 빼요.
+// 숫자는 전부 서버 계산이에요.
+//   처음 방법들: POST /live/link-fit
+//   직접 고치면: POST /live/preview
+// [넣기]를 누르면 POST /live/apply로 저장하고 바뀐 일정 화면으로 가요.
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import TopBar from '@/components/common/TopBar.vue'
@@ -11,8 +15,8 @@ import { toDuration } from '@/utils/time'
 
 const STAY_STEP_MIN = 10
 const MIN_STAY_MIN = 10
-const PREVIEW_WAIT_MS = 400 // 연속으로 누를 때 마지막 한 번만 계산
-const LATE_END = '22:00' // 이보다 늦게 끝나면 빨간 글자
+const PREVIEW_WAIT_MS = 400 // 버튼을 연달아 누르면 마지막으로 누르고 0.4초 뒤 한 번만 계산
+const LATE_END = '22:00' // 고정 일정이 없을 때, 이 시각 이후에 끝나면 늦음(빨간 글자)
 
 const router = useRouter()
 const replan = useReplanStore()
@@ -40,7 +44,7 @@ onMounted(() => {
 
 const picked = computed(() => (pickedKey.value === 'custom' ? custom.value : options.value.find((option) => option.key === pickedKey.value) || null))
 
-// 고정 일정이 있으면 여유, 없으면 끝나는 시각
+// 방법 오른쪽 글자: 고정 일정이 있으면 여유(예: "여유 15분"), 없거나 다음날로 넘어가면 끝나는 시각
 function slackText(option) {
   if (!fixedName.value || option.finalArrive.startsWith('다음날')) return option.finalArrive + ' 끝'
   return option.slackMin < 0 ? toDuration(-option.slackMin) + ' 늦어요' : '여유 ' + toDuration(option.slackMin)
@@ -57,7 +61,7 @@ function slackClass(option) {
 function closedNames(option) {
   return option.stops.filter((stop) => stop.closedReason).map((stop) => stop.name)
 }
-// 모든 방법에서 문 닫는 곳은 맨 위에 한 번만
+// 모든 방법에서 문 닫는 곳은 방법마다 말고 맨 위 경고 줄에 한 번만 보여요
 const sharedNames = computed(() => {
   if (!options.value.length) return []
   return closedNames(options.value[0]).filter((name) => options.value.every((option) => closedNames(option).includes(name)))
@@ -67,7 +71,7 @@ const sharedClosed = computed(() => {
   const stop = options.value[0].stops.find((item) => item.name === sharedNames.value[0])
   return stop.name + (stop.closeAt ? ' ' + stop.closeAt + ' 마감' : ' 영업 끝') + (sharedNames.value.length > 1 ? ' 외 ' + (sharedNames.value.length - 1) + '곳' : '')
 })
-// 맨 위 한 줄: 다 늦으면 그 말을 한 번만
+// 맨 위 안내 한 줄: 모든 방법이 늦으면 "모두 늦어요"를 여기서 한 번만
 const topText = computed(() => {
   if (options.value.length && options.value.every(isLate)) return '모두 늦어요 · 가장 덜 늦는 곳 추천'
   return fit.value ? fit.value.message : ''
@@ -83,7 +87,9 @@ function pickOption(key) {
   isManual.value = false
 }
 
-// 직접 고르기: 머묾 늘리기·줄이기 (새 장소·고정 일정도 고정 일정 빼고 조절)
+// [직접 고르기]의 −/+ 버튼: 머묾을 10분씩 줄이고 늘려요
+//   새 장소도 바꿀 수 있고, 고정 일정 줄에는 버튼이 없어요
+//   MIN_STAY_MIN(10분) 밑으로는 안 줄여요
 function changeStay(row, diff) {
   row.stay = Math.max(MIN_STAY_MIN, (row.stay || 0) + diff)
   schedule()

@@ -1,6 +1,8 @@
 <script setup>
-// S17 바뀐 일정 (④): 대안을 적용한 뒤 무엇이 바뀌었는지 색으로 보여 줘요. 5분 안에는 되돌릴 수 있어요
-// 방금 적용한 결과(POST /live/apply 응답)와 적용 직전 원래 칸을 비교해요. 위 배너는 적용 뒤 다시 계산한 지금 상황(POST /live/status)
+// S17 바뀐 일정 (④): 대안을 적용하면 이 화면으로 와요
+// 무엇이 바뀌었는지 색으로 보여 줘요. 적용하고 5분 안에는 [되돌리기]로 원래 일정에 돌아갈 수 있어요.
+//   비교: 방금 적용한 결과(POST /live/apply 응답)와 적용 직전 원래 칸
+//   위 배너: 적용 뒤 다시 계산한 지금 상황 (POST /live/status)
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import TopBar from '@/components/common/TopBar.vue'
@@ -12,14 +14,14 @@ import { toDuration } from '@/utils/time'
 import { showToast } from '@/utils/toast'
 import { shareTrip } from '@/utils/tripShare'
 
-const UNDO_CHECK_MS = 15000 // 되돌리기 버튼을 숨길지 다시 보는 간격
+const UNDO_CHECK_MS = 15000 // 15초마다 되돌리기 버튼을 숨길지(5분 지났는지) 다시 봐요
 
 const router = useRouter()
 const replan = useReplanStore()
 const after = ref(null) // 적용 뒤 지금 상황
 const isUndoing = ref(false)
 const canUndo = ref(replan.canUndo())
-const photos = ref({}) // 칸 이름 → 장소 사진 (여행 중 화면과 같은 사진, 11/19)
+const photos = ref({}) // 칸 이름 → 장소 사진 (여행 중 화면과 같은 사진)
 let undoTimer = null
 
 onMounted(async () => {
@@ -34,8 +36,9 @@ onMounted(async () => {
 })
 onUnmounted(() => clearInterval(undoTimer))
 
-// 장소 사진 (11/19 PPT 8장: 예전엔 종류별 기본 그림만 보여서 사진이 다 달라 보였어요)
-//   여행 중 화면처럼 POST /places/photos/trip. 새로 넣은 칸까지 들어 있게 적용한 뒤 여행을 다시 읽어서 보냄
+// 장소 사진 받기: 여행 중 화면과 같은 사진을 쓰려고요 (종류별 기본 그림만 쓰면 달라 보여요)
+//   여행 중 화면처럼 POST /places/photos/trip을 불러요
+//   새로 넣은 칸까지 들어 있게, 적용한 뒤 여행을 다시 읽어서 보내요
 async function loadPhotos() {
   try {
     const trip = await getTrip(replan.tripId)
@@ -53,14 +56,15 @@ function photoOf(stop) {
 function beforeOf(id) {
   return (replan.before || []).find((stop) => stop.id === id) || null
 }
-// 적용한 계산에서 앞에서 오는 이동 분
+// 적용한 계산(replan.plan)에서 이 칸까지 오는 이동 시간(분)
 function moveOf(row) {
   if (!replan.plan) return null
   const found = replan.plan.stops.find((stop) => (row.id && stop.id === row.id) || (!stop.id && stop.name === row.name))
   return found ? found.moveMin : null
 }
 
-// 적용 뒤 다시 계산한 이동(지금 → 그 칸): 분·수단. 대안 카드·여행 중 화면과 같은 숫자
+// 줄 사이 이동 표시: 적용 뒤 다시 계산한 이동(지금 → 그 칸)의 분과 수단 아이콘
+//   대안 카드·여행 중 화면과 같은 숫자예요. 없으면 적용한 계산의 이동 분(걷기 아이콘)
 const MODE_ICON = { walk: 'i-walk', transit: 'i-subway', car: 'i-car' }
 function legOf(row) {
   const now = after.value && after.value.stops ? after.value.stops.find((stop) => stop.id === row.id) : null
@@ -71,7 +75,7 @@ function legOf(row) {
 // 역(KTX·기차)은 음식 사진 대신 기차 아이콘
 const isStation = (category) => /역|KTX|기차/.test(category || '')
 
-// 한 줄 모양: 배지·글자·색
+// 일정 한 줄의 모양: 오른쪽 배지(줄임·늘림·그대로 등), 아래 작은 글자, 색
 function toRow(row) {
   const old = beforeOf(row.id)
   const isCurrent = after.value && after.value.currentStopId === row.id
@@ -110,8 +114,9 @@ const banner = computed(() => {
   }
 })
 
-// 같이 간 사람에게 바뀐 일정 보내기 (11/19 PPT 8장): 여행 중 화면 [일정 공유]와 같은 ① 공유 링크를 카카오톡으로
-//   예전엔 앱 안 가짜 공유 창이라 실제로 안 보내져도 "공유했어요"가 떴어요. 카톡 창에서 보냈는지는 앱이 알 수 없어서 버튼 글자는 그대로 둬요
+// [카카오톡으로 공유]: 같이 간 사람에게 바뀐 일정을 보내요
+//   여행 중 화면 [일정 공유]와 같은 ① 공유 링크를 써요
+//   카톡 창에서 실제로 보냈는지는 앱이 알 수 없어서, 보낸 뒤에도 버튼 글자는 그대로 둬요
 const shareText = computed(() => {
   const fixed = after.value && after.value.fixed
   const method = (replan.plan && replan.plan.title) || '' // 고른 대안 이름 (예: 지하철로 바로 가기)
@@ -211,7 +216,8 @@ async function undo() {
       </div>
 
       <div class="cta" style="display: flex; gap: 8px">
-        <!-- 카카오톡 공유 버튼: 카카오 디자인 가이드처럼 노란 바탕(#FEE500) + 검은 말풍선 심볼 + 검은 글씨. 말풍선은 파일을 받지 않고 SVG로 그림 (11/08) -->
+        <!-- [카카오톡으로 공유] 버튼: 카카오 디자인 가이드대로 노란 바탕(#FEE500), 검은 말풍선, 검은 글씨
+             말풍선은 이미지 파일 없이 SVG로 그려요 -->
         <button type="button" class="btn btn--lg kakao-share" style="flex: 1" @click="share">
           <svg class="kakao-share__bubble" viewBox="0 0 24 22" aria-hidden="true"><path d="M12 1C5.9 1 1 4.9 1 9.7c0 3.1 2 5.8 5.1 7.3l-1.1 4c-.1.4.3.7.6.5l4.7-3.1c.6.1 1.1.1 1.7.1 6.1 0 11-3.9 11-8.7S18.1 1 12 1z" fill="#191919"/></svg>
           카카오톡으로 공유

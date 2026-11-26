@@ -14,9 +14,10 @@ import com.tripbiseo.trip.dto.Place;
 import lombok.RequiredArgsConstructor;
 
 /**
- * ④ 추천 점수·이유 칩: 리뷰에서 "혼밥·조용·분위기·데이트·가성비·웨이팅없음" 태그를 세서 판단해요.
- * 태그 인정: 그 장소 리뷰 중 2개 이상이면서 (3개 이상 또는 20% 이상) — 리뷰 한두 개의 의견이 아니라 여러 리뷰의 공통점일 때만.
- * 근거: 장소마다 리뷰가 10~19개로 고르게 있어서 비율로 판단할 수 있음 (DB 확인 11/02).
+ * ④ 추천 점수와 이유 칩: 리뷰에서 태그 6가지(혼밥, 조용, 분위기, 데이트, 가성비, 웨이팅없음)를 세서 판단해요.
+ * 태그 인정: 그 태그가 나온 리뷰가 2개 이상이고, 3개 이상이거나 전체의 20% 이상일 때.
+ *   리뷰 한두 개의 의견이 아니라 여러 리뷰의 공통점일 때만 믿으려고요.
+ * 비율을 써도 되는 이유: 장소마다 리뷰가 최대 10개(평균 9.7개)로 고르게 있어요 (DB에서 확인).
  */
 @Component
 @RequiredArgsConstructor
@@ -25,7 +26,7 @@ public class PlaceTagReader {
     private static final int MIN_TAG_COUNT = 2;
     private static final int SURE_TAG_COUNT = 3;
     private static final int TAG_PERCENT = 20;
-    private static final double TAG_BONUS = 0.3;     // 원하는 태그가 있으면 보정 평점에 더하는 점수
+    private static final double TAG_BONUS = 0.3;     // 원하는 태그가 있으면 보정 평점(리뷰 수까지 반영한 평점)에 더하는 점수
     private static final int MAX_EXTRA_REASONS = 2;  // 원하는 태그가 없을 때 보여 줄 다른 태그 수
 
     private final PlaceTagMapper placeTagMapper;

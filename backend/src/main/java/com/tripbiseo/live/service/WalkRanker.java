@@ -13,7 +13,7 @@ import com.tripbiseo.live.dto.AskedPlace;
 import lombok.RequiredArgsConstructor;
 
 /**
- * ④ AI에게 묻기: AI SQL이 직선으로 고른 후보를 실제 걷는 시간으로 다시 재고 줄 세움 (11/13).
+ * ④ AI에게 묻기: AI SQL(Gemini가 쓴 SQL)이 직선거리로 고른 후보를 실제 걷는 시간으로 다시 재고 줄 세움.
  * 왜 두 단계인지: 넓게 거르기는 DB 공간 인덱스로 빠르게(직선), 마지막 몇 곳만 길찾기 API로 정확하게.
  * 직선으로 가까워도 길·건물 때문에 실제로는 더 멀 수 있어서예요.
  * 길찾기가 실패하면 RouteClient가 거리로 어림한 값을 줘요 (source = "estimate") → isEstimate = true.
@@ -30,6 +30,7 @@ public class WalkRanker {
     /**
      * 다시 재고 줄 세우기.
      * orderBy "detour": 돌아가는 분 = (나 → 이곳) + (이곳 → 다음 장소) − (나 → 다음 장소), 적은 순
+     *   예) 5분 + 7분 − 9분 = 3분 돌아감
      * orderBy "near": 나 → 이곳 걷는 시간, 적은 순
      */
     public List<AskedPlace> rank(List<AskedPlace> places, AskSituation situation, String orderBy) {

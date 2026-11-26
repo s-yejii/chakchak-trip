@@ -1,8 +1,11 @@
 <script setup>
 import { toDuration } from '@/utils/time'
-// S16-a2 시간 줄이기 슬라이더 (④): 한 장소(?id=)의 머무는 시간을 왼쪽으로 밀어서 줄여요. 0분이면 일정에서 빠져요
-// 숫자는 서버 계산(POST /live/preview)이에요. 끄는 동안에는 "1분 줄이면 고정 일정 도착도 1분 빨라진다"로 바로 보여 주고,
-// 손을 떼면 서버가 다시 계산한 값으로 바꿔요. (고정 일정 앞 칸만 도착 시각에 영향을 줘요)
+// S16-a2 시간 줄이기 슬라이더 (④): 시간 줄이기 화면에서 장소 줄을 누르면 떠요 (?id=칸 id)
+// 슬라이더를 왼쪽으로 밀어 그 장소에 머무는 시간을 줄여요. 0분이면 일정에서 빠져요.
+// 숫자는 서버 계산(POST /live/preview)이에요.
+//   끄는 동안: "1분 줄이면 고정 일정 도착도 1분 빨라진다"로 바로 보여 줘요
+//   손을 떼면: 서버가 다시 계산한 값으로 바꿔요
+// 고정 일정 앞에 있는 칸만 줄여야 도착 시각이 바뀌어요.
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
@@ -12,8 +15,8 @@ import { useReplanStore } from '@/stores/replan'
 import { imageFor } from '@/utils/mapView'
 import { showToast } from '@/utils/toast'
 
-const STEP_MIN = 5 // 슬라이더 한 칸
-const MUST_MIN_STAY = 20 // 꼭 갈 곳은 여기까지만 줄임 (빼지는 않음)
+const STEP_MIN = 5 // 슬라이더 한 칸 (분)
+const MUST_MIN_STAY = 20 // 꼭 갈 곳은 20분 밑으로 안 줄임 (빼지는 않음)
 
 const route = useRoute()
 const router = useRouter()
@@ -21,7 +24,7 @@ const replan = useReplanStore()
 const stopId = Number(route.query.id)
 
 const stay = ref(0)
-const atMax = ref(null) // 이 칸은 그대로, 다른 곳 줄인 것만 반영한 계산
+const atMax = ref(null) // 이 칸은 그대로 두고, 다른 곳에서 줄인 것만 반영한 서버 계산
 const checked = ref(null) // 손을 뗀 값으로 서버가 계산한 결과
 const removed = ref(null) // 이 칸을 뺐을 때 서버 계산 (빼기 확인창)
 const asking = ref(false)
@@ -38,20 +41,22 @@ onMounted(async () => {
 const stop = computed(() => replan.stops.find((item) => item.id === stopId) || null)
 const max = computed(() => (stop.value ? stop.value.stay : 0))
 const rangeMin = computed(() => (stop.value && stop.value.importance === 'must' ? Math.min(MUST_MIN_STAY, max.value) : 0))
-// 이 칸이 기준 칸(고정 일정) 앞에 있어야 줄인 만큼 도착이 빨라짐
+// 기준 칸(basisStop): 늦으면 안 되는 첫 고정 일정, 없으면 마지막 칸
+// 이 칸이 기준 칸 앞에 있어야 줄인 만큼 도착이 빨라져요
 const isBeforeBasis = computed(() => {
   const list = replan.stops
   return list.indexOf(stop.value) < list.indexOf(replan.basisStop)
 })
 
-// 이 칸 말고 다른 곳에서 정한 것
+// 다른 장소에서 정한 머묾 (trimPlan에서 이 칸만 뺀 것)
 function otherPlan() {
   const plan = { ...replan.trimPlan }
   delete plan[stopId]
   return plan
 }
 
-// 지금 슬라이더 값의 여유: 서버가 같은 값으로 계산했으면 그 값, 아니면 바로 계산
+// 지금 슬라이더 값의 여유 (기준 칸에 도착하고 남는 분, 음수면 늦음)
+// 서버가 같은 값으로 계산해 뒀으면 그 값, 아니면 줄인 분만큼 더해서 바로 계산
 const slack = computed(() => {
   if (checked.value && checked.value.stay === stay.value) return checked.value.result.slackMin
   if (!atMax.value) return null
@@ -75,7 +80,9 @@ const otherCut = computed(() => {
   return total
 })
 
-// 이 칸만 줄여서 안 늦으려면 몇 분 이하 (5분 단위). 이 칸으로 못 맞추면 null
+// 이 칸만 줄여서 안 늦으려면 몇 분 이하여야 하는지 (5분 단위로 내림)
+//   예: 60분 머물고 15분 늦으면 45분
+// 이 칸으로는 못 맞추면 null
 const needStay = computed(() => {
   if (!atMax.value || atMax.value.slackMin >= 0 || !isBeforeBasis.value) return null
   const need = Math.floor((max.value + atMax.value.slackMin) / STEP_MIN) * STEP_MIN
@@ -95,7 +102,7 @@ function shiftTime(time, minutes) {
   return String(Math.floor(total / 60)).padStart(2, '0') + ':' + String(total % 60).padStart(2, '0')
 }
 
-// 손을 뗐을 때: 0이면 빼기 확인, 아니면 서버로 다시 계산
+// 손을 뗐을 때: 0분이면 빼기 확인 창, 아니면 서버로 다시 계산
 async function onRelease() {
   if (stay.value === 0) return askRemove()
   await check()

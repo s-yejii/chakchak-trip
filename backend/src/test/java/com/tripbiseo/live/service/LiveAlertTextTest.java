@@ -14,7 +14,8 @@ import com.tripbiseo.common.util.Geo;
 import com.tripbiseo.live.dto.StatusContext;
 import com.tripbiseo.trip.dto.Stop;
 
-// 11/17 주형: 놓침 카드 문구는 택시 도착·요금(TMAP 실제 값)으로 쉽게, 이동 중엔 출발 알림 안 냄
+// LiveAlertMaker 알림 문구 확인
+//   놓침 카드는 택시 도착·요금(TMAP 실제 값)으로 쉽게 보여 줘요. 이동 중에는 출발 알림을 안 내요
 class LiveAlertTextTest {
 
     private final LiveAlertMaker maker = new LiveAlertMaker(); // 문구만 만드는 도우미
@@ -26,7 +27,8 @@ class LiveAlertTextTest {
         return stop;
     }
 
-    // 11/19 PPT 14장: 택시로도 늦으면 시각·요금 대신 한마디로 (늦는 시각은 카드 첫 줄 "13:05 도착 · 35분 늦음")
+    // 택시로도 늦으면 시각·요금 대신 한마디로 (발표 자료 문구와 같게)
+    // 늦는 시각은 카드 첫 줄에 따로 나와요 (예: "13:05 도착 · 35분 늦음")
     @Test
     void 택시로도_늦으면_한마디로() {
         StatusContext context = new StatusContext();
@@ -43,14 +45,15 @@ class LiveAlertTextTest {
         assertEquals("가장 빠른 방법으로 가도 약속 시각(12:30)보다 15분 늦어요", maker.makeLostText(context, sushi()));
     }
 
-    // 11/19 주형: 예약 49m 앞 카페 (1분 거리, 계획은 18:54에 나가 18:55 도착) → 18:09엔 "늦어요" 없음, 18:54엔 있음
+    // 예약한 곳 49m 앞 카페 (1분 거리, 계획: 18:54에 나가 18:55 도착)
+    // 18:09에는 "늦어요"가 없고, 18:54에는 있어야 해요
     @Test
     void 바로_앞_카페면_나갈_때가_돼야_지금_나가라고() {
         Stop dinner = sushi();
         dinner.setId(7L);
         dinner.setTime("19:00");
         StatusContext context = new StatusContext();
-        context.setDemo(true); // 11/20: 이 기준은 시연 계정만
+        context.setDemo(true); // 이 기준은 시연 계정만
         context.setFixedStop(dinner);
         context.setLeaveAt(Geo.toMinutes("18:54"));
         context.getEtaMap().put(7L, Geo.toMinutes("18:55"));
@@ -61,7 +64,7 @@ class LiveAlertTextTest {
         assertTrue(maker.isMustLeaveNow(context));
     }
 
-    // 11/19 주형: 예약 앞 카페에선 출발 알림을 5분 전 한 번만
+    // 시연 계정은 예약 앞 카페에선 출발 알림을 5분 전 한 번만 (일반 계정은 10분 전부터)
     @Test
     void 시연_계정_카페에선_출발_알림이_5분_전_한_번만() {
         Stop cafe = new Stop();
@@ -92,7 +95,7 @@ class LiveAlertTextTest {
         assertFalse(LiveAlertMaker.hasLeftAStop(List.of(sushi())));
     }
 
-    // 11/20 주형: 일반 계정은 예전 기준 그대로 (여유 5분 이하면 바로 "지금 나가지 않으면 늦어요")
+    // 일반 계정은 예전 기준 그대로 (여유 5분 이하면 바로 "지금 나가지 않으면 늦어요")
     @Test
     void 일반_계정은_여유_5분이면_예전처럼_바로() {
         Stop dinner = sushi();

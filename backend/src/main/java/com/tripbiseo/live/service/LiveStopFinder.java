@@ -13,7 +13,7 @@ import com.tripbiseo.trip.dto.Trip;
 
 /**
  * ④ 오늘 일정 칸 고르기·시각 계산 도우미.
- * 지금 상황(StatusServiceImpl)과 대안(LiveServiceImpl)이 같은 기준으로 칸을 고르도록 한 곳에 모아 둠.
+ * 지금 상황(StatusServiceImpl)과 대안(AlternativeServiceImpl)이 같은 기준으로 칸을 고르도록 한 곳에 모아 둠.
  * 계산만 하고 DB·외부 API는 부르지 않아요.
  */
 @Component 
@@ -51,7 +51,7 @@ public class LiveStopFinder {
                 return stop; // GPS로 도착 기록된 칸이 제일 확실함
             }
             double meters = Geo.distanceMeters(lat, lng, stop.getLat(), stop.getLng());
-            // 거리가 같으면 앞 칸(먼저 갈 곳)을 그대로 둠 (11/17: 낮·밤 숙소 칸 좌표가 같아서 밤 숙소로 잡혀 '6시간 늦어요'가 떴어요)
+            // 거리가 같으면 앞 칸(먼저 갈 곳)을 그대로 둬요. 낮·밤 숙소 칸은 좌표가 같아서, 밤 숙소로 잡히면 '6시간 늦어요'가 떠요
             if (meters <= nearestMeters && (nearest == null || meters < nearestMeters)) {
                 nearest = stop;
                 nearestMeters = meters;
@@ -90,7 +90,7 @@ public class LiveStopFinder {
         return "todo".equals(stop.getState());
     }
 
-    /** 지난 일정: 고정 일정이 아니고, 도착 기록이 없는데 계획한 머무름까지 이미 끝났어야 하는 칸 */
+    /** 지난 일정: 고정 일정이 아니고, 도착 기록이 없는데 계획한 머무름까지 이미 끝났어야 하는 칸 (예: 14:00·60분 칸, 지금 15:10) */
     public boolean isMissed(Stop stop) {
         if (Boolean.TRUE.equals(stop.getFixed()) || stop.getArrivedAt() != null) {
             return false;
@@ -106,7 +106,7 @@ public class LiveStopFinder {
             // "2026-11-01T13:30:00"에서 "13:30" 부분만
             arrived = Geo.toMinutes(current.getArrivedAt().substring(11, 16));
         }
-        // 예약(고정)·숙소는 일찍 도착해도 계획 시각부터 머묾 (11/08: 회식 18:30에 17:33 도착하면 19:13에 나가라고 하던 문제)
+        // 예약(고정)·숙소는 일찍 도착해도 계획 시각부터 머물러요. 예: 회식 18:30(100분)에 17:33 도착 → 19:13이 아니라 20:10에 떠남
         if (Boolean.TRUE.equals(current.getFixed()) || isStay(current)) {
             arrived = Math.max(arrived, Geo.toMinutes(current.getTime()));
         }
@@ -121,14 +121,17 @@ public class LiveStopFinder {
         return arrive;
     }
 
-    /** 머무는 시간(분). 없으면 0 */
-    /** 숙소 칸인지 (종류가 숙소·호텔·숙박이거나 메모가 "숙소"로 시작). 숙소 도착 시각은 마감이 아니라서 늦음·빼기 대상이 아님 (11/08) */
+    /**
+     * 숙소 칸인지: 종류에 숙소·호텔·숙박·모텔·게스트하우스가 들어 있거나, 메모가 "숙소"·"예약해 둔 숙소"로 시작.
+     * 숙소 도착 시각은 마감이 아니라서 늦음·빼기 대상이 아니에요.
+     */
     public static boolean isStay(Stop stop) {
         String category = stop.getCategory() == null ? "" : stop.getCategory();
         String memo = stop.getMemo() == null ? "" : stop.getMemo();
         return category.matches(".*(숙소|호텔|숙박|모텔|게스트하우스).*") || memo.startsWith("숙소") || memo.startsWith("예약해 둔 숙소");
     }
 
+    /** 머무는 시간(분). 없으면 0 */
     public int getStay(Stop stop) {
         return stop.getStay() == null ? 0 : stop.getStay();
     }
