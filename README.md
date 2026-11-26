@@ -71,6 +71,7 @@
 | 구분 | 기술 |
 |---|---|
 | Frontend | Vue 3.5, Vite 8, Pinia 4, Vue Router 5, Kakao Map, MapLibre GL 6, Unity 6 WebGL |
+| 앱 | Capacitor 8 (같은 Vue 화면을 Android 앱으로 감쌈) |
 | Backend | Java 17, Spring Boot 4.0, Spring Security, MyBatis, Spring AI 2.0, JSqlParser 5.3 |
 | Database | PostgreSQL 17, PostGIS 3.5, pgvector |
 | AI | Gemini 3.8 Flash, Gemini Embedding 001 |
